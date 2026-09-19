@@ -18,10 +18,11 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import SessionLocal, get_db, init_db
 from app.pipeline import cancel_trailing_refreshes
-from app.routers import ai, alerts, analytics, dispatch, incidents, reports, resources, ws
+from app.routers import ai, alerts, analytics, dispatch, incidents, reports, resources, simulator, ws
 from app.schemas import HealthOut
 from app.seed import seed_if_empty
 from app.services.escalation import loop as escalation_loop
+from app.simulator import simulator as scenario_simulator
 from app.ws_manager import manager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -53,6 +54,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await scenario_simulator.stop()
         await escalation_loop.stop()
         cancel_trailing_refreshes()
         await manager.stop()
@@ -101,6 +103,7 @@ app.include_router(reports.router)
 app.include_router(resources.router)
 app.include_router(alerts.router)
 app.include_router(dispatch.router)
+app.include_router(simulator.router)
 app.include_router(ws.router)
 # BE2 routers (contract §3 AI + Analytics).
 app.include_router(ai.router)
