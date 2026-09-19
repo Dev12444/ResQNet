@@ -1,1 +1,32 @@
-[]
+[
+  {"callsign": "108-AMD-01", "kind": "ambulance", "capabilities": ["als", "trauma"], "lat": 23.0540, "lng": 72.6030, "base": "Civil Hospital, Asarwa"},
+  {"callsign": "108-AMD-02", "kind": "ambulance", "capabilities": ["bls"], "lat": 23.0532, "lng": 72.6045, "base": "Civil Hospital, Asarwa"},
+  {"callsign": "108-AMD-03", "kind": "ambulance", "capabilities": ["als", "cardiac"], "lat": 23.0225, "lng": 72.5705, "base": "VS Hospital, Ellisbridge"},
+  {"callsign": "108-AMD-04", "kind": "ambulance", "capabilities": ["bls"], "lat": 23.0235, "lng": 72.5655, "base": "SVP Hospital, Paldi"},
+  {"callsign": "108-AMD-05", "kind": "ambulance", "capabilities": ["als", "trauma"], "lat": 22.9990, "lng": 72.6055, "base": "LG Hospital, Maninagar"},
+  {"callsign": "108-AMD-06", "kind": "ambulance", "capabilities": ["bls"], "lat": 23.0725, "lng": 72.5175, "base": "Sola Civil Hospital"},
+  {"callsign": "108-AMD-07", "kind": "ambulance", "capabilities": ["als"], "lat": 23.0495, "lng": 72.5540, "base": "Naranpura 108 Point"},
+  {"callsign": "108-AMD-08", "kind": "ambulance", "capabilities": ["bls"], "lat": 22.9700, "lng": 72.6250, "base": "Vatva 108 Point"},
+  {"callsign": "108-AMD-09", "kind": "ambulance", "capabilities": ["als", "pediatric"], "lat": 23.0575, "lng": 72.5080, "base": "Thaltej 108 Point"},
+  {"callsign": "108-AMD-10", "kind": "ambulance", "capabilities": ["bls"], "lat": 23.0290, "lng": 72.6600, "base": "Odhav 108 Point"},
+
+  {"callsign": "AFES-DNP-01", "kind": "fire_truck", "capabilities": ["water_tender", "rescue"], "lat": 23.0245, "lng": 72.5835, "base": "Danapith Fire Station"},
+  {"callsign": "AFES-DNP-02", "kind": "fire_truck", "capabilities": ["aerial_ladder"], "lat": 23.0240, "lng": 72.5840, "base": "Danapith Fire Station"},
+  {"callsign": "AFES-NRP-01", "kind": "fire_truck", "capabilities": ["water_tender", "rescue"], "lat": 23.0605, "lng": 72.5545, "base": "Naranpura Fire Station"},
+  {"callsign": "AFES-SHP-01", "kind": "fire_truck", "capabilities": ["water_tender"], "lat": 23.0345, "lng": 72.5815, "base": "Shahpur Fire Station"},
+
+  {"callsign": "NDRF-BOAT-01", "kind": "rescue_boat", "capabilities": ["inflatable", "swift_water"], "lat": 23.0300, "lng": 72.5770, "base": "Sabarmati Riverfront Post"},
+  {"callsign": "NDRF-BOAT-02", "kind": "rescue_boat", "capabilities": ["inflatable", "swift_water"], "lat": 23.0305, "lng": 72.5775, "base": "Sabarmati Riverfront Post"},
+  {"callsign": "NDRF-BOAT-03", "kind": "rescue_boat", "capabilities": ["inflatable"], "lat": 23.0560, "lng": 72.5800, "base": "Subhash Bridge Boat Point"},
+  {"callsign": "NDRF-BOAT-04", "kind": "rescue_boat", "capabilities": ["inflatable"], "lat": 22.9990, "lng": 72.5600, "base": "Vasna Barrage Boat Point"},
+
+  {"callsign": "NDRF-TEAM-01", "kind": "ndrf_team", "capabilities": ["collapse_rescue", "flood_rescue"], "lat": 23.0280, "lng": 72.5760, "base": "NDRF Camp, Riverfront"},
+  {"callsign": "NDRF-TEAM-02", "kind": "ndrf_team", "capabilities": ["collapse_rescue", "flood_rescue"], "lat": 23.0620, "lng": 72.6320, "base": "NDRF Camp, Airport Road"},
+
+  {"callsign": "PCR-NVR-01", "kind": "police", "capabilities": ["traffic_control"], "lat": 23.0370, "lng": 72.5600, "base": "Navrangpura Police Station"},
+  {"callsign": "PCR-VST-01", "kind": "police", "capabilities": ["traffic_control"], "lat": 23.0390, "lng": 72.5290, "base": "Vastrapur Police Station"},
+  {"callsign": "PCR-MNR-01", "kind": "police", "capabilities": ["crowd_control"], "lat": 22.9965, "lng": 72.6025, "base": "Maninagar Police Station"},
+  {"callsign": "PCR-SBM-01", "kind": "police", "capabilities": ["crowd_control"], "lat": 23.0790, "lng": 72.5860, "base": "Sabarmati Police Station"},
+
+  {"callsign": "HAZMAT-ODV-01", "kind": "hazmat", "capabilities": ["gas_leak", "chemical", "decontamination"], "lat": 23.0285, "lng": 72.6625, "base": "Odhav GIDC Fire Station"}
+]
