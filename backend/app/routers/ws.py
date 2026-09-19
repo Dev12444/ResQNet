@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket
 
 from app.config import get_settings
 from app.ws_manager import manager
@@ -33,9 +33,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     if not await manager.connect(ws):
         return
     try:
-        while True:
-            await ws.receive_text()  # ignore client messages; returns/raises on disconnect
-    except WebSocketDisconnect:
-        pass
+        # Client messages (text or binary) are ignored; receive() also reports the disconnect.
+        while (await ws.receive())["type"] != "websocket.disconnect":
+            pass
     finally:
         manager.disconnect(ws)

@@ -7,7 +7,7 @@ Contract §3 "Alerts":
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app import audit
@@ -46,9 +46,16 @@ def acknowledge_alert(
     alert = db.scalars(q).one_or_none()
     if alert is None:
         raise HTTPException(status_code=404, detail=f"Alert {alert_id} not found")
-    if not alert.acknowledged:  # idempotent: acking twice records nothing new
-        alert.acknowledged = True
+    # Idempotent: a conditional UPDATE, so of two simultaneous acks exactly one changes the row
+    # and records the audit entry (the other waits on the row lock, then matches nothing).
+    changed = db.execute(
+        update(m.Alert)
+        .where(m.Alert.id == alert_id, m.Alert.acknowledged.is_(False))
+        .values(acknowledged=True)
+        .execution_options(synchronize_session=False)
+    ).rowcount
+    if changed:
         audit.record(db, actor=audit.clean_actor(x_actor), action="alert.acknowledged", entity="alert",
                      entity_id=alert.id, payload={"kind": alert.kind, "incident_id": alert.incident_id})
-        db.commit()
-    return alert
+    db.commit()
+    return db.scalars(q.execution_options(populate_existing=True)).one()

@@ -22,7 +22,7 @@ from pydantic import ValidationError
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
-from app.pipeline import ingest_report, publish_ingest, refresh_summary_in_background
+from app.pipeline import ReportDiscarded, ingest_report, publish_ingest, refresh_summary_in_background
 from app.schemas import IncidentOut, ReportCreate, ReportOut, SimulatorStatus
 from app.services.escalation import check_incident_in_background
 from app.ws_manager import manager
@@ -127,7 +127,7 @@ class Simulator:
                 delay = started + ev.offset_sec / speed - time.monotonic()
                 if delay > 0:
                     await asyncio.sleep(delay)
-                incident_id = await asyncio.to_thread(self._ingest, ev.body, bind)
+                incident_id = await self._ingest_to_completion(ev.body, bind)
                 self.events_sent += 1
                 if incident_id is not None:
                     side = asyncio.create_task(asyncio.to_thread(self._after_ingest, bind, incident_id))
@@ -140,6 +140,17 @@ class Simulator:
                 self._task = None  # finished (not cancelled): report running=false
                 self.broadcast_status()
 
+    async def _ingest_to_completion(self, body: ReportCreate, bind: Engine | Connection) -> int | None:
+        """Run one event in a worker thread. If the run is stopped meanwhile, wait for that event to
+        finish before letting the cancellation through: stop() (and a reset right after it) must
+        never leave a half-processed simulator report running in the background."""
+        in_flight = asyncio.ensure_future(asyncio.to_thread(self._ingest, body, bind))
+        try:
+            return await asyncio.shield(in_flight)
+        except asyncio.CancelledError:
+            await asyncio.wait({in_flight})  # one event: at most one AI call
+            raise
+
     def _ingest(self, body: ReportCreate, bind: Engine | Connection) -> int | None:
         """Worker thread: one event through the report pipeline. Errors are logged and skipped."""
         try:
@@ -148,6 +159,8 @@ class Simulator:
                 publish_ingest(result, ReportOut.model_validate(result.report),
                                IncidentOut.model_validate(result.incident))
                 return result.incident.id
+        except ReportDiscarded:
+            return None  # the demo was reset meanwhile: expected, not an error
         except Exception:
             self.errors += 1
             log.exception("Scenario event failed (skipped)")

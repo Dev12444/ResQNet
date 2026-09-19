@@ -37,6 +37,7 @@ from app.schemas import (
     UnmergeResponse,
 )
 from app.services.classifier import ClassificationResult, priority_for
+from app.services.escalation import check_incident_in_background
 from app.services.triage import apply_to_incident
 from app.ws_manager import manager
 
@@ -267,4 +268,6 @@ def unmerge_report(
     manager.publish("incident.created", new_out)
     for inc_id in (old.id, new.id):
         background.add_task(refresh_summary_in_background, db.get_bind(), inc_id, True)
+    # A split-off P1 gets its critical alert now, like a new report, not at the next loop tick.
+    background.add_task(check_incident_in_background, db.get_bind(), new.id)
     return UnmergeResponse(old=old_out, new=new_out)

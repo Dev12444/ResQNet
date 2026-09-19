@@ -229,6 +229,18 @@ def test_unmerge_moves_report_into_new_incident(env):
         assert db.scalars(select(m.AuditLog.action).where(m.AuditLog.action == "incident.unmerged")).one()
 
 
+def test_unmerged_p1_report_gets_its_critical_alert_immediately(env):
+    """The new incident from an unmerge is checked right away, not at the next escalation tick."""
+    client, _ = env
+    first = _report(client)
+    second = _report(client, text=AKH_GU, lat=23.0590, lng=72.5623, source="call")
+    new = client.post(f"/api/incidents/{first['incident']['id']}/unmerge",
+                      json={"report_id": second["report"]["id"]}).json()["new"]
+    assert new["priority"] == "P1"
+    alerts = client.get("/api/alerts", params={"incident_id": new["id"], "kind": "critical"}).json()
+    assert len(alerts) == 1
+
+
 def test_unmerge_errors(env):
     client, _ = env
     first = _report(client)

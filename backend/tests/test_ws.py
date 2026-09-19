@@ -79,6 +79,17 @@ def test_client_receives_published_event(client):
         assert msg["ts"].endswith("Z")
 
 
+def test_client_binary_and_text_frames_are_ignored(client):
+    """Clients never need to send anything, but a binary frame must not kill their connection."""
+    with client.websocket_connect("/ws") as ws:
+        assert _connected(1)
+        ws.send_bytes(b"\x00\x01binary")
+        ws.send_text("ping")
+        manager.publish("incident.created", {"id": 1})
+        assert ws.receive_json()["event"] == "incident.created"
+        assert manager.client_count == 1
+
+
 def test_all_clients_receive_and_order_is_preserved(client):
     with client.websocket_connect("/ws") as a, client.websocket_connect("/ws") as b:
         assert _connected(2)

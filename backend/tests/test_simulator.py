@@ -261,3 +261,30 @@ def test_full_ahmedabad_scenario_at_max_speed(env, monkeypatch):
     assert len(incidents) == 11
     akh = max(incidents, key=lambda i: i.report_count)
     assert (akh.report_count, akh.type, akh.priority) == (7, "flood", "P1")
+
+
+def test_stop_waits_for_the_event_already_in_flight(env, monkeypatch):
+    """stop() returns only once the event being processed has finished, so a reset right after
+    it can never race a half-processed simulator report."""
+    import threading
+
+    client, Session, scen = env
+    _write(scen, "slow_ai", [{"t_offset_sec": 0, **AKH}, {"t_offset_sec": 30, **FIRE}])
+    entered = threading.Event()
+    real_prepare = pipeline.prepare
+
+    def slow_prepare(report):
+        entered.set()
+        time.sleep(0.8)  # the AI call
+        return real_prepare(report)
+
+    monkeypatch.setattr(pipeline, "prepare", slow_prepare)
+    client.post("/api/simulator/start", json={"scenario": "slow_ai"})
+    assert entered.wait(5)
+    started = time.monotonic()
+    client.post("/api/simulator/stop")
+    assert time.monotonic() - started >= 0.5  # waited for the in-flight event
+    with Session() as db:  # ...which finished cleanly: stored AND attached
+        (report,) = db.scalars(select(m.Report)).all()
+        assert report.incident_id is not None
+    assert simulator.errors == 0
