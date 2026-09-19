@@ -227,3 +227,32 @@ def test_eval_endpoint_serves_stress_set():
     c = TestClient(app)
     assert c.get("/api/analytics/eval?set=stress").json()["n"] == 32
     assert c.get("/api/analytics/eval?set=bogus").status_code == 422
+
+
+# ---------------- citizen safety advice
+
+def test_advice_hazard_tips_first_and_translated():
+    from app.services import advice
+    gu = advice.safety_advice("flood", ["trapped_people", "rising_water"], "gu")
+    assert gu["lang"] == "gu" and "ફસાયા" in gu["tips"][0] and len(gu["tips"]) <= advice.MAX_TIPS
+    assert [h["number"] for h in gu["helplines"]][:2] == ["112", "108"]
+    en = advice.safety_advice("flood", ["trapped_people", "rising_water"], "en")
+    assert len(en["tips"]) == len(gu["tips"])  # same tips in every language
+
+
+def test_advice_every_tip_has_all_languages_and_bad_input_is_safe():
+    from app.services import advice
+    for tips in list(advice.HAZARD_TIPS.values()) + list(advice.TYPE_TIPS.values()):
+        for tip in tips:
+            assert set(tip) == set(advice.LANGS) and all(tip[l].strip() for l in advice.LANGS)
+    out = advice.safety_advice("volcano", ["unknown"], "fr")
+    assert out["lang"] == "en" and out["tips"]
+
+
+def test_advice_endpoint():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    r = c.get("/api/ai/advice", params={"type": "industrial", "hazards": "gas_leak,chemical", "lang": "hi"})
+    assert r.status_code == 200 and "गंध" in r.json()["tips"][0]
+    assert c.get("/api/ai/advice", params={"lang": "xx"}).status_code == 422
