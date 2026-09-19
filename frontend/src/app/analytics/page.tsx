@@ -608,7 +608,7 @@ export default function AnalyticsPage() {
               <Stat label="Severity ±1" value={pct(evalResult.data.severity_within_1)} />
               <Stat label="Dedup precision" value={pct(evalResult.data.dedup_precision)} />
               <Stat label="Dedup recall" value={pct(evalResult.data.dedup_recall)} />
-              <Stat label="Avg latency" value={`${evalResult.data.avg_latency_ms} ms`} />
+              <Stat label="Avg latency" value={evalResult.data.avg_latency_ms != null ? `${evalResult.data.avg_latency_ms} ms` : "—"} />
               <Stat label="Examples" value={String(evalResult.data.n)} />
             </dl>
           ) : (

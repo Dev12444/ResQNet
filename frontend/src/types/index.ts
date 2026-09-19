@@ -73,7 +73,7 @@ export type Hazard =
   | "other";
 
 /** `source_model` on a classification — how the triage result was produced. */
-export type SourceModel = "gemini" | "fallback" | "rules";
+export type SourceModel = "openai" | "gemini" | "fallback" | "rules";
 
 /* ------------------------------------------------------------------ */
 /* 2. Objects                                                          */
@@ -176,6 +176,8 @@ export interface Recommendation {
   distance_km: number;
   eta_min: number;
   score: number;
+  /** Unit capabilities this incident calls for, e.g. ["aerial_ladder", "rescue"] (show as chips). */
+  matched_capabilities?: string[];
   reason: string;
 }
 
@@ -213,6 +215,8 @@ export interface ReportCreate {
    * reading shown on the receipt.
    */
   citizen_type?: IncidentType | null;
+  /** `/field` updates: attach to this open incident directly (contract v1.3). */
+  incident_id?: number | null;
 }
 
 /** Gemini Vision analysis of an attached photo. Advisory only. */
@@ -350,7 +354,7 @@ export interface AnalyticsEval {
   severity_within_1: number;
   dedup_precision: number;
   dedup_recall: number;
-  avg_latency_ms: number;
+  avg_latency_ms: number | null;
   run_at: string;
 }
 

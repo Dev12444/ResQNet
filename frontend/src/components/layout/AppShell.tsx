@@ -15,6 +15,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const connection = useConnectionStatus();
 
+  // The control room is a full-screen console with its own header, 112 bar and live status.
+  if (pathname.startsWith("/dashboard")) return <>{children}</>;
+
   return (
     <>
       <a href="#main" className="skip-link">

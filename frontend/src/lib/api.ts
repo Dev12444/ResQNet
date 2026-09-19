@@ -61,7 +61,7 @@ import * as mock from "./mock";
 /* Configuration                                                       */
 /* ------------------------------------------------------------------ */
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 /** Mock mode is the default until the backend is live (see TEAM_WORKFLOW §2). */
 export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
@@ -89,7 +89,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -694,6 +694,8 @@ export async function submitSituationUpdate(update: SituationUpdate): Promise<vo
       photo_url: null,
       reporter: `Assignment ${update.assignment_id}`,
       sensor: null,
+      // Attach to this incident even without GPS (otherwise a new incident opens at the city centre).
+      incident_id: update.incident_id,
     } satisfies ReportCreate),
   });
 
