@@ -292,6 +292,66 @@ def test_concurrent_duplicates_merge_into_one_incident(tmp_path):
         eng.dispose()
 
 
+def test_ai_calls_run_in_parallel_but_duplicates_still_merge(tmp_path, monkeypatch):
+    """The slow AI half (prepare) runs outside the pipeline lock; only dedup + merge is serialised.
+
+    With a 0.5 s classifier, 4 simultaneous reports take ~0.5 s instead of ~2 s, and still end up
+    in ONE incident (the merge decision is still made under the lock).
+    """
+    from app.services import triage as triage_mod
+
+    real_classify = triage_mod.classify
+
+    def slow_classify(*args, **kwargs):
+        time.sleep(0.5)  # stands in for an LLM call
+        return real_classify(*args, **kwargs)
+
+    monkeypatch.setattr(triage_mod, "classify", slow_classify)
+    eng = create_engine(f"sqlite:///{(tmp_path / 'parallel.db').as_posix()}",
+                        connect_args={"check_same_thread": False, "timeout": 30})
+    Session = _make_client(eng)
+    try:
+        with TestClient(app) as client:
+            codes: list[int] = []
+            barrier = threading.Barrier(4)
+
+            def send(i):
+                barrier.wait()
+                codes.append(_post(client, source="citizen", text=f"{AKHBARNAGAR_EN} (report {i})",
+                                   lat=23.0588 + i * 0.00001, lng=72.5620).status_code)
+
+            threads = [threading.Thread(target=send, args=(i,)) for i in range(4)]
+            started = time.monotonic()
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            elapsed = time.monotonic() - started
+        assert codes == [201] * 4
+        assert elapsed < 1.5, f"AI calls were serialised: {elapsed:.2f}s for 4 reports"
+        with Session() as db:
+            incidents = db.scalars(select(m.Incident)).all()
+            assert len(incidents) == 1 and incidents[0].report_count == 4
+    finally:
+        app.dependency_overrides.clear()
+        eng.dispose()
+
+
+def test_prepare_failure_keeps_raw_report(env, monkeypatch):
+    """prepare() is documented never to raise; if it ever does, the report is still kept."""
+    client, Session = env
+
+    def boom(_report):
+        raise RuntimeError("classifier exploded")
+
+    monkeypatch.setattr("app.pipeline.prepare", boom)
+    r = _post(client, source="citizen", text=AKHBARNAGAR_EN, lat=23.0588, lng=72.562)
+    assert r.status_code == 500 and r.json()["detail"] == "Report 1 was saved but could not be processed"
+    with Session() as db:
+        assert db.get(m.Report, 1).incident_id is None
+        assert db.scalar(select(func.count()).select_from(m.Incident)) == 0
+
+
 # ---------------------------------------------------------------- debounced summaries catch up
 
 

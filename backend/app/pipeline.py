@@ -2,8 +2,9 @@
 
 Used by POST /api/reports and by the scenario simulator, so both follow the same path:
 
-    raw report saved + committed  ->  triage() (BE2: classify, geocode, dedup)
-    ->  create or merge incident   ->  audit  ->  commit  ->  (caller) broadcast
+    raw report saved + committed  ->  prepare() (BE2: AI classify + geocode, no DB, NOT locked)
+    ->  [lock] triage(prepared) dedup  ->  create or merge incident  ->  audit  ->  commit [/lock]
+    ->  (caller) broadcast
     ->  background: refresh_summary() -> commit -> broadcast incident.updated
         (if BE2's summarizer debounce skipped it: one trailing refresh when the window ends)
 
@@ -11,9 +12,10 @@ Guarantees:
 - The raw report is committed before any processing, so it is never lost (PRD §7);
   if processing fails it stays stored, unlinked, and ReportProcessingError is raised.
 - Dedup + incident create/merge run under a process-wide lock, so concurrent reports
-  about the same event merge instead of racing into duplicate incidents. This serialises
-  triage within one process (fine for one Render instance; multiple workers would need a
-  DB-level lock).
+  about the same event merge instead of racing into duplicate incidents. The slow AI call
+  (~1-2 s) runs before the lock, so simultaneous reports are classified in parallel and only
+  the millisecond dedup step is serialised (fine for one Render instance; multiple workers
+  would need a DB-level lock).
 """
 from __future__ import annotations
 
@@ -30,7 +32,7 @@ from app import models as m
 from app.schemas import IncidentOut, ReportCreate
 from app.services import summarizer
 from app.services.classifier import ClassificationResult
-from app.services.triage import apply_to_incident, refresh_summary, triage
+from app.services.triage import apply_to_incident, prepare, refresh_summary, triage
 from app.ws_manager import manager
 
 log = logging.getLogger("resqnet.pipeline")
@@ -90,8 +92,9 @@ def ingest_report(db: Session, body: ReportCreate, actor: str) -> IngestResult:
     report = _save_raw(db, body)
     report_id = report.id
     try:
+        prepared = prepare(report)  # AI + geocoding, no DB: outside the lock so reports classify in parallel
         with _PIPELINE_LOCK:
-            t = triage(db, report)
+            t = triage(db, report, prepared=prepared)  # dedup only (milliseconds)
             cls = t.classification
             report.lat, report.lng = t.lat, t.lng
             report.lang = cls.lang
