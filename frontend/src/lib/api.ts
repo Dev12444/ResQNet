@@ -67,6 +67,7 @@ export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:800
 export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 
 const TIMEOUT_MS = 8000;
+const REPORT_TIMEOUT_MS = 25_000;
 
 /* ------------------------------------------------------------------ */
 /* Envelope helpers                                                    */
@@ -89,9 +90,9 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_URL}${path}`, {
       ...init,
@@ -106,8 +107,13 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (!res.ok) {
       let detail = `Request failed (${res.status})`;
       try {
-        const body = (await res.json()) as { detail?: string };
-        if (body?.detail) detail = body.detail;
+        const body = (await res.json()) as { detail?: unknown };
+        if (typeof body?.detail === "string") detail = body.detail;
+        // FastAPI validation errors (422) are a list of {loc, msg}: show them readably.
+        else if (Array.isArray(body?.detail))
+          detail = body.detail
+            .map((d: { loc?: unknown[]; msg?: string }) => `${(d.loc ?? []).slice(1).join(".")}: ${d.msg ?? "invalid"}`)
+            .join("; ");
       } catch {
         /* non-JSON error body — keep the status message */
       }
@@ -186,10 +192,17 @@ export async function ping(): Promise<boolean> {
 
 export async function submitReport(body: ReportCreate): Promise<ReportCreateResponse> {
   if (USE_MOCK) return mockSubmit(body);
-  return request<ReportCreateResponse>("/api/reports", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  // citizen_type is a UI-only hint (used by the mock). The API contract has no such field and
+  // rejects unknown fields (422), so it is not sent; the AI classifies from the text itself.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { citizen_type, ...payload } = body;
+  // A new report runs the full AI triage (classify + embeddings), ~2-9 s on Render's free tier:
+  // a short timeout would show "failed" for a report that was actually stored.
+  return request<ReportCreateResponse>(
+    "/api/reports",
+    { method: "POST", body: JSON.stringify(payload) },
+    REPORT_TIMEOUT_MS,
+  );
 }
 
 /**
@@ -697,7 +710,7 @@ export async function submitSituationUpdate(update: SituationUpdate): Promise<vo
       // Attach to this incident even without GPS (otherwise a new incident opens at the city centre).
       incident_id: update.incident_id,
     } satisfies ReportCreate),
-  });
+  }, REPORT_TIMEOUT_MS);
 
   if (update.severity !== null || update.resolved) {
     await request<unknown>(`/api/incidents/${update.incident_id}`, {

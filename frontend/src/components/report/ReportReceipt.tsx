@@ -15,6 +15,7 @@
 import type { Lang, ReportCreateResponse, ReportStage } from "@/types";
 import { REPORT_STAGES, TYPE_LABEL_I18N, UI_STRINGS } from "@/lib/constants";
 import { Panel } from "@/components/layout/primitives";
+import { SafetyAdvice } from "@/components/report/SafetyAdvice";
 import {
   ConfidenceMeter,
   HazardList,
@@ -65,6 +66,9 @@ export function ReportReceipt({
           <dd className="mono">{formatTime(submittedAt)}</dd>
         </dl>
       </div>
+
+      {/* Safety first: what to do until help arrives, in the citizen's language. */}
+      <SafetyAdvice type={classification.type} hazards={classification.hazards} lang={lang} />
 
       {/* Progress — each stage named, with the reached ones marked. */}
       <Panel title="Status">
