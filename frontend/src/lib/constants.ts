@@ -46,6 +46,42 @@ export const DISTRICTS = [
 
 export type District = (typeof DISTRICTS)[number];
 
+/** Great-circle distance in km. Mirrors `backend/app/services/geo.py`. */
+export function haversineKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Average speeds by unit kind, km/h — the same figures BE1 uses. These give a
+ * straight-line estimate, NOT a routed one: no road network, traffic or
+ * closures are modelled, so every ETA built from this is labelled as an
+ * estimate wherever it is displayed.
+ */
+export const KIND_SPEED_KMH: Record<ResourceKind, number> = {
+  ambulance: 35,
+  fire_truck: 30,
+  police: 40,
+  rescue_boat: 10,
+  ndrf_team: 25,
+  hazmat: 30,
+};
+
+export function etaMinutes(distanceKm: number, kind: ResourceKind): number {
+  return Math.max(1, Math.round((distanceKm / KIND_SPEED_KMH[kind]) * 60));
+}
+
 /* ------------------------------------------------------------------ */
 /* Emergency numbers                                                   */
 /* ------------------------------------------------------------------ */

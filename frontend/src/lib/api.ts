@@ -798,3 +798,53 @@ export function computeShortages(
     })
     .sort((a, b) => b.shortage - a.shortage || a.kind.localeCompare(b.kind));
 }
+
+/* ------------------------------------------------------------------ */
+/* Analytics support — incidents paired with their trust view          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Incidents plus the derived trust view for each, so `/analytics` can filter
+ * by verification and break down sources without every component refetching.
+ *
+ * In mock mode this is a lookup. Against a live backend it is one request per
+ * incident (there is no bulk reports endpoint in the contract) — acceptable at
+ * demo scale, and noted as an integration dependency.
+ */
+export async function getIncidentsWithTrust(): Promise<
+  Envelope<{ incident: Incident; trust: IncidentTrust }[]>
+> {
+  const incidents = await getIncidents({ includeResolved: true });
+
+  if (USE_MOCK) {
+    const paired = incidents.data.map((incident) => ({
+      incident,
+      trust:
+        mock.MOCK_TRUST[incident.id] ??
+        ({
+          incident_id: incident.id,
+          verification: "unverified",
+          sources: {
+            reports: incident.report_count,
+            unique_sources: 1,
+            citizen: incident.report_count,
+            call: 0,
+            sensor: 0,
+            field: 0,
+          },
+          duplicate_state: "matched",
+          sensor_corroboration: null,
+          conflicts: [],
+        } satisfies IncidentTrust),
+    }));
+    return envelope(paired, incidents.mode, incidents.error);
+  }
+
+  const paired = await Promise.all(
+    incidents.data.map(async (incident) => ({
+      incident,
+      trust: (await getIncidentTrust(incident.id)).data,
+    })),
+  );
+  return envelope(paired, incidents.mode, incidents.error);
+}
