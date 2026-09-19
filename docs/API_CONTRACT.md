@@ -215,6 +215,7 @@ Request:
 }
 ```
 - `text` required unless `source = "sensor"` (then `sensor` required)
+- `photo_url` (optional): a `data:image/jpeg|png|webp;base64,...` URL (≤ 6 MB — FE should downscale to ~1280 px) or a public `https://` image URL. Analysed by Gemini Vision in parallel; a relevant photo can raise severity by +1
 - `lat/lng` optional — if missing, BE2 extracts `location_text` and BE1 geocodes against a small Ahmedabad gazetteer (fallback: city centre + flag low confidence)
 
 Pipeline: save → `classify()` → `find_match()` → create or merge incident → `summarize_incident()` → broadcast WS → respond.
@@ -233,7 +234,9 @@ Response `201`:
   }
 }
 ```
-`source_model` is `"gemini"` or `"fallback"`.
+`source_model` is `"gemini"`, `"fallback"` (rules) or `"rules"` (sensor).
+`classification.photo` is `null` or `{ "relevant": bool, "type": ..., "severity_hint": 1-5, "hazards": [...], "description": "...", "confidence": 0-1 }`.
+Reports without GPS are geocoded from the text (Ahmedabad gazetteer); if that fails the incident is placed at the city centre with `confidence <= 0.4` — FE should show "location unverified".
 
 #### `GET /api/reports?incident_id=7` → `Report[]`
 
@@ -287,6 +290,10 @@ Setting `status: "escalated"` creates an `escalation` alert and sends Telegram.
 
 #### `POST /api/incidents/{id}/summarize`
 Forces a re-summary → `{ "ai_summary": "...", "ai_actions": ["..."] }`
+
+#### `GET /api/ai/status`
+→ `{ "ai_enabled": true, "generation_available": true, "embeddings_available": true, "models": { "gemini-3.5-flash-lite": { "calls_last_min": 3, "benched_for_sec": 0 } }, "embed_model": "gemini-embedding-001", "rpm_per_model": 12, "disk_cache": true }`
+Debug/demo helper: if every model is benched, the system is running on rule-based fallback.
 
 #### `POST /api/ai/sitrep`
 Request `{}` → `{ "generated_at": "...", "markdown": "## Situation Report\n..." , "active_count": 9 }`
@@ -441,6 +448,11 @@ def summarize_incident(incident: Incident, reports: list[Report]) -> dict: ...
     # -> {"summary": str, "actions": list[str]}
 def sitrep(incidents: list[Incident]) -> str: ...             # markdown
 
+# app/services/triage.py  (BE2 — one call for the whole AI part of POST /api/reports; recipe in its docstring)
+def triage(db: Session, report: Report) -> TriageResult: ...  # .classification .match .lat .lng .address .geocoded .approximate
+def apply_to_incident(incident: Incident, cls: ClassificationResult, is_new: bool) -> Incident: ...
+def refresh_summary(incident: Incident, force: bool = False) -> dict: ...
+
 # app/services/geo.py  (BE1 — BE2 uses)
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float: ...
 def eta_minutes(distance_km: float, kind: str) -> int: ...
@@ -457,3 +469,4 @@ Rules:
 | Date | Change | By |
 |---|---|---|
 | 2026-09-19 | v1 | team |
+| 2026-09-19 | `photo_url` formats, `classification.photo`, geocoding note, `GET /api/ai/status`, `triage.py` internal API | BE2 |
