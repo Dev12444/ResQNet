@@ -108,6 +108,6 @@
 | *Cost at city scale?* | About $0.0005 per report on gpt-4.1-mini. Repeat texts are cached. There's a hard budget cap, and it falls back to free rules. |
 | *Offline / internet outage?* | Keyword rules in 3 languages, place-name gazetteer, geo+time dedup. It degrades, it doesn't stop. |
 | *Reports without GPS?* | Gazetteer of ~35 Ahmedabad areas (EN/GU/HI names). If it's unknown, the report goes to the city centre with a "location unverified" badge. |
-| *Isn't your eval set biased?* | *(After the held-out set lands:)* We also tested on N new messages written by teammates that were never used for tuning: X % type accuracy. |
+| *Isn't your eval set biased?* | We also built a separate **stress set** of messy real-world input (Romanized Gujarati like "pani bharayu che", typos, pranks, past incidents, no GPS). The AI scores 100 % type and 94 % critical-incident recall there, and even the offline keyword rules score 100 % type. *(Add teammates' held-out numbers here when they land.)* |
 | *Privacy / security?* | Keys server-side only, no citizen data sent anywhere except the AI provider, SSRF-guarded photo fetch, full audit log. |
 | *Why not just a form with categories?* | People in an emergency write "ગાડી ફસાઈ છે", not a category. The AI turns messy text into structured, prioritised, de-duplicated incidents. |

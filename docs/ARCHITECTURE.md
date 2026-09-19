@@ -141,6 +141,15 @@ OpenAI gpt-4.1-mini ─► gpt-4.1-nano ─► Gemini 3.5-flash-lite ─► 3.1-
 | Avg AI latency | 1.4 s / report |
 | Cost | $0.027 per 50 reports |
 
+**Robustness set** (`GET /api/analytics/eval?set=stress`, 32 messy reports: Romanized Gujarati/Hindi, SMS typos, pranks, past incidents, no GPS):
+
+| | AI | Offline rules |
+|---|---|---|
+| Type accuracy | 100 % | 100 % |
+| Severity within ±1 | 100 % | 100 % |
+| P1 recall | 94.4 % | 88.9 % |
+| Duplicates (native ↔ Roman script) | 1.00 / 1.00 | 1.00 / 1.00 |
+
 End-to-end check: `scripts/dry_run.py` runs the full pipeline on the demo scenario. 30 reports → 11 incidents, each story is exactly one incident, and no false merges.
 
 ## 5. Data model
