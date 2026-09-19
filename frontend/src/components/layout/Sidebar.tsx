@@ -8,9 +8,10 @@
  * The active item takes a crimson plate, which is the only place crimson is
  * used decoratively anywhere in the shell.
  *
- * The foot of the rail carries the stippled Statue of Unity and the state
- * motto. It is drawn, not photographed, and dissolves into the navy — see
- * `StatueOfUnity.tsx`.
+ * The foot of the rail carries the creed, set flush left, one word per line.
+ * A stippled Statue of Unity used to stand above it; it was removed because a
+ * national monument is not this platform's identity, and the rail reads
+ * quieter without it.
  */
 
 import Link from "next/link";
@@ -33,7 +34,6 @@ import type { ComponentType } from "react";
 import type { Lang } from "@/types";
 import { PLATFORM_STRINGS, SIDEBAR_NAV, type NavKey } from "@/lib/constants";
 import { ResQLogoMark } from "@/components/brand/ResQLogo";
-import { StatueOfUnity } from "@/components/brand/StatueOfUnity";
 
 const ICONS: Record<string, ComponentType<{ className?: string }>> = {
   Home,
@@ -136,14 +136,11 @@ export function Sidebar({
           </ul>
         </nav>
 
-        {/* Statue of Unity over the Gujarat skyline, then the creed.
-            The artwork is drawn, dissolves into the navy and carries no
-            background plate — see `StatueOfUnity.tsx`. The creed is set flush
-            left under it, one word per line, closed by a short crimson rule:
-            the only crimson in the rail apart from the active nav plate. */}
+        {/* The creed, set flush left, one word per line, closed by a short
+            crimson rule: the only crimson in the rail apart from the active
+            nav plate. */}
         <div className="relative mt-auto shrink-0 px-3 pb-4 pt-1">
-          <StatueOfUnity className="mx-auto w-full" />
-          <p className="mt-1 text-[13px] font-normal leading-[1.18] text-[#c3d3e2]">
+          <p className="text-[13px] font-normal leading-[1.18] text-[#c3d3e2]">
             {t.railCreed.map((word) => (
               <span key={word} className="block">
                 {word}

@@ -12,7 +12,7 @@
  *   ├────────┬─────────────────────────────────────┤
  *   │  rail  │ workspace                           │
  *   ├────────┴─────────────────────────────────────┤
- *   │ SDMA | A Safer State Together | RESQNET         │
+ *   │ Emblem | A Safer State Together | RESQNET      │
  *   └──────────────────────────────────────────────┘
  *
  * Header, nav, hazard strip and ticker all span the full width so identity and

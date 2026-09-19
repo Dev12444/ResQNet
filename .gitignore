@@ -27,3 +27,6 @@ next-env.d.ts
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# Local delivery bundles — built artifacts, not source
+*.zip

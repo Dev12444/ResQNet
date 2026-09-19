@@ -22,6 +22,7 @@ import {
   Users,
 } from "lucide-react";
 import type { Lang } from "@/types";
+import { isSecureContext } from "@/lib/secureContext";
 
 const CLOSE_ONES_KEY = "resqnet.closeOnes";
 const CONTACTS_KEY = "resqnet.closeOnes.contacts";
@@ -454,6 +455,15 @@ export function LocationPermissionCard() {
 
   const request = () => {
     setError(null);
+    // On plain HTTP from anything but this device the browser refuses before
+    // it prompts, so there is no permission decision to report. Say why.
+    if (!isSecureContext()) {
+      setState("denied");
+      setError(
+        "This page is not on a secure (HTTPS) connection, so your browser blocks location. You can still report an emergency by typing a landmark.",
+      );
+      return;
+    }
     setState("asking");
     navigator.geolocation.getCurrentPosition(
       (pos) => {

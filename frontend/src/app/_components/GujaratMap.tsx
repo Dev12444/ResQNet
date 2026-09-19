@@ -218,6 +218,10 @@ const GUJARAT_VIEW = { center: [71.5, 22.6] as [number, number], zoom: 6.1 };
  * with a count. The radius is a little over a marker's width, so a group is
  * formed exactly when the icons would have overlapped.
  */
+/* How long a basemap may take before the map calls it a failure. Generous on
+   purpose: a phone on a slow connection is the case that matters. */
+const MAP_LOAD_TIMEOUT_MS = 30000;
+
 const CLUSTER_RADIUS_PX = 26;
 
 /** Marker diameters, in pixels. Deliberately small: this is a GIS overlay. */
@@ -300,12 +304,16 @@ export function GujaratMap({
   }, []);
 
   /* A basemap that never finishes loading is indistinguishable from a blank
-     rectangle, so it gets a deadline rather than being left to hang. */
+     rectangle, so it gets a deadline rather than being left to hang.
+     The deadline has to suit the slowest device that will really open this:
+     a phone on mobile data fetching satellite tiles, not a desktop on fibre.
+     Fifteen seconds was short enough to call a slow load a failure and put an
+     error over a map that was about to arrive. */
   const armWatchdog = useCallback(() => {
     if (watchdog.current) clearTimeout(watchdog.current);
     watchdog.current = setTimeout(() => {
       if (!readyRef.current) setFailed(true);
-    }, 15000);
+    }, MAP_LOAD_TIMEOUT_MS);
   }, []);
 
   // Latest callback, read from map handlers without re-running init.

@@ -250,6 +250,7 @@ export function ReportForm({
           useMyLocation: t.useMyLocation,
           locating: t.locating,
           locationDenied: t.locationDenied,
+          locationInsecure: t.locationInsecure,
           adjustLocation: t.adjustLocation,
           landmarkLabel: t.landmarkLabel,
           landmarkPlaceholder: t.landmarkPlaceholder,
@@ -272,6 +273,7 @@ export function ReportForm({
         startLabel={t.startVoice}
         stopLabel={t.stopVoice}
         unsupportedLabel={t.voiceUnsupported}
+        insecureLabel={t.voiceInsecure}
         hintLabel={t.voiceHint}
       />
 

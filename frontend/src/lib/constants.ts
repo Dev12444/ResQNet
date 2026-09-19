@@ -496,6 +496,13 @@ export const UI_STRINGS = {
     locating: "Finding your location…",
     locationDenied:
       "Location unavailable. Type the nearest landmark instead — your report still works.",
+    /* Shown instead of locationDenied when the browser refused before it ever
+       asked, because the page is not on HTTPS. Naming the real cause is the
+       only way the person running it knows what to change. */
+    locationInsecure:
+      "This page is not on a secure (HTTPS) connection, so your browser blocks location. Type the nearest landmark instead — your report still works.",
+    voiceInsecure:
+      "Voice input needs a secure (HTTPS) connection. Type your description instead.",
     adjustLocation: "Adjust location",
     landmarkLabel: "Nearest landmark or address",
     landmarkPlaceholder: "e.g. Akhbarnagar underpass, Naranpura",
@@ -538,6 +545,10 @@ export const UI_STRINGS = {
     locating: "તમારું સ્થાન શોધી રહ્યા છીએ…",
     locationDenied:
       "સ્થાન ઉપલબ્ધ નથી. નજીકનું સ્થળ લખો — તમારો રિપોર્ટ તો પણ કામ કરશે.",
+    locationInsecure:
+      "આ પેજ સુરક્ષિત (HTTPS) કનેક્શન પર નથી, તેથી બ્રાઉઝર સ્થાન બ્લ્ોક કરે છે. નજીકનું સ્થળ લખો — તમારો રિપોર્ટ તો પણ કામ કરશે.",
+    voiceInsecure:
+      "વોઇસ ઇનપુટ માટે સુરક્ષિત (HTTPS) કનેક્શન જરૂરી છે. તેને બદલે લખો.",
     adjustLocation: "સ્થાન સુધારો",
     landmarkLabel: "નજીકનું સ્થળ અથવા સરનામું",
     landmarkPlaceholder: "દા.ત. અખબારનગર અંડરપાસ, નારણપુરા",
@@ -580,6 +591,10 @@ export const UI_STRINGS = {
     locating: "आपका स्थान खोजा जा रहा है…",
     locationDenied:
       "स्थान उपलब्ध नहीं है। पास का लैंडमार्क लिखें — आपकी रिपोर्ट फिर भी जाएगी।",
+    locationInsecure:
+      "यह पेज सुरक्षित (HTTPS) कनेक्शन पर नहीं है, इसलिए ब्राउज़र स्थान ब्लॉक कर रहा है। पास का लैंडमार्क लिखें — रिपोर्ट फिर भी जाएगी।",
+    voiceInsecure:
+      "वॉइस इनपुट के लिए सुरक्षित (HTTPS) कनेक्शन चाहिए। इसके बजाय लिखें।",
     adjustLocation: "स्थान ठीक करें",
     landmarkLabel: "पास का लैंडमार्क या पता",
     landmarkPlaceholder: "जैसे अखबारनगर अंडरपास, नारणपुरा",

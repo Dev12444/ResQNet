@@ -283,9 +283,6 @@ function StateEmblem() {
         <path d="M9 29h22l-2.5 4h-17L9 29Z" fill="var(--navy-700)" />
         <path d="M11 34.5h18v2H11z" fill="var(--navy-700)" opacity="0.6" />
       </svg>
-      <span className="mt-0.5 text-[7px] font-bold leading-none tracking-wide text-[var(--navy-700)]">
-        SDMA
-      </span>
     </span>
   );
 }

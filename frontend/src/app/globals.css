@@ -316,6 +316,14 @@ th {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
+  /*
+   * A grid or flex item defaults to `min-width: auto`, which means it refuses
+   * to shrink below the widest thing inside it. A panel head holds a title and
+   * a timestamp that both decline to wrap, so on a narrow column the panel
+   * would win that argument against the viewport and push the whole page
+   * sideways. A panel is a column in a layout; it never sets the page width.
+   */
+  min-width: 0;
 }
 
 /* Card head: tinted strip, thin rule, compact uppercase title. */
@@ -327,6 +335,14 @@ th {
   border-bottom: 1px solid var(--hairline);
   background: var(--surface-2);
   border-radius: var(--radius) var(--radius) 0 0;
+  /*
+   * Clip rather than overflow. When the column is too narrow for the title and
+   * the timestamp together, the timestamp is the thing to lose: it is the
+   * least important item in the head, and losing it silently beats a
+   * horizontal scrollbar on the whole document.
+   */
+  min-width: 0;
+  overflow: hidden;
 }
 
 /*
