@@ -62,7 +62,7 @@ flowchart LR
 |---|---|---|
 | API | Python 3.11, FastAPI, Pydantic v2 | typed contract, async WebSockets, fast to build |
 | DB | SQLAlchemy 2.0 · SQLite (dev) / Postgres on Neon (prod) | zero-setup locally, managed in prod |
-| Realtime | FastAPI WebSocket, `ws_manager.broadcast(event, data)` | live map without polling |
+| Realtime | FastAPI WebSocket, `ws_manager.manager.publish(event, data)` (thread-safe, ordered per client) | live map without polling |
 | AI | OpenAI `gpt-4.1-mini` → Gemini `3.5-flash-lite` → keyword rules | quality first, then cost/quota fallbacks |
 | Embeddings | Gemini `gemini-embedding-001` → OpenAI `text-embedding-3-small` | Gemini separates EN↔GU↔HI duplicates far better |
 | Frontend | Next.js 16, Tailwind, MapLibre (OSM tiles), Recharts | free maps, fast charts |
@@ -75,7 +75,7 @@ flowchart LR
 sequenceDiagram
     participant U as Citizen / caller / sensor
     participant API as POST /api/reports
-    participant T as triage()
+    participant T as prepare() / triage()
     participant AI as LLM chain
     participant DB as Postgres
     participant WS as WebSocket
@@ -83,10 +83,11 @@ sequenceDiagram
 
     U->>API: text (any language), GPS?, photo?
     API->>DB: store raw report first (never lost)
-    API->>T: triage(db, report)
-    T->>AI: classify (strict JSON schema) ∥ photo check
+    API->>T: prepare(report) — outside the lock, runs in parallel
+    T->>AI: classify (strict JSON schema) ∥ photo check · embed text
     AI-->>T: type, severity, hazards, location, confidence
     T->>T: priority rule · gazetteer geocode if no GPS
+    Note over API,T: pipeline lock (dedup + create/merge only, ms)
     T->>DB: candidate incidents (same type, ≤300 m / 1 km flood, ≤30 min)
     T->>AI: embeddings for text similarity
     T-->>API: new incident OR merge into existing
@@ -98,6 +99,7 @@ sequenceDiagram
 ```
 
 Typical latency: about 1.4 s of AI time per report (measured), about 2 ms when cached. The raw report is saved before any AI call.
+**Concurrency:** AI classification runs *outside* the pipeline lock, and only dedup + create/merge are serialised (so simultaneous duplicates can't race into two incidents). Measured on a real server with OpenAI: 8 simultaneous reports all answered in 3.2–5.6 s (vs 16.4 s when classification was inside the lock), still merged correctly.
 
 ## 4. AI & intelligence layer (BE2)
 
@@ -112,7 +114,7 @@ All AI code is in `backend/app/services/`. Every public function **never raises*
 | `vision.py` | Photo → severity hint (max +1). SSRF-guarded URL fetch | ignored |
 | `gazetteer.py` | ~35 Ahmedabad places with EN/GU/HI aliases → lat/lng when no GPS | city centre + "location unverified" (confidence ≤ 0.4) |
 | `dedup.py` | Type + distance (300 m, 1 km floods) + 30 min window + embedding cosine with per-model thresholds | geo + time only |
-| `triage.py` | One call: classify → geocode → dedup. Honours `incident_id` hints from field crews | — |
+| `triage.py` | `prepare()` = classify + geocode + embed (no DB, parallel) · `triage(prepared=)` = dedup under BE1's lock. Honours `incident_id` hints from field crews | — |
 | `recommender.py` | Score = 0.5·capability fit + 0.35·ETA + 0.15·load balance. Matches unit capabilities (aerial ladder, swift-water, cardiac…) and hospital specialties. AI writes one-line reasons | template reasons |
 | `summarizer.py` | English incident summary + actions, and a city-wide SITREP (markdown) | template summary |
 | `trust.py` | Verification level, distinct sources, sensor corroboration, **conflicts** between reports (people count, severity, type, "contained" vs "worsening") | pure rules |
@@ -226,7 +228,7 @@ Vercel (Next.js)  ──HTTPS/WSS──►  Render (FastAPI, uvicorn)  ──TLS
 
 | Area | Owner | Paths |
 |---|---|---|
-| BE1 — core & realtime | Rahi | `models.py`, `schemas.py`, `db.py`, `main.py`, `routers/{reports,incidents,dispatch,resources,alerts,simulator,ws}.py`, `services/{geo,escalation,notifier}.py`, seed + scenario |
+| BE1 — core & realtime | Rahi | `models.py`, `schemas.py`, `db.py`, `main.py`, `pipeline.py`, `audit.py`, `routers/{reports,incidents,dispatch,resources,alerts,simulator,ws}.py`, `services/{geo,escalation,notifier}.py`, seed + scenario |
 | BE2 — AI & intelligence | Dev | `services/{llm,classifier,dedup,recommender,summarizer,vision,gazetteer,triage,trust,insights}.py`, `routers/{ai,analytics}.py`, `scripts/{eval,warm_cache,dry_run}.py` |
 | FE1 — command center | Maansi | `/dashboard`, map, incident drawer, dispatch |
 | FE2 — reporting & insights | Diya | `/report`, `/field`, `/analytics`, `/resources`, landing, API layer, types |
