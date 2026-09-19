@@ -83,7 +83,7 @@ Real 108/112 telephony integration, authentication/RBAC beyond a role switcher, 
 
 ### FR-2 Incident Classification (AI)
 - Output (strict JSON): `type ∈ {flood, fire, road_accident, industrial, medical, building_collapse, other}`, `severity 1-5`, `priority P1-P4`, `location_text`, `people_affected_est`, `hazards[]`, `reasoning`, `confidence 0-1`, `lang`
-- Model: Gemini (`gemini-2.5-flash`) with JSON schema response; temperature 0
+- Model: Gemini (`gemini-3.5-flash-lite`, fallback `gemini-3.6-flash`) with JSON schema response; temperature 0
 - Fallback: keyword + rule classifier if API fails/rate-limited — the pipeline must never block
 - Sensor reports: rule-based (e.g. water level > danger mark → flood, severity by margin)
 - Priority rule: P1 = severity ≥ 4 **or** hazards include `trapped_people|gas_leak|fire_spread`; P2 = severity 3; P3 = 2; P4 = 1
@@ -93,7 +93,7 @@ A new report is merged into an existing **open** incident when **all** hold:
 - same `type` (or one is `other`)
 - distance ≤ **300 m** (haversine; 1 km for floods — they cover areas)
 - time gap ≤ **30 min** from incident's last report
-- text similarity: embedding cosine ≥ **0.80** (Gemini `text-embedding-004`) — or, if embeddings unavailable, the first three rules alone
+- text similarity: embedding cosine ≥ **0.80** (Gemini `gemini-embedding-001`) — or, if embeddings unavailable, the first three rules alone
 
 On merge: append report, bump `report_count`, recompute severity = max(existing, new), re-summarise, broadcast `incident.merged`. Dispatcher can **unmerge** (Should).
 

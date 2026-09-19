@@ -184,7 +184,7 @@ Tick boxes in this file via PRs as you go (or just in your head — but tell the
 - [ ] Quick CLI test: `python -c "from app.services.classifier import classify; print(classify('...'))"`
 
 **P2 Golden path (Sat 14:00–19:00)**
-- [ ] `services/dedup.py` — `find_match(db, report, cls) -> Incident | None` per PRD FR-3 (type, 300 m / 1 km flood, 30 min, cosine ≥ 0.80 with `text-embedding-004`; geo+time only if embeddings fail). Cache embeddings on report
+- [ ] `services/dedup.py` — `find_match(db, report, cls) -> Incident | None` per PRD FR-3 (type, 300 m / 1 km flood, 30 min, cosine ≥ 0.80 with `gemini-embedding-001`; geo+time only if embeddings fail). Cache embeddings on report
 - [ ] `services/recommender.py` — `recommend(db, incident) -> {resources: [...top3 per needed kind], facility}`; capability map + score formula from PRD FR-4 using BE1's `geo.py`; LLM one-line reason (batched, one call per incident) with template fallback
 - [ ] `routers/ai.py` (new file, BE2-owned; ask BE1 to `include_router` it in `main.py`): `GET /api/incidents/{id}/recommendations`, `POST /api/incidents/{id}/summarize`, `POST /api/ai/sitrep`
 - [ ] `services/summarizer.py` — `summarize_incident(incident, reports) -> {summary, actions[]}` in English; called on create + merge (debounce: max once per 20 s per incident)
