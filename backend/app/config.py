@@ -9,6 +9,19 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./resqnet.db"
 
+    # BE2: AI providers, tried in this order (then rule-based fallback). Comma-separated: openai, gemini.
+    llm_providers: str = "openai,gemini"
+    embed_providers: str = "openai,gemini"
+
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4.1-mini"
+    openai_fallback_model: str = "gpt-4.1-nano"   # comma-separated list allowed
+    openai_embed_model: str = "text-embedding-3-small"
+    openai_reasoning_effort: str = "minimal"      # only sent to reasoning models (gpt-5*, o*)
+    openai_rpm: int = 300
+    # Hard stop for OpenAI spend (estimated from token usage) — protects the $10 credit. 0 = no cap.
+    openai_budget_usd: float = 8.0
+
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"  # fastest; eval: 100% type acc on 50-report set
     # Tried in order when the primary is overloaded (503), rate-limited (429) or out of daily quota.
@@ -36,7 +49,7 @@ class Settings(BaseSettings):
 
     @property
     def ai_available(self) -> bool:
-        return self.ai_enabled and bool(self.gemini_api_key)
+        return self.ai_enabled and bool(self.openai_api_key or self.gemini_api_key)
 
     @property
     def cors_list(self) -> list[str]:
