@@ -36,7 +36,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { useCallback, useEffect, useState } from "react";
 import { BellRing, ChevronRight, House, TriangleAlert, X } from "lucide-react";
-import type { WeatherAlert } from "@/types";
+import type { DataMode, WeatherAlert } from "@/types";
 import { DISASTER_META } from "@/lib/constants";
 import {
   readIncoming,
@@ -76,11 +76,14 @@ function fromIncoming(a: IncomingAlert): Flash | null {
   };
 }
 
-function fromFeed(a: WeatherAlert): Flash {
+function fromFeed(a: WeatherAlert, demo: boolean): Flash {
   const meta = DISASTER_META[a.disaster];
   return {
     id: a.id,
-    tag: "Official warning",
+    // A fabricated cyclone warning that says "Official warning" and credits IMD
+    // is the single most misleading thing this app could put on screen, so the
+    // provenance of the feed is carried into the chip rather than assumed.
+    tag: demo ? "Demo warning — not issued" : "Official warning",
     headline: `${meta.label} warning · ${a.district}`,
     detail: a.detail,
     district: a.district,
@@ -90,7 +93,15 @@ function fromFeed(a: WeatherAlert): Flash {
   };
 }
 
-export function CriticalAlertBanner({ alerts }: { alerts: WeatherAlert[] }) {
+export function CriticalAlertBanner({
+  alerts,
+  mode,
+}: {
+  alerts: WeatherAlert[];
+  /** Provenance of `alerts`. Anything but "live" is not an official warning. */
+  mode: DataMode;
+}) {
+  const demoFeed = mode !== "live";
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [incoming, setIncoming] = useState<IncomingAlert[]>([]);
   const [notify, setNotify] = useState<NotifyState>("default");
@@ -122,7 +133,7 @@ export function CriticalAlertBanner({ alerts }: { alerts: WeatherAlert[] }) {
 
   const queue: Flash[] = [
     ...incoming.map(fromIncoming).filter((f): f is Flash => f !== null),
-    ...alerts.filter((a) => a.severity === "critical").map(fromFeed),
+    ...alerts.filter((a) => a.severity === "critical").map((a) => fromFeed(a, demoFeed)),
   ];
   const flash = queue.find((f) => !dismissed.includes(f.id));
 
@@ -252,7 +263,9 @@ export function CriticalAlertBanner({ alerts }: { alerts: WeatherAlert[] }) {
       <p className="border-t border-white/20 px-3 py-1 text-[10px] leading-snug text-white/75 sm:px-4">
         {unverified
           ? `Reported by ${flash.source} and awaiting verification by the State Control Room. This banner is showing on this device only — ResQNet does not broadcast to phones. For an emergency, call 112.`
-          : `Issued by ${flash.source}. ResQNet displays official warnings — it does not broadcast to phones. For an emergency, call 112.`}
+          : demoFeed
+            ? `Demonstration warning attributed to ${flash.source} for the walkthrough. Nothing has been issued and nobody has been told. For an emergency, call 112.`
+            : `Issued by ${flash.source}. ResQNet displays official warnings — it does not broadcast to phones. For an emergency, call 112.`}
       </p>
     </aside>
   );

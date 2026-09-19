@@ -33,7 +33,7 @@ import {
   useState,
 } from "react";
 import { usePathname } from "next/navigation";
-import type { Lang, WeatherAlert } from "@/types";
+import type { DataMode, Lang, WeatherAlert } from "@/types";
 import { getWeatherAlerts } from "@/lib/api";
 import { Sidebar } from "./Sidebar";
 import { GovHeader } from "./GovHeader";
@@ -66,6 +66,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>("en");
   const [menuOpen, setMenuOpen] = useState(false);
   const [alerts, setAlerts] = useState<WeatherAlert[]>([]);
+  // Provenance travels with the alerts: the banner must not present a demo
+  // warning as an official one.
+  const [alertMode, setAlertMode] = useState<DataMode>("simulated");
   const connectivity = useConnectivity();
   const pathname = usePathname() ?? "";
 
@@ -88,7 +91,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     void (async () => {
       const env = await getWeatherAlerts();
-      if (!cancelled) setAlerts(env.data);
+      if (!cancelled) {
+        setAlerts(env.data);
+        setAlertMode(env.mode);
+      }
     })();
     return () => {
       cancelled = true;
@@ -126,7 +132,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <EmergencyUtilityBar />
         {/* Full width and above the rail: a critical warning belongs to the
             whole system, not to one panel on one route. */}
-        <CriticalAlertBanner alerts={alerts} />
+        <CriticalAlertBanner alerts={alerts} mode={alertMode} />
 
         <div className="flex flex-1">
           <Sidebar lang={lang} open={menuOpen} onClose={() => setMenuOpen(false)} />

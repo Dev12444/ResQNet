@@ -73,6 +73,8 @@ export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 
 const TIMEOUT_MS = 8000;
 const REPORT_TIMEOUT_MS = 25_000;
+/** Recommendations: AI matching, often against a cold container. */
+const RECOMMENDATION_TIMEOUT_MS = 30_000;
 
 /* ------------------------------------------------------------------ */
 /* Envelope helpers                                                    */
@@ -137,20 +139,55 @@ export async function request<T>(path: string, init?: RequestInit, timeoutMs = T
 }
 
 /**
- * Run a live call, falling back to cache and then to mock data.
- * `key` identifies the cache slot; `fallback` supplies the demo value.
+ * The API is hosted on a free Render instance, which suspends after roughly
+ * fifteen minutes of inactivity. The first request after that has to start the
+ * container, which takes far longer than any healthy request ever will. That
+ * failure is not an outage and should not read like one.
+ */
+function isProbablyWaking(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  // A timeout or a transport-level failure carries no status. A 502/503/504
+  // is the platform answering while the container is still coming up.
+  return err.status === null || err.status === 502 || err.status === 503 || err.status === 504;
+}
+
+const WAKING_NOTE =
+  "Server waking — the API sleeps after a few idle minutes and takes up to a minute to start. Retrying will work.";
+
+/**
+ * Run a live call, degrading in the order: live → last good response → last
+ * resort. `key` identifies the cache slot and `fallback` supplies the demo
+ * value used in mock mode.
+ *
+ * `liveEmpty` is what separates a screen that may show fixtures from one that
+ * may not. Pass it for anything operational — incidents, units, assignments,
+ * recommendations, alerts — and a live build with a dead endpoint renders an
+ * empty result and an explanation rather than invented records. Without it the
+ * old behaviour stands, which is correct for surfaces that are openly
+ * demonstrations (the weather forecast, the pulse feed) and label themselves
+ * DEMO DATA wherever they appear.
+ *
+ * The distinction matters most in the room: a judge looking at a dashboard of
+ * plausible-looking incidents cannot tell that the backend is down, and nobody
+ * demonstrating the product should be relying on that.
  */
 async function withFallback<T>(
   key: string,
   fallback: () => T,
   live: () => Promise<T>,
+  liveEmpty?: () => T,
 ): Promise<Envelope<T>> {
   if (USE_MOCK) return envelope(fallback(), "simulated");
+
+  const lastResort = (note: string): Envelope<T> =>
+    liveEmpty
+      ? envelope(liveEmpty(), "unavailable", note)
+      : envelope(fallback(), "simulated", `${note} — showing demo data`);
 
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     const cached = cache.get(key) as T | undefined;
     return cached === undefined
-      ? envelope(fallback(), "simulated", "Offline — showing demo data")
+      ? lastResort("This device is offline")
       : envelope(cached, "stale", "Offline — showing last known data");
   }
 
@@ -160,11 +197,12 @@ async function withFallback<T>(
     return envelope(data, "live");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Request failed";
+    const note = isProbablyWaking(err) ? WAKING_NOTE : message;
     const cached = cache.get(key) as T | undefined;
     if (cached !== undefined) {
-      return envelope(cached, "stale", `${message} — showing last known data`);
+      return envelope(cached, "stale", `${note} — showing last known data`);
     }
-    return envelope(fallback(), "simulated", `${message} — showing demo data`);
+    return lastResort(note);
   }
 }
 
@@ -392,6 +430,7 @@ export async function getIncidents(
         ? mock.MOCK_INCIDENTS
         : mock.MOCK_INCIDENTS.filter((i) => i.status !== "resolved"),
     () => request<Incident[]>(`/api/incidents${qs}`),
+    () => [],
   );
 }
 
@@ -418,7 +457,15 @@ export async function getRecommendations(
   return withFallback(
     `recommendations-${incidentId}`,
     () => mock.MOCK_RECOMMENDATIONS[incidentId] ?? null,
-    () => request<RecommendationsResponse>(`/api/incidents/${incidentId}/recommendations`),
+    () => request<RecommendationsResponse>(
+      `/api/incidents/${incidentId}/recommendations`,
+      undefined,
+      // The recommender runs the AI matcher, and it is usually the first call
+      // to hit a sleeping container. Eight seconds failed it before it had a
+      // chance; this is the wake time plus the work.
+      RECOMMENDATION_TIMEOUT_MS,
+    ),
+    () => null,
   );
 }
 
@@ -431,6 +478,7 @@ export async function getResources(): Promise<Envelope<Resource[]>> {
     "resources",
     () => mock.MOCK_RESOURCES,
     () => request<Resource[]>("/api/resources"),
+    () => [],
   );
 }
 
@@ -447,6 +495,7 @@ export async function getAlerts(): Promise<Envelope<Alert[]>> {
     "alerts",
     () => mock.MOCK_ALERTS,
     () => request<Alert[]>("/api/alerts"),
+    () => [],
   );
 }
 
@@ -464,6 +513,7 @@ export async function getAssignments(
         ? mock.MOCK_ASSIGNMENTS
         : mock.assignmentsForResource(params.resourceId),
     () => request<Assignment[]>(`/api/assignments${suffix}`),
+    () => [],
   );
 }
 
@@ -968,6 +1018,10 @@ export async function getWeatherAlerts(): Promise<Envelope<WeatherAlert[]>> {
     "weather-alerts",
     () => mock.MOCK_WEATHER_ALERTS,
     () => request<WeatherAlert[]>("/api/weather/alerts"),
+    // A fabricated CRITICAL cyclone warning, attributed to IMD, raised the
+    // emergency banner on every page of a live build. Nothing invented may
+    // carry an authority's name.
+    () => [],
   );
 }
 
@@ -1072,6 +1126,58 @@ export function enqueue(item: Omit<QueuedSubmission, "id" | "queuedAt" | "attemp
 
 export function dequeue(id: string): void {
   writeQueue(readQueue().filter((q) => q.id !== id));
+}
+
+/** Outcome of a flush, so the caller can report it truthfully. */
+export interface FlushResult {
+  sent: number;
+  failed: number;
+  /** Entries with no stored body. Kept in the queue, not counted as sent. */
+  undeliverable: number;
+}
+
+/**
+ * Actually resend what is waiting.
+ *
+ * This used to delete every queued entry the moment a health probe answered,
+ * which told the citizen their report had gone through while the text was
+ * thrown away. Nothing is removed here unless the server accepted it.
+ *
+ * An entry written before bodies were stored cannot be resent by anyone. It
+ * stays in the queue flagged `undeliverable` so the citizen is told to send it
+ * again, because the one thing worse than a report stuck in a queue is a
+ * report silently dropped from one.
+ */
+export async function flushQueue(): Promise<FlushResult> {
+  const items = readQueue();
+  if (items.length === 0) return { sent: 0, failed: 0, undeliverable: 0 };
+
+  const remaining: QueuedSubmission[] = [];
+  let sent = 0;
+  let failed = 0;
+  let undeliverable = 0;
+
+  for (const item of items) {
+    if (item.kind !== "report" || !item.payload) {
+      remaining.push({ ...item, undeliverable: true });
+      undeliverable += 1;
+      continue;
+    }
+    try {
+      await submitReport(item.payload);
+      sent += 1;
+    } catch (err) {
+      remaining.push({
+        ...item,
+        attempts: item.attempts + 1,
+        lastError: err instanceof Error ? err.message : "Send failed",
+      });
+      failed += 1;
+    }
+  }
+
+  writeQueue(remaining);
+  return { sent, failed, undeliverable };
 }
 
 export function readSafeCheckIns(): SafeCheckIn[] {

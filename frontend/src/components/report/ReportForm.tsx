@@ -19,6 +19,7 @@ import type {
   DisasterType,
   IncidentType,
   Lang,
+  ReportCreate,
   ReportCreateResponse,
   ReportSource,
 } from "@/types";
@@ -109,27 +110,31 @@ export function ReportForm({
     const originalText = text.trim();
     const offline = typeof navigator !== "undefined" && navigator.onLine === false;
 
+    // Built once so the queued copy is byte-for-byte what the send attempted.
+    // Queueing a summary instead of the body is how a report gets lost.
+    const body: ReportCreate = {
+      source,
+      text: originalText,
+      lang,
+      lat: location.lat,
+      lng: location.lng,
+      address: location.address.trim() || null,
+      photo_url: media,
+      reporter: buildReporter(name, phone),
+      sensor: null,
+      citizen_type: disaster ? DISASTER_TO_INCIDENT[disaster] : null,
+      disaster_type: disaster,
+      citizen_urgency: urgency,
+      people_affected: people.trim() === "" ? null : Number(people),
+      special_assistance: assistance,
+    };
+
     try {
-      const result = await submitReport({
-        source,
-        text: originalText,
-        lang,
-        lat: location.lat,
-        lng: location.lng,
-        address: location.address.trim() || null,
-        photo_url: media,
-        reporter: buildReporter(name, phone),
-        sensor: null,
-        citizen_type: disaster ? DISASTER_TO_INCIDENT[disaster] : null,
-        disaster_type: disaster,
-        citizen_urgency: urgency,
-        people_affected: people.trim() === "" ? null : Number(people),
-        special_assistance: assistance,
-      });
+      const result = await submitReport(body);
       onSubmitted(result, originalText, offline);
     } catch (err) {
       // A failed send is queued rather than lost, but the caller is told.
-      enqueue({ kind: "report", label: originalText.slice(0, 60) });
+      enqueue({ kind: "report", label: originalText.slice(0, 60), payload: body });
       setError(err instanceof Error ? err.message : t.submitError);
     } finally {
       setSubmitting(false);
@@ -347,13 +352,19 @@ export function ReportForm({
         </div>
       </details>
 
-      {/* Demo aid: lets the same form stand in for a 112 call or sensor feed. */}
+      {/* Demo aid: lets the same form stand in for a 112 call or a field unit.
+          "sensor" is deliberately absent. A sensor report is only valid with a
+          sensor block attached, and this form has no sensor to describe, so
+          choosing it sent `sensor: null` and the API rejected every one with a
+          422. An option that cannot succeed does not belong on a form a
+          citizen is using during an emergency. Sensor ingestion belongs to the
+          simulator on /dashboard, which has real readings to send. */}
       <details className="border border-dashed border-[var(--border)]">
         <summary className="min-h-11 cursor-pointer px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
           Demo — submit as
         </summary>
         <div className="flex flex-wrap gap-1.5 px-3 pb-3">
-          {(["citizen", "call", "sensor", "field"] as ReportSource[]).map((option) => (
+          {(["citizen", "call", "field"] as ReportSource[]).map((option) => (
             <button
               key={option}
               type="button"

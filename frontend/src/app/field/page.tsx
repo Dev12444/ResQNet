@@ -71,8 +71,18 @@ export default function FieldPage() {
   const [sentUpdates, setSentUpdates] = useState<SituationUpdate[]>([]);
   const [sentSignals, setSentSignals] = useState<QuickAction[]>([]);
 
+  /**
+   * How often the responder's phone re-asks the control room what it is meant
+   * to be doing. Five seconds: a dispatch change the responder does not see is
+   * the whole failure this screen exists to prevent, and the payload is a
+   * handful of rows.
+   */
+  const POLL_MS = 5000;
+
   // All assignments, so the unit picker can list units that actually have work.
-  const all = useEnvelope(useCallback(() => getAssignments({ active: true }), []));
+  const all = useEnvelope(useCallback(() => getAssignments({ active: true }), []), [], {
+    pollMs: POLL_MS,
+  });
 
   const assignment = useMemo<Assignment | null>(() => {
     if (!all.data) return null;
@@ -95,6 +105,9 @@ export default function FieldPage() {
       [incidentId],
     ),
     [incidentId],
+    // The incident itself is re-read on the same cadence: severity and status
+    // can be revised by the control room while a unit is on the way.
+    { pollMs: incidentId === null ? undefined : POLL_MS },
   );
   const trust = useEnvelope(
     useCallback(
@@ -114,6 +127,33 @@ export default function FieldPage() {
 
   if (all.loading) return <LoadingState label="Loading your assignment…" />;
 
+  /**
+   * "No assignment" and "could not ask" are the same empty list and must never
+   * read the same way. Telling a responder they have nothing to do, when in
+   * fact the control room could not be reached, is the most damaging thing
+   * this screen could get wrong — so an unreachable server says so, and says
+   * to use the radio.
+   */
+  if (all.mode === "unavailable") {
+    return (
+      <div className="mx-auto w-full max-w-xl px-3 py-4">
+        <ErrorState
+          title="Could not reach the control room"
+          detail={
+            all.error ??
+            "The server did not answer. This is not the same as having no assignment."
+          }
+          onRetry={all.reload}
+        />
+        <p className="mt-2 border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--muted)]">
+          Do not treat this as “stand down”. Confirm your tasking by radio or on{" "}
+          <strong className="font-semibold text-[var(--fg)]">112</strong> before standing
+          down or leaving a scene.
+        </p>
+      </div>
+    );
+  }
+
   if (!all.data || all.data.length === 0) {
     return (
       <div className="mx-auto w-full max-w-xl px-3 py-4">
@@ -128,8 +168,17 @@ export default function FieldPage() {
   const status = localStatus ?? assignment?.status ?? "assigned";
   const inc = incident.data;
 
+  /**
+   * Demo-only field verification.
+   *
+   * These fixtures exist so the walkthrough can show a responder correcting an
+   * AI severity. On a live incident they were a lie with operational weight:
+   * "field-verified SEV 4" told a responder that somebody had already been to
+   * the scene and confirmed it, when nobody had. It is now shown only for data
+   * that is itself demo data — never over a record that came from the API.
+   */
   const verified: VerifiedSeverity | null =
-    inc && Object.hasOwn(MOCK_VERIFIED_SEVERITY, inc.id)
+    inc && incident.mode === "simulated" && Object.hasOwn(MOCK_VERIFIED_SEVERITY, inc.id)
       ? MOCK_VERIFIED_SEVERITY[inc.id]
       : null;
   // A field update sent in this session supersedes anything loaded from the API.

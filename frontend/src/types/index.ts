@@ -422,7 +422,20 @@ export type ConfidenceBand = "high" | "review_advised" | "manual_required";
 export type ConnectionStatus = "live" | "reconnecting" | "offline";
 
 /** Provenance of the data currently on screen. */
-export type DataMode = "live" | "cached" | "stale" | "simulated";
+export type DataMode =
+  | "live"
+  | "cached"
+  | "stale"
+  | "simulated"
+  /**
+   * Live mode, the server did not answer, and there is nothing real to
+   * show. Distinct from "simulated" on purpose: simulated means "these are
+   * demo figures", unavailable means "we have no figures". Screens that
+   * would otherwise fill with fixtures during a demo show an explanation
+   * instead — an invented incident on a live dashboard is worse than a
+   * blank one.
+   */
+  | "unavailable";
 
 /**
  * Counts of corroborating evidence. `unique_sources` is what makes an incident
@@ -943,4 +956,21 @@ export interface QueuedSubmission {
   label: string;
   queuedAt: string;
   attempts: number;
+  /**
+   * The exact body to resend. Without it an entry is a note that something was
+   * once typed, not a report that can still be delivered — and the queue used
+   * to hold nothing else, so "queued" meant the text was discarded as soon as
+   * the connection returned.
+   *
+   * Optional because entries written by older builds are still in people's
+   * browsers and must be handled rather than silently dropped.
+   */
+  payload?: ReportCreate;
+  /** Why the last resend attempt failed, shown to whoever is waiting. */
+  lastError?: string | null;
+  /**
+   * Set on an entry that cannot be resent — no stored body. It is kept and
+   * shown, never quietly deleted: the citizen has to know to send it again.
+   */
+  undeliverable?: boolean;
 }

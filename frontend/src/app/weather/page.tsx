@@ -30,6 +30,7 @@ import { useEnvelope } from "@/components/layout/useEnvelope";
 import {
   EmptyState,
   ErrorState,
+  UnavailableState,
   LoadingState,
 } from "@/components/layout/primitives";
 import { DataModeBadge } from "@/components/layout/ConnectionBar";
@@ -151,7 +152,13 @@ export default function WeatherPage() {
           <h2 className="border-b border-[var(--border)] px-3 py-2 text-[13px] font-bold uppercase tracking-wide">
             Active warnings
           </h2>
-          {filtered.length === 0 ? (
+          {alerts.mode === "unavailable" ? (
+            <UnavailableState
+              what="the warning feed"
+              note={alerts.error}
+              onRetry={alerts.reload}
+            />
+          ) : filtered.length === 0 ? (
             <EmptyState title="No warnings match these filters" />
           ) : (
             <ul className="divide-y divide-[var(--border)]">

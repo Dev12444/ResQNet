@@ -413,6 +413,7 @@ export const DATA_MODE_META: Record<
   cached: { label: "CACHED", color: "#278ba8" },
   stale: { label: "STALE", color: "#d97534" },
   simulated: { label: "SIMULATED", color: "#7b6ba8" },
+  unavailable: { label: "NO DATA", color: "#a8484f" },
 };
 
 export const SENSOR_HEALTH_META: Record<

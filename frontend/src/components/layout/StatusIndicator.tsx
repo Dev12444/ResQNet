@@ -13,8 +13,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Phone, RefreshCw, WifiOff } from "lucide-react";
 import type { ConnectivityState, QueuedSubmission } from "@/types";
+import type { FlushResult } from "@/lib/api";
 import { CONNECTIVITY_META } from "@/lib/constants";
-import { dequeue, ping, readQueue } from "@/lib/api";
+import { flushQueue, ping, readQueue } from "@/lib/api";
 
 const PROBE_MS = 20000;
 /** A probe slower than this is treated as a weak connection, not a healthy one. */
@@ -26,12 +27,18 @@ export interface ConnectivityInfo {
   queue: QueuedSubmission[];
   recheck: () => void;
   flush: () => void;
+  /** True while queued reports are being resent. */
+  flushing: boolean;
+  /** Outcome of the last flush, for a message that matches what happened. */
+  lastFlush: FlushResult | null;
 }
 
 export function useConnectivity(): ConnectivityInfo {
   const [state, setState] = useState<ConnectivityState>("online");
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [queue, setQueue] = useState<QueuedSubmission[]>([]);
+  const [flushing, setFlushing] = useState(false);
+  const [lastFlush, setLastFlush] = useState<FlushResult | null>(null);
   const misses = useRef(0);
 
   const probe = useCallback(async () => {
@@ -77,24 +84,45 @@ export function useConnectivity(): ConnectivityInfo {
     };
   }, [probe]);
 
+  /**
+   * Resend what is waiting. Previously this deleted the queue outright once a
+   * health probe answered, which reported a delivery that had not happened —
+   * the reports were never sent anywhere. Entries now leave the queue only
+   * when the server has accepted them.
+   */
   const flush = useCallback(() => {
-    // Nothing to retry against while the backend is mocked; clearing the
-    // queue here would claim a delivery that never happened, so we only
-    // drop entries once a probe confirms the control room is reachable.
     void (async () => {
       const reachable = await ping();
       if (!reachable) {
         void probe();
         return;
       }
-      for (const item of readQueue()) dequeue(item.id);
-      setQueue(readQueue());
-      setLastSynced(new Date());
-      setState("online");
+      setFlushing(true);
+      try {
+        const result = await flushQueue();
+        setLastFlush(result);
+        setQueue(readQueue());
+        // "Last synced" means the queue is genuinely clear, so it is only
+        // stamped when nothing is left waiting.
+        if (result.failed === 0 && result.undeliverable === 0) {
+          setLastSynced(new Date());
+        }
+        setState("online");
+      } finally {
+        setFlushing(false);
+      }
     })();
   }, [probe]);
 
-  return { state, lastSynced, queue, recheck: () => void probe(), flush };
+  return {
+    state,
+    lastSynced,
+    queue,
+    recheck: () => void probe(),
+    flush,
+    flushing,
+    lastFlush,
+  };
 }
 
 export function StatusIndicator({ info }: { info: ConnectivityInfo }) {
@@ -166,11 +194,30 @@ export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
         <button
           type="button"
           onClick={info.flush}
-          className="inline-flex min-h-9 items-center gap-1.5 border border-[var(--carbon)] bg-[var(--surface)] px-3 text-xs font-semibold"
+          disabled={info.flushing}
+          className="inline-flex min-h-9 items-center gap-1.5 border border-[var(--carbon)] bg-[var(--surface)] px-3 text-xs font-semibold disabled:opacity-60"
         >
-          <RefreshCw className="size-3.5" aria-hidden />
-          Retry sync
+          <RefreshCw className={`size-3.5 ${info.flushing ? "animate-spin" : ""}`} aria-hidden />
+          {info.flushing ? "Sending…" : "Send now"}
         </button>
+      )}
+
+      {/* What the last attempt actually achieved. Anything that did not send
+          is still on the device and is named as such. */}
+      {info.lastFlush && (
+        <span className="w-full text-xs text-[var(--foreground)]">
+          {info.lastFlush.sent > 0 && (
+            <strong className="font-semibold">
+              {info.lastFlush.sent} sent to the control room.
+            </strong>
+          )}{" "}
+          {info.lastFlush.failed > 0 &&
+            `${info.lastFlush.failed} could not be sent and are still waiting. `}
+          {info.lastFlush.undeliverable > 0 &&
+            `${info.lastFlush.undeliverable} cannot be sent automatically — please submit ${
+              info.lastFlush.undeliverable === 1 ? "it" : "them"
+            } again.`}
+        </span>
       )}
     </div>
   );

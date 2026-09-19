@@ -170,6 +170,52 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
+/**
+ * The server did not answer and there is nothing real to show.
+ *
+ * Deliberately not `EmptyState`. An empty list has two very different causes —
+ * "there is nothing" and "we could not ask" — and they render identically
+ * unless something forces them apart. On an operations screen the difference
+ * decides whether somebody stands down, so it gets its own component and its
+ * own wording, and it never borrows the reassuring tone of an empty result.
+ */
+export function UnavailableState({
+  what,
+  note,
+  onRetry,
+}: {
+  /** What could not be loaded, as a noun phrase: "the incident feed". */
+  what: string;
+  note?: string | null;
+  onRetry?: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="border-l-4 px-3 py-3"
+      style={{ borderColor: "var(--high)", background: "var(--high-bg)" }}
+    >
+      <p className="text-sm font-semibold">Could not load {what}</p>
+      <p className="mt-1 text-xs text-[var(--muted)]">
+        {note ?? "The server did not answer."}
+      </p>
+      <p className="mt-1 text-xs text-[var(--muted)]">
+        This is not the same as there being nothing to show — treat it as unknown,
+        not as clear.
+      </p>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-2 border border-[var(--border-strong)] bg-[var(--surface)] px-2 py-1 text-xs font-semibold hover:bg-[var(--surface-2)]"
+        >
+          Retry
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function ErrorState({
   title,
   detail,

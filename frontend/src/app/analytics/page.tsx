@@ -34,6 +34,8 @@ import {
 import {
   computeShortages,
   getDistrictSituations,
+  getEval,
+  getHotspots,
   getIncidentsWithTrust,
   getPulse,
   getResourceViews,
@@ -46,6 +48,7 @@ import {
   ErrorState,
   LoadingState,
   Panel,
+  UnavailableState,
 } from "@/components/layout/primitives";
 import { DataModeBadge, useNow } from "@/components/layout/ConnectionBar";
 import { formatDuration } from "@/components/charts/chartTheme";
@@ -91,12 +94,50 @@ const INCIDENT_TO_DISASTER: Record<string, DisasterType> = {
   other: "other",
 };
 
+/** One figure in the evaluation card. */
+function EvalStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-r border-[var(--border)] px-3 py-2 last:border-r-0">
+      <p className="text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</p>
+      <p className="mono mt-0.5 text-[20px] font-bold leading-none">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Hotspots arrive as bare coordinates. A dispatcher reads district names, not
+ * decimal degrees, so each cluster is named for the district centre nearest to
+ * it. Plane geometry is accurate enough at this scale to pick a neighbour.
+ */
+function nearestDistrict(lat: number, lng: number): string {
+  let best = GUJARAT_DISTRICTS[0];
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const d of GUJARAT_DISTRICTS) {
+    const dist = (d.lat - lat) ** 2 + (d.lng - lng) ** 2;
+    if (dist < bestD) {
+      bestD = dist;
+      best = d;
+    }
+  }
+  return best.name;
+}
+
 export default function AnalyticsPage() {
   const paired = useEnvelope(useCallback(() => getIncidentsWithTrust(), []));
   const situations = useEnvelope(useCallback(() => getDistrictSituations(), []));
   const shelters = useEnvelope(useCallback(() => getShelters(), []));
   const units = useEnvelope(useCallback(() => getResourceViews(), []));
   const pulse = useEnvelope(useCallback(() => getPulse(), []));
+  /**
+   * The two analytics endpoints the backend actually serves, read directly
+   * rather than recomputed here. Everything else on this page is derived from
+   * the incident rows in view, which is right for anything the filters should
+   * affect — but the AI evaluation and the reporting hotspots are properties
+   * of the whole corpus and of the model, not of the current selection, so
+   * they come from the API and ignore the filters on purpose.
+   */
+  const evaluation = useEnvelope(useCallback(() => getEval(), []));
+  const hotspots = useEnvelope(useCallback(() => getHotspots(), []));
   const now = useNow();
 
   const [windowId, setWindowId] = useState<WindowId>("30d");
@@ -406,6 +447,109 @@ export default function AnalyticsPage() {
               : `Units committed: ${kpis.utilisation}%`
           }
         />
+      </div>
+
+      {/*
+        AI evaluation and reporting hotspots, straight from /api/analytics/*.
+        These are the only two panels on the page that are not derived from the
+        filtered rows, because neither is a property of the selection.
+      */}
+      <div className="mb-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Panel
+          title="AI classification accuracy"
+          subtitle="Measured by BE2 against a labelled evaluation set — not a live figure."
+          actions={<DataModeBadge mode={evaluation.mode} note={evaluation.error} />}
+        >
+          {evaluation.mode === "unavailable" || !evaluation.data ? (
+            <UnavailableState
+              what="the evaluation run"
+              note={evaluation.error}
+              onRetry={evaluation.reload}
+            />
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4">
+                <EvalStat
+                  label="Type accuracy"
+                  value={`${Math.round(evaluation.data.type_accuracy * 100)}%`}
+                />
+                <EvalStat
+                  label="Severity ±1"
+                  value={`${Math.round(evaluation.data.severity_within_1 * 100)}%`}
+                />
+                <EvalStat
+                  label="Dedup precision"
+                  value={`${Math.round(evaluation.data.dedup_precision * 100)}%`}
+                />
+                <EvalStat
+                  label="Dedup recall"
+                  value={`${Math.round(evaluation.data.dedup_recall * 100)}%`}
+                />
+              </div>
+              <p className="border-t border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--muted)]">
+                {evaluation.data.n.toLocaleString("en-IN")} labelled cases
+                {evaluation.data.avg_latency_ms !== null &&
+                  ` · ${Math.round(evaluation.data.avg_latency_ms)} ms average`}{" "}
+                · run {new Date(evaluation.data.run_at).toLocaleString("en-IN")}
+              </p>
+              <p className="border-t border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--faint)]">
+                Accuracy on a test set is not accuracy on the next real report.
+                Every classification stays advisory and an operator confirms it.
+              </p>
+            </>
+          )}
+        </Panel>
+
+        <Panel
+          title="Reporting hotspots"
+          subtitle="Where reports cluster. Density of reports — not confirmed risk."
+          actions={<DataModeBadge mode={hotspots.mode} note={hotspots.error} />}
+        >
+          {hotspots.mode === "unavailable" ? (
+            <UnavailableState
+              what="the hotspot clusters"
+              note={hotspots.error}
+              onRetry={hotspots.reload}
+            />
+          ) : !hotspots.data || hotspots.data.length === 0 ? (
+            <EmptyState title="No clusters in the current corpus" />
+          ) : (
+            <ul className="divide-y divide-[var(--border)]">
+              {[...hotspots.data]
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 6)
+                .map((h) => {
+                  const meta =
+                    DISASTER_META[INCIDENT_TO_DISASTER[h.top_type] ?? "other"];
+                  const share = h.count / Math.max(...hotspots.data!.map((x) => x.count));
+                  return (
+                    <li
+                      key={`${h.lat},${h.lng}`}
+                      className="flex items-center gap-2 px-3 py-1.5"
+                    >
+                      <span className="w-28 shrink-0 text-[12px] font-semibold">
+                        {nearestDistrict(h.lat, h.lng)}
+                      </span>
+                      <span className="w-24 shrink-0 text-[11px] text-[var(--muted)]">
+                        {meta.label}
+                      </span>
+                      <span
+                        className="h-2.5 min-w-[2px]"
+                        style={{
+                          width: `${Math.round(share * 100)}%`,
+                          background: meta.color,
+                        }}
+                        aria-hidden
+                      />
+                      <span className="mono ml-auto shrink-0 text-[12px] font-bold">
+                        {h.count}
+                      </span>
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
+        </Panel>
       </div>
 
       {/* Filters */}
