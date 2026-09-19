@@ -53,7 +53,7 @@ def env(monkeypatch):
     }.items():
         monkeypatch.setattr(st, k, v)
     for name, val in {"_calls": {}, "_benched_until": {}, "_cooldown_until": {}, "_dropped": {},
-                      "_spend_mem": {}, "_clients": {}, "_cache": llm.OrderedDict()}.items():
+                      "_spend_mem": {}, "_clients": {}, "_cache": llm.OrderedDict(), "_seed": {}}.items():
         monkeypatch.setattr(llm, name, val)
     monkeypatch.setattr(llm, "RETRY_BACKOFF_SEC", 0)
     gemini_calls = []
@@ -222,3 +222,73 @@ def test_embedding_quota_uses_retry_hint_and_next_provider(env):
     assert model == "text-embedding-3-small" and len(vecs[0]) == 5
     wait = llm._cooldown_until[("gemini", "emb")] - llm.time.monotonic()
     assert 25 < wait <= 30
+
+
+def test_demo_seed_answers_before_any_provider(env, tmp_path):
+    import gzip
+    import json
+
+    fake = env.install(FakeOpenAI(reply=lambda kw: "live"))
+    seed = tmp_path / "seed.json.gz"
+    env.monkeypatch.setattr(llm, "DEMO_SEED_PATH", seed)
+    env.monkeypatch.setattr(llm, "_seed", None)
+    llm.RECORD_KEYS = set()
+    try:
+        assert llm.generate_text("seeded prompt") == "live"
+        recorded = set(llm.RECORD_KEYS)
+    finally:
+        llm.RECORD_KEYS = None
+    entries = llm.export_entries(recorded)
+    assert entries and all(v["by"] == "openai:gpt-4.1-mini" for v in entries.values())
+    with gzip.open(seed, "wt", encoding="utf-8") as f:
+        json.dump(entries, f)
+
+    # Fresh process: empty memory cache, no disk cache, provider would answer differently.
+    env.monkeypatch.setattr(llm, "_cache", llm.OrderedDict())
+    env.monkeypatch.setattr(llm, "_seed", None)
+    fake.reply = lambda kw: "SHOULD NOT BE CALLED"
+    n = len(fake.requests)
+    assert llm.generate_text("seeded prompt") == "live"
+    assert len(fake.requests) == n and llm.last_source() == "cache:openai:gpt-4.1-mini"
+    assert llm.demo_seed_size() == len(entries)
+
+
+def test_missing_or_corrupt_seed_is_ignored(env, tmp_path):
+    env.install(FakeOpenAI(reply=lambda kw: "live"))
+    bad = tmp_path / "bad.json.gz"
+    bad.write_bytes(b"not gzip")
+    for path in (tmp_path / "missing.json.gz", bad):
+        env.monkeypatch.setattr(llm, "DEMO_SEED_PATH", path)
+        env.monkeypatch.setattr(llm, "_seed", None)
+        env.monkeypatch.setattr(llm, "_cache", llm.OrderedDict())
+        assert llm.generate_text("anything") == "live"
+        assert llm.demo_seed_size() == 0
+
+
+def test_seeded_answer_served_without_any_api_key(env, tmp_path):
+    import gzip
+    import json
+
+    env.install(FakeOpenAI(reply=lambda kw: "tested answer"))
+    llm.RECORD_KEYS = set()
+    try:
+        llm.generate_text("demo prompt")
+        model, vecs = llm.embed_with_model(["demo text"])
+        recorded = set(llm.RECORD_KEYS)
+    finally:
+        llm.RECORD_KEYS = None
+    seed = tmp_path / "seed.json.gz"
+    with gzip.open(seed, "wt", encoding="utf-8") as f:
+        json.dump(llm.export_entries(recorded), f)
+
+    for k in ("openai_api_key", "gemini_api_key"):
+        env.monkeypatch.setattr(env.st, k, "")
+    env.monkeypatch.setattr(llm, "DEMO_SEED_PATH", seed)
+    env.monkeypatch.setattr(llm, "_seed", None)
+    env.monkeypatch.setattr(llm, "_cache", llm.OrderedDict())
+    assert not llm.available()
+    assert llm.generate_text("demo prompt") == "tested answer"
+    assert llm.embed_with_model(["demo text"]) == (model, vecs)
+    assert llm.generate_text("never seen") is None  # uncached + no provider -> caller falls back to rules
+    env.monkeypatch.setattr(env.st, "ai_enabled", False)
+    assert llm.generate_text("demo prompt") is None  # AI_ENABLED=false always means rules only

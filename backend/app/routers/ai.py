@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.services import llm, recommender, summarizer, trust
+from app.services import advice, llm, recommender, summarizer, trust
 
 router = APIRouter(prefix="/api", tags=["ai"])
 
@@ -30,6 +30,23 @@ def _incident_or_404(db: Session, incident_id: int):
 def get_recommendations(incident_id: int, db: Session = Depends(get_db)) -> dict:
     inc = _incident_or_404(db, incident_id)
     return recommender.recommend(db, inc)
+
+
+@router.get("/ai/advice")
+def get_advice(
+    type: str = Query("other", description="incident type from the classification"),
+    hazards: str = Query("", description="comma list, e.g. trapped_people,rising_water"),
+    lang: str = Query("en", pattern="^(en|gu|hi)$"),
+) -> dict:
+    """Safety tips for the citizen who just reported (fixed, reviewed templates; EN/GU/HI)."""
+    return advice.safety_advice(type, [h.strip() for h in hazards.split(",") if h.strip()], lang)
+
+
+@router.get("/incidents/{incident_id}/advice")
+def get_incident_advice(incident_id: int, lang: str = Query("en", pattern="^(en|gu|hi)$"),
+                        db: Session = Depends(get_db)) -> dict:
+    inc = _incident_or_404(db, incident_id)
+    return advice.safety_advice(inc.type, list(inc.hazards or []), lang)
 
 
 @router.get("/incidents/{incident_id}/trust")
@@ -78,4 +95,5 @@ def ai_status() -> dict:
         "rpm_per_model": next((p.rpm for p in llm._providers("gen")), None),
         **llm.spend_status(),
         "disk_cache": bool(st.llm_cache_path),
+        "demo_seed_answers": llm.demo_seed_size(),
     }

@@ -29,6 +29,8 @@ def main() -> None:
     ap.add_argument("--quiet", action="store_true", help="don't list misclassifications")
     ap.add_argument("--no-cache", action="store_true", help="bypass the cache to measure real latency (costs API calls)")
     ap.add_argument("--no-save", action="store_true", help="print only; don't overwrite eval_results.json")
+    ap.add_argument("--data", type=Path, default=DATA, help="labelled reports (default: eval_incidents.json)")
+    ap.add_argument("--out", type=Path, help="results file (default: eval_results.json, or <data>_results.json)")
     args = ap.parse_args()
     if args.no_ai:
         os.environ["AI_ENABLED"] = "false"
@@ -37,7 +39,8 @@ def main() -> None:
 
     llm.BYPASS_CACHE = args.no_cache  # still records OpenAI spend
 
-    rows = json.loads(DATA.read_text(encoding="utf-8"))
+    rows = json.loads(args.data.read_text(encoding="utf-8"))
+    out_path = args.out or (OUT if args.data == DATA else args.data.with_name(args.data.stem.replace("_incidents", "") + "_results.json"))
     t0 = datetime(2026, 9, 19, 8, 0, tzinfo=timezone.utc)
 
     # ---------- classification
@@ -116,7 +119,7 @@ def main() -> None:
         "run_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     if not args.no_save:
-        OUT.write_text(json.dumps(out, indent=2), encoding="utf-8")
+        out_path.write_text(json.dumps(out, indent=2), encoding="utf-8")
 
     print(json.dumps(out, indent=2))
     if not args.quiet:
@@ -127,7 +130,7 @@ def main() -> None:
             for r, c in bad:
                 print(f"  #{r['id']:>2} expected {r['expected_type']}/{r['expected_severity']} "
                       f"got {c.type}/{c.severity} [{c.source_model}] — {r['text'][:70]}")
-    print("\n(not saved)" if args.no_save else f"\nSaved → {OUT.relative_to(ROOT)}")
+    print("\n(not saved)" if args.no_save else f"\nSaved → {out_path.resolve().relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

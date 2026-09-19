@@ -2,6 +2,8 @@
 import os
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 os.environ["AI_ENABLED"] = "false"
 
 from app.routers import analytics  # noqa: E402
@@ -195,3 +197,62 @@ def test_analytics_computations():
     assert analytics.compute_by_type(incidents)[0]["count"] == 1
     sh = analytics.compute_shortages([{"kind": "shortage", "message": "No rescue boat available"}], RESOURCES)
     assert sh[0]["kind"] == "rescue_boat" and sh[0]["shortage_alerts"] == 1
+
+
+# ---------------- Romanized Gujarati / Hindi (offline rules)
+
+@pytest.mark.parametrize(("text", "type_", "min_sev", "lang"), [
+    ("Akhbarnagar underpass ma pani bharayu che, gadi fasai gai che, jaldi aavo", "flood", 4, "gu"),
+    ("Bhai CG road pe dukaan me aag lagi hai, andar 2 log hai", "fire", 4, "hi"),
+    ("maninagar me uncle ko heart attack aaya, saans nahi le rahe", "medical", 4, "hi"),
+    ("behrampura ma juni divaal padi gayi, niche 2 chokra dabayela che", "building_collapse", 4, "gu"),
+    ("Naroda ma bus ultai gai, ghana loko ne vagyu che", "road_accident", 4, "gu"),
+    ("नरोडा में बस पलट गई, बहुत लोग घायल हैं", "road_accident", 3, "hi"),
+])
+def test_romanized_reports_offline(text, type_, min_sev, lang):
+    c = classifier.fallback_classify(text)
+    assert c.type == type_ and c.severity >= min_sev and c.lang == lang
+
+
+def test_romanized_negation_and_non_emergencies():
+    calm = classifier.fallback_classify("Shahibaug underpass paani bharelu che but koi fasayu nathi")
+    assert calm.type == "flood" and "trapped_people" not in calm.hazards and calm.priority != "P1"
+    assert classifier.fallback_classify("My cat is stuck on a tree in Satellite").priority != "P1"
+    assert classifier.fallback_classify("Our company office has a water cooler").type == "other"  # 'pani' not in 'company'
+
+
+def test_eval_endpoint_serves_stress_set():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    assert c.get("/api/analytics/eval?set=stress").json()["n"] == 32
+    assert c.get("/api/analytics/eval?set=bogus").status_code == 422
+
+
+# ---------------- citizen safety advice
+
+def test_advice_hazard_tips_first_and_translated():
+    from app.services import advice
+    gu = advice.safety_advice("flood", ["trapped_people", "rising_water"], "gu")
+    assert gu["lang"] == "gu" and "ફસાયા" in gu["tips"][0] and len(gu["tips"]) <= advice.MAX_TIPS
+    assert [h["number"] for h in gu["helplines"]][:2] == ["112", "108"]
+    en = advice.safety_advice("flood", ["trapped_people", "rising_water"], "en")
+    assert len(en["tips"]) == len(gu["tips"])  # same tips in every language
+
+
+def test_advice_every_tip_has_all_languages_and_bad_input_is_safe():
+    from app.services import advice
+    for tips in list(advice.HAZARD_TIPS.values()) + list(advice.TYPE_TIPS.values()):
+        for tip in tips:
+            assert set(tip) == set(advice.LANGS) and all(tip[l].strip() for l in advice.LANGS)
+    out = advice.safety_advice("volcano", ["unknown"], "fr")
+    assert out["lang"] == "en" and out["tips"]
+
+
+def test_advice_endpoint():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    r = c.get("/api/ai/advice", params={"type": "industrial", "hazards": "gas_leak,chemical", "lang": "hi"})
+    assert r.status_code == 200 and "गंध" in r.json()["tips"][0]
+    assert c.get("/api/ai/advice", params={"lang": "xx"}).status_code == 422

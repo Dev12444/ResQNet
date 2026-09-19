@@ -15,6 +15,7 @@ Protection built in:
 from __future__ import annotations
 
 import base64
+import gzip
 import copy
 import hashlib
 import json
@@ -82,12 +83,61 @@ def _disk_conn() -> sqlite3.Connection | None:
     return _disk
 
 
+# ============================================================ demo seed (read-only, shipped in git)
+# AI answers for the demo scenario, exported by scripts/export_demo_cache.py. Render's free tier has
+# no shell to run warm_cache.py and its disk is wiped on every deploy, so the seed makes a fresh
+# deploy answer the scenario instantly, for free, with exactly the outputs we tested. Keys include
+# CACHE_VERSION, so a prompt change silently invalidates the seed instead of serving stale answers.
+DEMO_SEED_PATH = Path(__file__).resolve().parent.parent / "data" / "demo_ai_cache.json.gz"
+_seed: dict[str, Any] | None = None
+_seed_lock = threading.Lock()
+# scripts/export_demo_cache.py sets this to a set() to record every cache key a run reads or writes.
+RECORD_KEYS: set[str] | None = None
+
+
+def _seed_get(k: str) -> Any:
+    global _seed
+    if _seed is None:
+        with _seed_lock:
+            if _seed is None:
+                try:
+                    with gzip.open(DEMO_SEED_PATH, "rt", encoding="utf-8") as f:
+                        _seed = json.load(f)
+                    log.info("Demo AI seed loaded: %d answers", len(_seed))
+                except FileNotFoundError:
+                    _seed = {}
+                except (OSError, ValueError) as e:
+                    log.warning("Demo AI seed unreadable, ignoring: %s", e)
+                    _seed = {}
+    return _seed.get(k)
+
+
+def demo_seed_size() -> int:
+    _seed_get("")  # load on first use
+    return len(_seed or {})
+
+
+def export_entries(keys: set[str]) -> dict[str, Any]:
+    """Current cached values for these keys (memory, then disk). Used to build the demo seed."""
+    out = {}
+    for k in sorted(keys):
+        v = _cache_get(k)
+        if v is not None:
+            out[k] = v
+    return out
+
+
 def _cache_get(k: str) -> Any:
     if BYPASS_CACHE:
         return None
+    if RECORD_KEYS is not None:
+        RECORD_KEYS.add(k)
     if k in _cache:
         _cache.move_to_end(k)
         return _cache[k]
+    if (v := _seed_get(k)) is not None:
+        _cache[k] = v
+        return v
     conn = _disk_conn()
     if conn is not None:
         try:
@@ -105,6 +155,8 @@ def _cache_get(k: str) -> Any:
 def _cache_put(k: str, v: Any) -> None:
     if BYPASS_CACHE:
         return
+    if RECORD_KEYS is not None:
+        RECORD_KEYS.add(k)
     _cache[k] = v
     _cache.move_to_end(k)
     while len(_cache) > _CACHE_MAX:
@@ -202,6 +254,13 @@ def _provider(name: str) -> Provider | None:
         return Provider("gemini", st.gemini_api_key, tuple(_split(f"{st.gemini_model},{st.gemini_fallback_model}")),
                         st.gemini_embed_model, st.gemini_rpm)
     return None
+
+
+def _embed_models() -> list[str]:
+    """Embedding model of every provider in EMBED_PROVIDERS order, whether or not its key is set."""
+    st = get_settings()
+    models = {"openai": st.openai_embed_model, "gemini": st.gemini_embed_model}
+    return [models[n] for n in _split(st.embed_providers) if models.get(n)]
 
 
 def _providers(kind: str = "gen") -> list[Provider]:
@@ -543,11 +602,13 @@ def _cached(k: str) -> Any | None:
 
 def generate_json(prompt: str, schema: dict, system: str | None = None, temperature: float = 0.0) -> Any | None:
     """Return parsed JSON matching `schema`, or None."""
-    if not available():
+    if not get_settings().ai_enabled:
         return None
     k = _key("json", system, prompt, schema, temperature)
-    if (hit := _cached(k)) is not None:
+    if (hit := _cached(k)) is not None:  # before provider checks: seed/cache work with no key or network
         return hit
+    if not available():
+        return None
     _set_source(None)
     data = _parse_json(_generate(prompt, system, schema, temperature))
     if data is not None:
@@ -559,11 +620,13 @@ def generate_json_with_image(
     prompt: str, image: bytes, mime_type: str, schema: dict, system: str | None = None, temperature: float = 0.0
 ) -> Any | None:
     """Vision variant of generate_json. Returns parsed JSON or None."""
-    if not available() or not image:
+    if not get_settings().ai_enabled or not image:
         return None
     k = _key("img", system, prompt, hashlib.sha256(image).hexdigest(), schema, temperature)
     if (hit := _cached(k)) is not None:
         return hit
+    if not available():
+        return None
     _set_source(None)
     data = _parse_json(_generate(prompt, system, schema, temperature, image=(image, mime_type)))
     if data is not None:
@@ -572,11 +635,13 @@ def generate_json_with_image(
 
 
 def generate_text(prompt: str, system: str | None = None, temperature: float = 0.3) -> str | None:
-    if not available():
+    if not get_settings().ai_enabled:
         return None
     k = _key("text", system, prompt, temperature)
     if (hit := _cached(k)) is not None:
         return hit
+    if not available():
+        return None
     _set_source(None)
     text = (_generate(prompt, system, None, temperature) or "").strip()
     if not text:
@@ -611,10 +676,10 @@ def embed_with_model(texts: list[str]) -> tuple[str, list[list[float]]] | None:
     if not get_settings().ai_enabled:
         return None
     providers = _providers("emb")
-    for p in providers:  # fully cached → no network at all
-        cached = [_cache_get(_key("emb", p.embed_model, t)) for t in texts]
+    for model in _embed_models():  # fully cached → no network (and no key) needed
+        cached = [_cache_get(_key("emb", model, t)) for t in texts]
         if all(v is not None for v in cached):
-            return p.embed_model, cached  # type: ignore[return-value]
+            return model, cached  # type: ignore[return-value]
     for p in providers:
         if not _provider_ok(p, "emb"):
             continue

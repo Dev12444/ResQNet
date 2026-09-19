@@ -1,0 +1,24 @@
+{
+  "n": 32,
+  "type_accuracy": 1.0,
+  "severity_within_1": 1.0,
+  "severity_exact": 0.625,
+  "p1_recall": 0.944,
+  "lang_accuracy": 0.938,
+  "dedup_precision": 1.0,
+  "dedup_recall": 1.0,
+  "true_incidents": 27,
+  "predicted_incidents": 27,
+  "avg_latency_ms": null,
+  "from_cache": true,
+  "models": {
+    "openai": 32
+  },
+  "answered_by": {
+    "openai:gpt-4.1-mini": 32
+  },
+  "embeddings": true,
+  "llm_model": "openai:gpt-4.1-mini",
+  "openai_cost_usd": 0.0,
+  "run_at": "2026-09-19T08:51:38.592973Z"
+}
