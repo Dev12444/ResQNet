@@ -1,19 +1,42 @@
-"""Router: incidents (read). Owner: BE1.
+"""Router: incidents. Owner: BE1.
 
 Contract §3 "Incidents":
-    GET /api/incidents        -> Incident[]   (P1 first, then oldest first)
-    GET /api/incidents/{id}   -> IncidentDetail, 404 if missing
+    GET   /api/incidents                -> Incident[]   (P1 first, then oldest first)
+    GET   /api/incidents/{id}           -> IncidentDetail, 404 if missing
+    PATCH /api/incidents/{id}           {status?, severity?, priority?, note?} -> IncidentDetail
+    POST  /api/incidents/{id}/unmerge   {report_id} -> {old, new}
+
+Manual status changes are limited to triaged / escalated / resolved: new, dispatched and
+on_scene are derived from reports and assignments (setting them by hand would desync).
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import dataclasses
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql import Select
 
+from app import audit
 from app import models as m
+from app.alerting import add_alert, open_alert_exists, publish_alert
 from app.db import get_db
-from app.schemas import IncidentDetail, IncidentOut, IncidentType
+from app.pipeline import PIPELINE_LOCK, incident_code, refresh_summary_in_background
+from app.schemas import (
+    AssignmentOut,
+    IncidentDetail,
+    IncidentOut,
+    IncidentPatch,
+    IncidentType,
+    ResourceOut,
+    UnmergeRequest,
+    UnmergeResponse,
+)
+from app.services.classifier import ClassificationResult, priority_for
+from app.services.triage import apply_to_incident
+from app.ws_manager import manager
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
@@ -69,3 +92,152 @@ def list_incidents(
 @router.get("/{incident_id}", response_model=IncidentDetail)
 def get_incident(incident_id: int, db: Session = Depends(get_db)) -> m.Incident:
     return get_incident_or_404(db, incident_id)
+
+
+# ---------------------------------------------------------------- PATCH /api/incidents/{id}
+
+MANUAL_STATUSES = ("triaged", "escalated", "resolved")
+
+
+def _derived_status(incident: m.Incident) -> str:
+    """Status implied by the incident's units (used when de-escalating / re-opening)."""
+    active = [a for a in incident.assignments if a.is_active]
+    if any(a.status == "on_scene" for a in active):
+        return "on_scene"
+    return "dispatched" if active else "triaged"
+
+
+def _close_active_assignments(incident: m.Incident, now: datetime) -> list[m.Assignment]:
+    """Manual resolve: units on scene are completed, the rest cancelled; all are freed."""
+    closed = []
+    for a in incident.assignments:
+        if not a.is_active:
+            continue
+        a.status = "completed" if a.status == "on_scene" else "cancelled"
+        a.updated_at = now
+        if a.resource.current_incident_id == incident.id:
+            a.resource.status, a.resource.current_incident_id = "available", None
+        closed.append(a)
+    return closed
+
+
+@router.patch("/{incident_id}", response_model=IncidentDetail)
+def update_incident(
+    incident_id: int,
+    body: IncidentPatch,
+    db: Session = Depends(get_db),
+    x_actor: str | None = Header(None),
+) -> m.Incident:
+    actor = audit.clean_actor(x_actor)
+    incident = get_incident_or_404(db, incident_id)
+    now = datetime.now(timezone.utc)
+    before = {"status": incident.status, "severity": incident.severity, "priority": incident.priority}
+
+    if body.status is not None and body.status != incident.status:
+        if body.status not in MANUAL_STATUSES:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Status '{body.status}' is set automatically; "
+                       f"manual changes allow {', '.join(MANUAL_STATUSES)}",
+            )
+        if body.status == "escalated" and incident.status == "resolved":
+            raise HTTPException(status_code=409, detail=f"Incident {incident.code} is resolved; re-open it first")
+
+    if body.severity is not None:
+        incident.severity = body.severity
+        incident.priority = priority_for(body.severity, list(incident.hazards or []))
+    if body.priority is not None:  # an explicit priority wins over the derived one
+        incident.priority = body.priority
+
+    closed: list[m.Assignment] = []
+    new_alert = None
+    if body.status is not None and body.status != incident.status:
+        if body.status == "resolved":
+            closed = _close_active_assignments(incident, now)
+            incident.status, incident.resolved_at = "resolved", now
+        elif body.status == "escalated":
+            incident.status = "escalated"
+            if not open_alert_exists(db, incident.id, "escalation"):
+                note = f": {body.note}" if body.note else ""
+                new_alert = add_alert(db, kind="escalation", incident=incident,
+                                      message=f"{incident.code} ({incident.type}, {incident.priority}) "
+                                              f"escalated by {actor}{note}")
+        else:  # "triaged": de-escalate / re-open; falls back to what the units imply
+            incident.status = _derived_status(incident)
+            incident.resolved_at = None
+
+    after = {"status": incident.status, "severity": incident.severity, "priority": incident.priority}
+    if after == before and not body.note:
+        return incident  # nothing changed: no audit row, no broadcast
+
+    audit.record(db, actor=actor, action="incident.updated", entity="incident", entity_id=incident.id,
+                 payload={"code": incident.code, "before": before, "after": after, "note": body.note,
+                          "closed_assignment_ids": [a.id for a in closed]})
+    db.commit()
+
+    for a in closed:
+        manager.publish("assignment.updated", AssignmentOut.model_validate(a))
+        manager.publish("resource.updated", ResourceOut.model_validate(a.resource))
+    if new_alert is not None:
+        publish_alert(new_alert)
+    if after != before:
+        manager.publish("incident.updated", IncidentOut.model_validate(incident))
+    return get_incident_or_404(db, incident.id)
+
+
+# ---------------------------------------------------------------- POST /api/incidents/{id}/unmerge
+
+
+def _classification_from_report(report: m.Report) -> ClassificationResult | None:
+    """Rebuild the report's own classification from its cached ai_json (None if unavailable)."""
+    data = report.ai_json or {}
+    names = {f.name for f in dataclasses.fields(ClassificationResult)}
+    try:
+        return ClassificationResult(**{k: v for k, v in data.items() if k in names})
+    except TypeError:  # missing required fields: fall back to the parent incident's values
+        return None
+
+
+@router.post("/{incident_id}/unmerge", response_model=UnmergeResponse)
+def unmerge_report(
+    incident_id: int,
+    body: UnmergeRequest,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    x_actor: str | None = Header(None),
+) -> UnmergeResponse:
+    """Move one wrongly-merged report into its own new incident (dispatcher correction)."""
+    actor = audit.clean_actor(x_actor)
+    with PIPELINE_LOCK:  # don't race a report being merged into this incident right now
+        old = get_incident_or_404(db, incident_id)
+        report = next((r for r in old.reports if r.id == body.report_id), None)
+        if report is None:
+            raise HTTPException(status_code=404, detail=f"Report {body.report_id} is not part of {old.code}")
+        if len(old.reports) < 2:
+            raise HTTPException(status_code=409, detail=f"{old.code} has only one report; nothing to unmerge")
+
+        new = m.Incident(status="new", lat=report.lat, lng=report.lng, address=report.address or old.address,
+                         report_count=1, created_at=report.created_at)
+        cls = _classification_from_report(report)
+        if cls is not None:
+            apply_to_incident(new, cls, is_new=True)
+        else:
+            new.type, new.severity, new.priority = old.type, old.severity, old.priority
+            new.title, new.hazards = old.title, list(old.hazards or [])
+        db.add(new)
+        db.flush()
+        new.code = incident_code(new.id)
+        report.incident_id = new.id
+        old.report_count = max(1, (old.report_count or 1) - 1)
+        old.updated_at = datetime.now(timezone.utc)
+        audit.record(db, actor=actor, action="incident.unmerged", entity="incident", entity_id=old.id,
+                     payload={"code": old.code, "report_id": report.id, "new_incident_id": new.id,
+                              "new_code": new.code})
+        db.commit()
+
+    old_out, new_out = IncidentOut.model_validate(old), IncidentOut.model_validate(new)
+    manager.publish("incident.updated", old_out)
+    manager.publish("incident.created", new_out)
+    for inc_id in (old.id, new.id):
+        background.add_task(refresh_summary_in_background, db.get_bind(), inc_id, True)
+    return UnmergeResponse(old=old_out, new=new_out)

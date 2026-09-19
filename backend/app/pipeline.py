@@ -36,6 +36,7 @@ from app.ws_manager import manager
 log = logging.getLogger("resqnet.pipeline")
 
 _PIPELINE_LOCK = threading.Lock()
+PIPELINE_LOCK = _PIPELINE_LOCK  # also taken by unmerge (routers/incidents.py)
 
 # BE2's summarizer re-summarises an incident at most once per summarizer.MIN_INTERVAL_SEC and
 # returns the cached summary in between. Reports merged inside that window would otherwise never
