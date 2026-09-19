@@ -1,1 +1,60 @@
-# Render deploy config — TODO(BE1)
+# Render Blueprint for the ResQNet API. Owner: BE1.
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repo (Render reads this file).
+# Secrets are NOT stored here: every `sync: false` value is typed into the Render dashboard.
+#
+# Database: Neon Postgres. Paste Neon's connection string into DATABASE_URL as-is
+# (postgresql://USER:PASSWORD@ep-...neon.tech/neondb?sslmode=require) — app/db.py switches it
+# to the psycopg 3 driver. An empty database is created + seeded automatically on first start.
+services:
+  - type: web
+    name: resqnet-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    region: singapore          # closest Render region to Gujarat
+    buildCommand: pip install -r requirements.txt
+    # Exactly ONE process: the report-pipeline lock, WebSocket clients and pending summary
+    # refreshes live in memory. More workers would split them (missed live events, dedup races).
+    # --proxy-headers: Render terminates TLS; trust its X-Forwarded-* so URLs are https/wss.
+    # (Trusted proxy IPs come from FORWARDED_ALLOW_IPS below: a literal * in this command would be
+    # glob-expanded by the shell into file names and uvicorn would refuse to start.)
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.11"
+      # --- secrets / per-environment (set in the dashboard) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_AUTHORITY_CHAT_ID
+        sync: false
+      - key: TELEGRAM_RESPONDER_CHAT_ID
+        sync: false
+      # Exact frontend origins (comma-separated), e.g. https://resqnet.vercel.app
+      - key: CORS_ORIGINS
+        sync: false
+      # Optional: Vercel preview deploys, e.g. ^https://resqnet(-[a-z0-9-]+)?\.vercel\.app$
+      - key: CORS_ORIGIN_REGEX
+        sync: false
+      # --- non-secret defaults ---
+      - key: FORWARDED_ALLOW_IPS   # read by uvicorn: trust Render's proxy for X-Forwarded-*
+        value: "*"
+      - key: AI_ENABLED
+        value: "true"
+      - key: SEED_ON_STARTUP
+        value: "true"
+      - key: SLA_P1_DISPATCH_SEC
+        value: "120"
+      - key: SLA_P2_DISPATCH_SEC
+        value: "300"
+      - key: SLA_NO_UPDATE_SEC
+        value: "600"
+      - key: ESCALATION_TICK_SEC
+        value: "15"

@@ -19,9 +19,9 @@ router = APIRouter(tags=["websocket"])
 
 
 def origin_allowed(origin: str | None) -> bool:
-    """Browsers always send Origin; allow only the frontend origins (same list as CORS).
-    Non-browser clients (scripts, wscat) send none and are allowed."""
-    return origin is None or origin in get_settings().cors_list
+    """Browsers always send Origin; allow only the frontend origins (same rule as CORS, incl.
+    CORS_ORIGIN_REGEX). Non-browser clients (scripts, wscat) send none and are allowed."""
+    return origin is None or get_settings().origin_allowed(origin)
 
 
 @router.websocket("/ws")

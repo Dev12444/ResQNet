@@ -1,4 +1,5 @@
 """App settings loaded from environment / .env. Owner: BE1."""
+import re
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -42,11 +43,21 @@ class Settings(BaseSettings):
     telegram_responder_chat_id: str = ""
 
     cors_origins: str = "http://localhost:3000"
+    # Optional: also allow origins matching this regex (e.g. Vercel preview deploys:
+    # ^https://resqnet(-[a-z0-9-]+)?\.vercel\.app$). Empty = exact CORS_ORIGINS only.
+    cors_origin_regex: str = ""
+
+    # Fill an EMPTY database with the seed data at startup (Render free tier has no shell).
+    # Never wipes anything; use `python -m scripts.seed --yes` or /api/simulator/reset for that.
+    seed_on_startup: bool = True
 
     sla_p1_dispatch_sec: int = 120
     sla_p2_dispatch_sec: int = 300
     sla_no_update_sec: int = 600
-    escalation_tick_sec: int = 15
+    escalation_tick_sec: int = 15  # <= 0 disables the background loop
+    # Auto-escalate an undispatched incident after this many missed dispatch SLA periods
+    # (PRD FR-6: 2). 0 = escalation only via the dashboard (PATCH status=escalated).
+    auto_escalate_after_breaches: int = 2
 
     @property
     def ai_available(self) -> bool:
@@ -55,6 +66,12 @@ class Settings(BaseSettings):
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    def origin_allowed(self, origin: str) -> bool:
+        """Same rule as the CORS middleware: exact CORS_ORIGINS entry or full CORS_ORIGIN_REGEX match."""
+        if origin in self.cors_list:
+            return True
+        return bool(self.cors_origin_regex) and re.fullmatch(self.cors_origin_regex, origin) is not None
 
 
 @lru_cache

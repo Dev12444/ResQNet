@@ -22,6 +22,7 @@ from app.pipeline import (
     refresh_summary_in_background,
 )
 from app.schemas import ClassificationOut, IncidentOut, ReportCreate, ReportCreatedResponse, ReportOut, ReportSource
+from app.services.escalation import check_incident_in_background
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -64,6 +65,8 @@ def create_report(
     publish_ingest(result, report_out, incident_out)
     # Summary runs after the response is sent, keeping report -> dashboard under the 5 s target (PRD §4).
     background.add_task(refresh_summary_in_background, db.get_bind(), result.incident.id)
+    # Critical / shortage alerts right away instead of waiting for the next escalation tick.
+    background.add_task(check_incident_in_background, db.get_bind(), result.incident.id)
     return ReportCreatedResponse(
         report=report_out,
         incident=incident_out,
