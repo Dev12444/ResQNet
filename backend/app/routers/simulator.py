@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app import audit
 from app.db import get_db
-from app.pipeline import PIPELINE_LOCK, cancel_trailing_refreshes
+from app.pipeline import PIPELINE_LOCK, bump_reset_epoch, cancel_trailing_refreshes
 from app.schemas import OkResponse, SimulatorStart, SimulatorStarted, SimulatorStatus, SimulatorStopped
 from app.seed import reset_database
 from app.simulator import ScenarioError, SimulatorBusy, load_scenario, simulator
@@ -55,6 +55,7 @@ async def status() -> SimulatorStatus:
 def _reset(db: Session, actor: str) -> None:
     with PIPELINE_LOCK:  # never wipe in the middle of a report being merged
         reset_database(db)
+        bump_reset_epoch()  # reports still in their AI step are discarded, not attached to the new data
         audit.record(db, actor=actor, action="demo.reset", entity="database", entity_id=None)
         db.commit()
 

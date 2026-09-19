@@ -16,6 +16,7 @@ from app.audit import clean_actor
 from app.db import get_db
 from app.pipeline import (
     IncidentNotFound,
+    ReportDiscarded,
     ReportProcessingError,
     ingest_report,
     publish_ingest,
@@ -57,6 +58,8 @@ def create_report(
         result = ingest_report(db, body, actor)
     except IncidentNotFound as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except ReportDiscarded as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ReportProcessingError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 

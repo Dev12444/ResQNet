@@ -317,3 +317,36 @@ def test_marking_a_unit_offline_while_it_is_dispatched(pg, monkeypatch):
         assert (res.status, res.current_incident_id) == ("assigned", inc_id)
     else:
         assert (res.status, res.current_incident_id) == ("offline", None)
+
+
+def test_simultaneous_acks_are_audited_once(pg, monkeypatch):
+    """Two dashboards acknowledge the same alert at once: one audit row, both get 200."""
+    from app.routers import alerts as alerts_router
+
+    client, Session = pg
+    inc_id = _incident(Session)
+    with Session() as db:
+        alert = m.Alert(kind="critical", message="P1 flood INC-0001", incident_id=inc_id)
+        db.add(alert)
+        db.commit()
+        alert_id = alert.id
+    paused, rival_done = threading.Event(), threading.Event()
+    real_record = alerts_router.audit.record
+
+    def slow_record(*a, **kw):
+        if not paused.is_set():
+            paused.set()
+            rival_done.wait(PAUSE_SEC)
+        return real_record(*a, **kw)
+
+    monkeypatch.setattr(alerts_router.audit, "record", slow_record)
+    codes = []
+    t = _run(lambda: codes.append(client.post(f"/api/alerts/{alert_id}/ack").status_code))
+    assert paused.wait(5)
+    second = client.post(f"/api/alerts/{alert_id}/ack")
+    rival_done.set()
+    t.join(10)
+    assert sorted([*codes, second.status_code]) == [200, 200] and second.json()["acknowledged"] is True
+    with Session() as db:
+        rows = db.scalars(select(m.AuditLog).where(m.AuditLog.action == "alert.acknowledged")).all()
+    assert len(rows) == 1

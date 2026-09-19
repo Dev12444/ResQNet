@@ -387,6 +387,105 @@ def test_report_does_not_merge_into_an_incident_resolved_after_dedup(tmp_path, m
         eng.dispose()
 
 
+def test_report_in_flight_during_a_reset_is_discarded_not_misattached(tmp_path, monkeypatch):
+    """A report still in its AI step when the demo is reset must not land in the fresh database.
+
+    Ids restart at 1 after a reset, so without a guard its late UPDATE hits the NEW report 1:
+    that report is moved to a ghost incident and its own incident is left with 0 reports.
+    """
+    eng = create_engine(f"sqlite:///{(tmp_path / 'epoch.db').as_posix()}",
+                        connect_args={"check_same_thread": False, "timeout": 30})
+    Session = _make_client(eng)
+    entered, gate = threading.Event(), threading.Event()
+    real_prepare = pipeline.prepare
+
+    def gated_prepare(report):
+        if not entered.is_set():
+            entered.set()
+            gate.wait(5)  # the first report is stuck in its (slow) AI call
+        return real_prepare(report)
+
+    monkeypatch.setattr(pipeline, "prepare", gated_prepare)
+    fire = "Fire in a commercial complex on C.G. Road, people on the terrace"
+    try:
+        with TestClient(app) as client:
+            out = {}
+            t = threading.Thread(target=lambda: out.__setitem__(
+                "r", _post(client, source="citizen", text=AKHBARNAGAR_EN, lat=23.0588, lng=72.562)))
+            t.start()
+            assert entered.wait(5)
+            assert client.post("/api/simulator/reset").status_code == 200
+            fresh = _post(client, source="call", text=fire, lat=23.029, lng=72.56)
+            assert fresh.status_code == 201 and fresh.json()["report"]["id"] == 1  # the id is reused
+            gate.set()
+            t.join(10)
+        assert out["r"].status_code == 409 and "reset" in out["r"].json()["detail"]
+        with Session() as db:
+            reports = db.scalars(select(m.Report)).all()
+            assert [(r.id, r.text) for r in reports] == [(1, fire)]
+            incidents = db.scalars(select(m.Incident)).all()
+            assert [(i.type, i.report_count) for i in incidents] == [("fire", 1)]
+            assert reports[0].incident_id == incidents[0].id
+    finally:
+        app.dependency_overrides.clear()
+        eng.dispose()
+
+
+def test_summary_ai_call_holds_no_db_connection(tmp_path, monkeypatch):
+    """The LLM call must not pin a pooled connection (or make a reset's TRUNCATE wait for it)."""
+    eng = create_engine(f"sqlite:///{(tmp_path / 'pool.db').as_posix()}",
+                        connect_args={"check_same_thread": False, "timeout": 30})
+    _make_client(eng)
+    try:
+        with TestClient(app) as client:
+            inc_id = _post(client, source="citizen", text=AKHBARNAGAR_EN,
+                           lat=23.0588, lng=72.562).json()["incident"]["id"]
+        real = pipeline.refresh_summary
+        checked_out = []
+
+        def spy(incident, force=False):
+            checked_out.append(eng.pool.checkedout())
+            return real(incident, force=force)
+
+        monkeypatch.setattr(pipeline, "refresh_summary", spy)
+        pipeline.refresh_summary_in_background(eng, inc_id, force=True)
+        assert checked_out == [0]
+    finally:
+        app.dependency_overrides.clear()
+        eng.dispose()
+
+
+def test_summary_is_not_written_onto_a_new_incident_that_reused_the_id(tmp_path, monkeypatch):
+    """A reset during the LLM call: the incident id now belongs to a different incident."""
+    eng = create_engine(f"sqlite:///{(tmp_path / 'reuse.db').as_posix()}",
+                        connect_args={"check_same_thread": False, "timeout": 30})
+    Session = _make_client(eng)
+    try:
+        with TestClient(app) as client:
+            inc_id = _post(client, source="citizen", text=AKHBARNAGAR_EN,
+                           lat=23.0588, lng=72.562).json()["incident"]["id"]
+        real = pipeline.refresh_summary
+
+        def reset_during_llm(incident, force=False):
+            result = real(incident, force=force)
+            incident.ai_summary, incident.ai_actions = "Summary of the OLD incident", ["old action"]
+            with Session() as db:  # demo reset + a brand-new incident that gets the same id
+                reset_database(db)
+                db.add(m.Incident(type="fire", severity=3, priority="P2", status="new", title="New fire",
+                                  lat=23.03, lng=72.56, report_count=1))
+                db.commit()
+            return result
+
+        monkeypatch.setattr(pipeline, "refresh_summary", reset_during_llm)
+        pipeline.refresh_summary_in_background(eng, inc_id, force=True)
+        with Session() as db:
+            new = db.get(m.Incident, inc_id)
+            assert new.title == "New fire" and new.ai_summary is None and not new.ai_actions
+    finally:
+        app.dependency_overrides.clear()
+        eng.dispose()
+
+
 # ---------------------------------------------------------------- debounced summaries catch up
 
 

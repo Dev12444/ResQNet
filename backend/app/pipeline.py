@@ -23,7 +23,7 @@ import logging
 import threading
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session, selectinload
 
@@ -40,6 +40,11 @@ log = logging.getLogger("resqnet.pipeline")
 
 _PIPELINE_LOCK = threading.Lock()
 PIPELINE_LOCK = _PIPELINE_LOCK  # also taken by unmerge (routers/incidents.py)
+
+# Bumped (under PIPELINE_LOCK) by every demo reset. A report that was already in flight when the
+# database was wiped must not be attached afterwards: its row is gone and ids restart at 1, so its
+# late UPDATE would land on an unrelated new report.
+_reset_epoch = 0
 
 # BE2's summarizer re-summarises an incident at most once per summarizer.MIN_INTERVAL_SEC and
 # returns the cached summary in between. Reports merged inside that window would otherwise never
@@ -58,6 +63,20 @@ class ReportProcessingError(RuntimeError):
     def __init__(self, report_id: int) -> None:
         super().__init__(f"Report {report_id} was saved but could not be processed")
         self.report_id = report_id
+
+
+class ReportDiscarded(RuntimeError):
+    """The demo database was reset while this report was being processed; it was not attached."""
+
+    def __init__(self, report_id: int) -> None:
+        super().__init__(f"The demo was reset while report {report_id} was being processed; please send it again")
+        self.report_id = report_id
+
+
+def bump_reset_epoch() -> None:
+    """Call with PIPELINE_LOCK held, in the same critical section as the wipe."""
+    global _reset_epoch
+    _reset_epoch += 1
 
 
 @dataclass(frozen=True)
@@ -99,17 +118,22 @@ def _still_open(db: Session, match: m.Incident | None) -> m.Incident | None:
 def ingest_report(db: Session, body: ReportCreate, actor: str) -> IngestResult:
     """Store, triage and attach one report. Does not broadcast (see publish_ingest).
 
-    Raises IncidentNotFound (hinted incident_id does not exist; nothing stored) or
+    Raises IncidentNotFound (hinted incident_id does not exist; nothing stored),
+    ReportDiscarded (a demo reset wiped the database meanwhile; nothing kept) or
     ReportProcessingError (report stored, processing failed).
     """
     if body.incident_id is not None and db.get(m.Incident, body.incident_id) is None:
         raise IncidentNotFound(body.incident_id)
 
+    epoch = _reset_epoch
     report = _save_raw(db, body)
-    report_id = report.id
+    report_id, saved_at = report.id, report.created_at
     try:
         prepared = prepare(report)  # AI + geocoding, no DB: outside the lock so reports classify in parallel
         with _PIPELINE_LOCK:
+            if epoch != _reset_epoch:
+                _discard(db, report_id, saved_at)
+                raise ReportDiscarded(report_id)
             t = triage(db, report, prepared=prepared)  # dedup only (milliseconds)
             cls = t.classification
             report.lat, report.lng = t.lat, t.lng
@@ -137,11 +161,22 @@ def ingest_report(db: Session, body: ReportCreate, actor: str) -> IngestResult:
                          entity="incident", entity_id=incident.id,
                          payload={"code": incident.code, "report_id": report.id, "report_count": incident.report_count})
             db.commit()
+    except ReportDiscarded:
+        log.info("Report %s discarded: the demo was reset while it was being processed", report_id)
+        raise
     except Exception as e:
         db.rollback()
         log.exception("Processing failed for report %s (kept, unlinked)", report_id)
         raise ReportProcessingError(report_id) from e
     return IngestResult(report=report, incident=incident, merged=merged, classification=cls)
+
+
+def _discard(db: Session, report_id: int, saved_at) -> None:
+    """Remove our raw report if it survived the reset (saved just after the wipe). The created_at
+    match makes sure we never delete a newer report that reused the id."""
+    db.rollback()
+    db.execute(delete(m.Report).where(m.Report.id == report_id, m.Report.created_at == saved_at))
+    db.commit()
 
 
 def publish_ingest(result: IngestResult, report_out, incident_out) -> None:
@@ -154,26 +189,44 @@ def publish_ingest(result: IngestResult, report_out, incident_out) -> None:
 
 
 def refresh_summary_in_background(bind: Engine | Connection, incident_id: int, force: bool = False) -> None:
-    """Background task: recompute the AI summary with its own session, commit, broadcast. Never raises."""
-    with Session(bind=bind, expire_on_commit=False) as db:
-        try:
-            incident = db.scalars(
+    """Background task: recompute the AI summary, write it, broadcast. Never raises.
+
+    The LLM call (seconds) runs with NO open transaction: holding one would pin a pooled
+    connection for its whole duration and make a demo reset's TRUNCATE (taken under
+    PIPELINE_LOCK, so every new report waits too) wait for the LLM.
+    """
+    try:
+        with Session(bind=bind, expire_on_commit=False) as db:
+            snapshot = db.scalars(
                 select(m.Incident).options(selectinload(m.Incident.reports)).where(m.Incident.id == incident_id)
             ).one_or_none()
-            if incident is None:
+            if snapshot is None:
                 return  # e.g. wiped by a demo reset
-            before = (incident.ai_summary, list(incident.ai_actions or []))
-            refresh_summary(incident, force=force)
-            if (incident.ai_summary, list(incident.ai_actions or [])) == before:
-                if not force:
-                    _schedule_trailing_refresh(bind, incident_id)  # probably debounced: catch up later
+            db.expunge(snapshot)  # detached copy with its reports loaded; the connection is released here
+        before = (snapshot.ai_summary, list(snapshot.ai_actions or []))
+        refresh_summary(snapshot, force=force)  # LLM: sets ai_summary / ai_actions on the copy only
+        after = (snapshot.ai_summary, list(snapshot.ai_actions or []))
+        if after == before:
+            if not force:
+                _schedule_trailing_refresh(bind, incident_id)  # probably debounced: catch up later
+            return
+        with Session(bind=bind, expire_on_commit=False) as db:
+            # Only the summary columns (a merge / dispatch committed meanwhile stays intact), and only
+            # on the SAME incident: after a reset during the LLM call the id may belong to a new one.
+            written = db.execute(
+                update(m.Incident)
+                .where(m.Incident.id == incident_id, m.Incident.created_at == snapshot.created_at)
+                .values(ai_summary=after[0], ai_actions=after[1])
+                .execution_options(synchronize_session=False)
+            ).rowcount
+            if not written:
                 return
             db.commit()
-            db.refresh(incident)  # publish the latest row, not values older than a concurrent merge
-            manager.publish("incident.updated", IncidentOut.model_validate(incident))
-        except Exception:
-            db.rollback()
-            log.exception("Background summary failed for incident %s", incident_id)
+            fresh = db.get(m.Incident, incident_id)
+            if fresh is not None:
+                manager.publish("incident.updated", IncidentOut.model_validate(fresh))
+    except Exception:
+        log.exception("Background summary failed for incident %s", incident_id)
 
 
 def _schedule_trailing_refresh(bind: Engine | Connection, incident_id: int) -> None:
