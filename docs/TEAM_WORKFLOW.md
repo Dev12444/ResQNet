@@ -9,10 +9,10 @@ Read first: [PRD.md](PRD.md) (what we build) → this file (who builds what, whe
 
 | Role | Name | Owns (folders) | Mission |
 |---|---|---|---|
-| **BE1 — Core & Realtime** | __Rahi___ | `backend/app/{main,models,schemas,db,config,ws_manager}.py`, `routers/` (except analytics), `services/{geo,notifier,escalation}.py`, `scripts/seed.py`, `app/data/seed_*.json`, `app/data/scenario_*.json`, `docs/API_CONTRACT.md` | The data spine: every report stored, every change pushed live, alerts fire on time |
-| **BE2 — AI & Intelligence** | __Dev___ | `services/{classifier,dedup,recommender,summarizer}.py`, `routers/analytics.py`, `scripts/eval.py`, `app/data/eval_incidents.json` | The brain: classify, merge duplicates, recommend resources, summarise, analytics, eval numbers |
-| **FE1 — Command Center** | __Maansi___ | `frontend/src/app/dashboard/`, `components/{map,incidents,dispatch,alerts}/`, `lib/ws.ts` | The screen judges stare at: live map, queue, incident drawer, dispatch, alerts |
-| **FE2 — Reporting & Insights** | __Diya___ | `frontend/src/app/{page.tsx,report,field,analytics,resources}/`, `components/{report,charts,layout}/`, `lib/{api,mock,constants}.ts`, `types/index.ts`, `docs/DEMO_SCRIPT.md` | Everything else users touch + the pitch |
+| **BE1 — Core & Realtime** | Rahi | `backend/app/{main,models,schemas,db,config,ws_manager}.py`, `routers/` (except ai, analytics), `services/{geo,notifier,escalation}.py`, `scripts/seed.py`, `app/data/seed_*.json`, `app/data/scenario_*.json`, `docs/API_CONTRACT.md` | The data spine: every report stored, every change pushed live, alerts fire on time |
+| **BE2 — AI & Intelligence** | Dev | `services/{classifier,dedup,recommender,summarizer}.py`, `routers/{ai,analytics}.py`, `scripts/eval.py`, `app/data/eval_incidents.json` | The brain: classify, merge duplicates, recommend resources, summarise, analytics, eval numbers |
+| **FE1 — Command Center** | Maansi | `frontend/src/app/dashboard/`, `components/{map,incidents,dispatch,alerts}/`, `lib/ws.ts` | The screen judges stare at: live map, queue, incident drawer, dispatch, alerts |
+| **FE2 — Reporting & Insights** | Diya | `frontend/src/app/{page.tsx,report,field,analytics,resources}/`, `components/{report,charts,layout}/`, `lib/{api,mock,constants}.ts`, `types/index.ts`, `docs/DEMO_SCRIPT.md` | Everything else users touch + the pitch |
 
 **Rule:** only edit files you own. Need a change in someone else's file? Ask them in the group, or open a PR and tag them.
 **Shared files** (`schemas.py`, `types/index.ts`, `API_CONTRACT.md`): change only after telling the group; update all three together.
@@ -68,7 +68,7 @@ Each person gets their **own Gemini API key** (free tier limits are per key).
 
 ## 4. The contract (build against this from minute one)
 
-Full details go in `docs/API_CONTRACT.md` (**BE1 writes it by 12:00 Sat**). Core shapes so FE can mock immediately:
+✅ Full details are in [`docs/API_CONTRACT.md`](API_CONTRACT.md) — **read it; it wins over this summary.** Core shapes:
 
 ```ts
 type IncidentType = "flood"|"fire"|"road_accident"|"industrial"|"medical"|"building_collapse"|"other";
@@ -140,7 +140,7 @@ Tick boxes in this file via PRs as you go (or just in your head — but tell the
 - [ ] `scripts/seed.py` — load JSON into DB (idempotent: wipe + insert)
 - [ ] Routers returning real DB data: `GET /api/incidents`, `/api/incidents/{id}`, `/api/resources`, `/api/facilities`, `/api/alerts`
 - [ ] `ws_manager.py` + `routers/ws.py` — connection manager with `broadcast(event, data)`
-- [ ] Write `docs/API_CONTRACT.md` with request/response JSON examples → **push by 12:00**, post in group
+- [x] ~~Write `docs/API_CONTRACT.md`~~ (done) → review it by 11:30 and raise changes in the group
 
 **P2 Golden path (Sat 14:00–19:00)**
 - [ ] `POST /api/reports` pipeline: save report → `classifier.classify(report)` (BE2) → `dedup.find_match()` (BE2) → create new incident or merge → broadcast → return
@@ -186,7 +186,7 @@ Tick boxes in this file via PRs as you go (or just in your head — but tell the
 **P2 Golden path (Sat 14:00–19:00)**
 - [ ] `services/dedup.py` — `find_match(db, report, cls) -> Incident | None` per PRD FR-3 (type, 300 m / 1 km flood, 30 min, cosine ≥ 0.80 with `text-embedding-004`; geo+time only if embeddings fail). Cache embeddings on report
 - [ ] `services/recommender.py` — `recommend(db, incident) -> {resources: [...top3 per needed kind], facility}`; capability map + score formula from PRD FR-4 using BE1's `geo.py`; LLM one-line reason (batched, one call per incident) with template fallback
-- [ ] `GET /api/incidents/{id}/recommendations` (add to incidents router — coordinate with BE1, or put in own router `routers/ai.py`)
+- [ ] `routers/ai.py` (new file, BE2-owned; ask BE1 to `include_router` it in `main.py`): `GET /api/incidents/{id}/recommendations`, `POST /api/incidents/{id}/summarize`, `POST /api/ai/sitrep`
 - [ ] `services/summarizer.py` — `summarize_incident(incident, reports) -> {summary, actions[]}` in English; called on create + merge (debounce: max once per 20 s per incident)
 
 **P3 Complete (Sat 19:00–23:30)**
@@ -272,7 +272,7 @@ Tick boxes in this file via PRs as you go (or just in your head — but tell the
 
 | Needed by | Needs | From | By |
 |---|---|---|---|
-| FE1, FE2 | `API_CONTRACT.md` | BE1 | Sat 12:00 |
+| FE1, FE2 | `API_CONTRACT.md` | — | ✅ done |
 | FE1 | `types/index.ts`, `lib/mock.ts` | FE2 | Sat 12:30 |
 | BE1 pipeline | `classify()`, `find_match()` function signatures (stubs OK) | BE2 | Sat 13:00 |
 | BE2 recommender | `geo.py` (`haversine_km`, `eta_minutes`), seeded resources | BE1 | Sat 15:00 |
