@@ -235,14 +235,16 @@ def test_websocket_events_new_then_merge(env):
     with client.websocket_connect("/ws") as ws:
         assert _wait(lambda: manager.client_count == 1)
         first = _post(client, source="citizen", text=AKHBARNAGAR_EN, lat=23.0588, lng=72.562).json()
-        events = [ws.receive_json() for _ in range(3)]
-        assert [e["event"] for e in events] == ["report.created", "incident.created", "incident.updated"]
+        events = [ws.receive_json() for _ in range(4)]
+        assert [e["event"] for e in events] == ["report.created", "incident.created", "incident.updated",
+                                                "alert.created"]
         assert events[1]["data"]["code"] == "INC-0001"
         assert events[2]["data"]["ai_summary"]
+        assert events[3]["data"]["kind"] == "critical"  # P1: immediate check after the report (Task 12)
 
         _post(client, source="call", text=AKHBARNAGAR_GU, lat=23.059, lng=72.5622)
         merged = [ws.receive_json() for _ in range(2)]
-        assert [e["event"] for e in merged] == ["report.created", "incident.merged"]
+        assert [e["event"] for e in merged] == ["report.created", "incident.merged"]  # no second critical alert
         assert merged[1]["data"]["incident"]["id"] == first["incident"]["id"]
         assert merged[1]["data"]["incident"]["report_count"] == 2
         assert merged[1]["data"]["report"]["source"] == "call"
@@ -300,7 +302,7 @@ def test_summary_catches_up_after_debounce_window(env, monkeypatch):
     with client.websocket_connect("/ws") as ws:
         assert _wait(lambda: manager.client_count == 1)
         inc = _post(client, source="citizen", text=AKHBARNAGAR_EN, lat=23.0588, lng=72.562).json()["incident"]
-        [ws.receive_json() for _ in range(3)]  # report.created, incident.created, incident.updated
+        [ws.receive_json() for _ in range(4)]  # report.created, incident.created, incident.updated, alert.created
         with Session() as db:
             first_summary = db.get(m.Incident, inc["id"]).ai_summary
         _post(client, source="call", text=AKHBARNAGAR_GU, lat=23.059, lng=72.5622)

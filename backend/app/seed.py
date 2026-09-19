@@ -102,6 +102,29 @@ def _wipe(db: Session) -> None:
             db.execute(text(f"DELETE FROM {table}"))
 
 
+def seed_if_empty(db: Session, data: SeedData | None = None) -> dict[str, int] | None:
+    """Insert the seed only when there are no resources and no facilities yet. Never deletes.
+
+    Returns inserted counts, or None if the database already had data.
+    """
+    from sqlalchemy import func, select
+
+    has_data = db.scalar(select(func.count()).select_from(m.Resource)) or db.scalar(
+        select(func.count()).select_from(m.Facility)
+    )
+    if has_data:
+        return None
+    data = data if data is not None else load_seed()
+    try:
+        db.add_all(m.Resource(**r.model_dump()) for r in data.resources)
+        db.add_all(m.Facility(**f.model_dump()) for f in data.facilities)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"resources": len(data.resources), "facilities": len(data.facilities)}
+
+
 def reset_database(db: Session, data: SeedData | None = None) -> dict[str, int]:
     """Wipe all demo data and insert the seed, atomically. Returns inserted counts."""
     data = data if data is not None else load_seed()  # validate before deleting anything

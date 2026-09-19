@@ -1,26 +1,149 @@
 @import "tailwindcss";
 
+/*
+ * ResQNet — operational theme.
+ *
+ * Dense, high-contrast, printable-looking. Colour carries meaning only:
+ * red critical, orange high, yellow medium, green available/resolved,
+ * blue information/resources. Everything else is neutral so that a coloured
+ * pixel on screen always means something.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4f4f5;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --foreground: #18181b;
+  --muted: #52525b;
+  --faint: #71717a;
+  --border: #d4d4d8;
+  --border-strong: #a1a1aa;
+
+  /* Operational palette */
+  --critical: #dc2626;
+  --critical-deep: #7f1d1d;
+  --high: #f97316;
+  --medium: #eab308;
+  --ok: #22c55e;
+  --info: #3b82f6;
+  --simulated: #a855f7;
+
+  /* Tinted backgrounds for banded rows and callouts */
+  --critical-bg: #fef2f2;
+  --high-bg: #fff7ed;
+  --medium-bg: #fefce8;
+  --ok-bg: #f0fdf4;
+  --info-bg: #eff6ff;
+
+  --focus: #1d4ed8;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-critical: var(--critical);
+  --color-high: var(--high);
+  --color-medium: var(--medium);
+  --color-ok: var(--ok);
+  --color-info: var(--info);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #09090b;
+    --surface: #131316;
+    --surface-2: #1c1c20;
+    --foreground: #f4f4f5;
+    --muted: #a1a1aa;
+    --faint: #8b8b93;
+    --border: #2e2e35;
+    --border-strong: #52525b;
+
+    --critical-bg: #2a1214;
+    --high-bg: #2a1a0e;
+    --medium-bg: #2a2410;
+    --ok-bg: #0f2418;
+    --info-bg: #10203a;
+
+    --focus: #60a5fa;
   }
+}
+
+html {
+  color-scheme: light dark;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Plex covers Latin; Noto Gujarati picks up the Indic scripts behind it. */
+  font-family: var(--font-plex-sans), var(--font-noto-gujarati), "Nirmala UI",
+    "Segoe UI", system-ui, sans-serif;
+  font-synthesis-weight: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Technical data — IDs, timestamps, ETAs, coordinates, readings. */
+.mono,
+code,
+kbd,
+samp {
+  font-family: var(--font-plex-mono), ui-monospace, "Cascadia Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Visible focus everywhere — operators use keyboards under pressure. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Respect reduced-motion; there is no decorative animation to lose. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Skip link, revealed on focus. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+}
+.skip-link:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 2px solid var(--focus);
+}
+
+/* A single, slow pulse reserved for unattended P1 — never decorative. */
+@keyframes resq-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.pulse-critical {
+  animation: resq-pulse 2s ease-in-out infinite;
 }
