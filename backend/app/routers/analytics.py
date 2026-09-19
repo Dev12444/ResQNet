@@ -268,9 +268,16 @@ def insights(db: Session = Depends(get_db)) -> list[dict]:
     return compute_insights(incidents, reports, db.query(Resource).all())
 
 
+EVAL_SETS = {
+    "main": EVAL_RESULTS,  # 50 clean EN/GU/HI reports
+    "stress": EVAL_RESULTS.with_name("stress_results.json"),  # Romanized GU/HI, typos, pranks, no GPS
+}
+
+
 @router.get("/eval")
-def eval_results() -> dict:
-    if not EVAL_RESULTS.exists():
+def eval_results(set: str = Query("main", pattern="^(main|stress)$")) -> dict:
+    path = EVAL_SETS[set]
+    if not path.exists():
         return {"n": 0, "type_accuracy": None, "severity_within_1": None, "dedup_precision": None,
                 "dedup_recall": None, "avg_latency_ms": None, "run_at": None}
-    return json.loads(EVAL_RESULTS.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8"))
