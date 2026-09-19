@@ -25,6 +25,7 @@ from app.db import get_db
 from app.routers.incidents import get_incident_or_404
 from app.schemas import AssignmentOut, AssignmentPatch, DispatchRequest, IncidentDetail, IncidentOut, ResourceOut
 from app.services import geo
+from app.services.notifier import notify_dispatch
 from app.ws_manager import manager
 
 router = APIRouter(prefix="/api", tags=["dispatch"])
@@ -105,10 +106,13 @@ def dispatch(
                           "assignment_ids": [a.id for a in assignments]})
     db.commit()
 
-    for a in assignments:
-        manager.publish("assignment.updated", AssignmentOut.model_validate(a))
+    assignments_out = [AssignmentOut.model_validate(a) for a in assignments]
+    incident_out = IncidentOut.model_validate(incident)
+    for a, a_out in zip(assignments, assignments_out, strict=True):
+        manager.publish("assignment.updated", a_out)
         manager.publish("resource.updated", ResourceOut.model_validate(a.resource))
-    manager.publish("incident.updated", IncidentOut.model_validate(incident))
+    manager.publish("incident.updated", incident_out)
+    notify_dispatch(incident_out, assignments_out, body.approved_by)  # responder chat; never blocks
     return get_incident_or_404(db, incident.id)
 
 
