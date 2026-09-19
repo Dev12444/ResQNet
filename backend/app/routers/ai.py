@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.services import llm, recommender, summarizer
+from app.services import llm, recommender, summarizer, trust
 
 router = APIRouter(prefix="/api", tags=["ai"])
 
@@ -30,6 +30,12 @@ def _incident_or_404(db: Session, incident_id: int):
 def get_recommendations(incident_id: int, db: Session = Depends(get_db)) -> dict:
     inc = _incident_or_404(db, incident_id)
     return recommender.recommend(db, inc)
+
+
+@router.get("/incidents/{incident_id}/trust")
+def get_trust(incident_id: int, db: Session = Depends(get_db)) -> dict:
+    """Corroboration, conflicts between reports and sensor confirmation (FE2 `IncidentTrust`)."""
+    return trust.incident_trust(_incident_or_404(db, incident_id))
 
 
 @router.post("/incidents/{incident_id}/summarize")
@@ -67,6 +73,9 @@ def ai_status() -> dict:
         "embeddings_available": llm.available("emb"),
         "models": llm.quota_status(),
         "embed_providers": [f"{p.name}:{p.embed_model}" for p in llm._providers("emb")],
+        # v1 keys kept for existing frontend types
+        "embed_model": next((p.embed_model for p in llm._providers("emb")), None),
+        "rpm_per_model": next((p.rpm for p in llm._providers("gen")), None),
         **llm.spend_status(),
         "disk_cache": bool(st.llm_cache_path),
     }

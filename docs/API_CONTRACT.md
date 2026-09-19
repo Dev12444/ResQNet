@@ -291,6 +291,26 @@ Setting `status: "escalated"` creates an `escalation` alert and sends Telegram.
 #### `POST /api/incidents/{id}/summarize`
 Forces a re-summary → `{ "ai_summary": "...", "ai_actions": ["..."] }`
 
+#### `GET /api/incidents/{id}/trust`
+How well supported an incident is (independent of severity) — matches FE2 `IncidentTrust`:
+```json
+{
+  "incident_id": 7,
+  "verification": "conflicting",
+  "sources": { "reports": 4, "unique_sources": 3, "citizen": 2, "call": 1, "sensor": 0, "field": 1 },
+  "duplicate_state": "review_required",
+  "sensor_corroboration": { "sensor_id": "VASNA-WL-01", "detail": "water_level_m 4.9m against a 4.2m threshold." },
+  "conflicts": [
+    { "field": "people_affected",
+      "claims": [ { "value": "3 people", "source": "citizen", "report_id": 41, "at": "2026-09-19T08:42:10Z" },
+                  { "value": "12 people", "source": "call", "report_id": 44, "at": "2026-09-19T08:44:02Z" } ] }
+  ]
+}
+```
+- `verification`: `conflicting` (any conflict) > `verified` (a field report) > `corroborated` (≥ 2 distinct reporters or a sensor over threshold) > `unverified`
+- `conflicts[].field`: `people_affected` (≥ 2× and ≥ 3 apart) · `severity` (≥ 2 apart) · `type` · `situation` ("contained" vs "worsening")
+- `duplicate_state`: `review_required` (type/situation conflict) · `possible_duplicate` (same reporter repeated) · `matched`
+
 #### `GET /api/ai/status`
 → `{ "ai_enabled": true, "providers": ["openai", "gemini"], "generation_available": true, "embeddings_available": true, "models": { "openai:gpt-4.1-mini": { "calls_last_min": 3, "benched_for_sec": 0, "provider_cooling_sec": 0 } }, "embed_providers": ["gemini:gemini-embedding-001", "openai:text-embedding-3-small"], "openai_spent_usd": 0.05, "openai_budget_usd": 8.0, "openai_over_budget": false, "disk_cache": true }`
 Debug/demo helper: if every model is benched, the system is running on rule-based fallback.
@@ -373,6 +393,16 @@ All accept optional `?since=<ISO time>` (default: all data).
 [ { "lat": 23.0475, "lng": 72.5650, "count": 9, "top_type": "flood" } ]
 ```
 Grid ≈ 500 m (round lat/lng to 0.0045°). FE renders as MapLibre heatmap.
+
+#### `GET /api/analytics/insights`
+Data-derived observations, most urgent first — matches FE2 `OperationalInsight[]`. No LLM; `evidence` has the numbers.
+```json
+[ { "id": "sla_breach:INC-0009", "kind": "sla_breach", "severity": "critical",
+    "headline": "INC-0009 (P1 industrial) waiting 4m 10s for dispatch",
+    "detail": "Gas leak at Vatva GIDC has no unit assigned. Dispatch or escalate now.",
+    "evidence": "created 08:46:00 UTC; P1 dispatch SLA 120s; waited 250s" } ]
+```
+`kind`: `sla_breach` · `shortage` (primary need of undispatched incidents > available units) · `coverage` (nearest suitable unit ETA > 20 min; 35 for boats/NDRF) · `conflict` · `trend` (≥ 3 reports and ≥ 2× the previous 10 min).
 
 #### `GET /api/analytics/eval`
 Returns the last `scripts/eval.py` result (saved to `app/data/eval_results.json`):
@@ -471,3 +501,4 @@ Rules:
 | 2026-09-19 | v1 | team |
 | 2026-09-19 | `photo_url` formats, `classification.photo`, geocoding note, `GET /api/ai/status`, `triage.py` internal API | BE2 |
 | 2026-09-19 | OpenAI primary provider: `source_model` values, `classification.model`, `/api/ai/status` shape | BE2 |
+| 2026-09-19 | `GET /api/incidents/{id}/trust`, `GET /api/analytics/insights`; hotspot `top_type` never null | BE2 |
