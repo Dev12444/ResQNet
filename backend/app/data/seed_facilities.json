@@ -1,1 +1,22 @@
-[]
+[
+  {"name": "Civil Hospital, Asarwa", "kind": "hospital", "lat": 23.0536, "lng": 72.6037, "beds_total": 120, "beds_available": 34, "specialties": ["trauma", "burns", "general"]},
+  {"name": "SVP Hospital, Paldi", "kind": "hospital", "lat": 23.0230, "lng": 72.5660, "beds_total": 90, "beds_available": 21, "specialties": ["trauma", "cardiac", "general"]},
+  {"name": "VS Hospital, Ellisbridge", "kind": "hospital", "lat": 23.0216, "lng": 72.5710, "beds_total": 60, "beds_available": 12, "specialties": ["general", "pediatric"]},
+  {"name": "LG Hospital, Maninagar", "kind": "hospital", "lat": 22.9985, "lng": 72.6060, "beds_total": 70, "beds_available": 18, "specialties": ["trauma", "general"]},
+  {"name": "Sola Civil Hospital", "kind": "hospital", "lat": 23.0730, "lng": 72.5170, "beds_total": 80, "beds_available": 25, "specialties": ["trauma", "general", "pediatric"]},
+  {"name": "Zydus Hospital, Thaltej", "kind": "hospital", "lat": 23.0580, "lng": 72.5070, "beds_total": 50, "beds_available": 9, "specialties": ["cardiac", "neuro", "trauma"]},
+  {"name": "Sterling Hospital, Memnagar", "kind": "hospital", "lat": 23.0490, "lng": 72.5330, "beds_total": 45, "beds_available": 7, "specialties": ["cardiac", "general"]},
+  {"name": "Shalby Hospital, S.G. Highway", "kind": "hospital", "lat": 23.0400, "lng": 72.5120, "beds_total": 40, "beds_available": 6, "specialties": ["orthopedic", "trauma"]},
+  {"name": "Rajasthan Hospital, Shahibaug", "kind": "hospital", "lat": 23.0560, "lng": 72.5930, "beds_total": 35, "beds_available": 8, "specialties": ["general", "burns"]},
+  {"name": "Apollo Hospitals, Bhat (Gandhinagar)", "kind": "hospital", "lat": 23.1290, "lng": 72.6370, "beds_total": 60, "beds_available": 15, "specialties": ["trauma", "burns", "cardiac"]},
+
+  {"name": "Paldi Community Hall Relief Shelter", "kind": "shelter", "lat": 23.0110, "lng": 72.5620, "beds_total": 300, "beds_available": 300, "specialties": ["food", "drinking_water"]},
+  {"name": "Maninagar AMC School Relief Shelter", "kind": "shelter", "lat": 22.9960, "lng": 72.6030, "beds_total": 250, "beds_available": 250, "specialties": ["food", "medical_camp"]},
+  {"name": "Vasna AMC School Relief Camp", "kind": "shelter", "lat": 23.0000, "lng": 72.5550, "beds_total": 200, "beds_available": 200, "specialties": ["food", "drinking_water"]},
+  {"name": "Gota Community Centre Shelter", "kind": "shelter", "lat": 23.1000, "lng": 72.5400, "beds_total": 180, "beds_available": 180, "specialties": ["food"]},
+
+  {"name": "Danapith Fire Station", "kind": "fire_station", "lat": 23.0240, "lng": 72.5830, "beds_total": null, "beds_available": null, "specialties": []},
+  {"name": "Naranpura Fire Station", "kind": "fire_station", "lat": 23.0600, "lng": 72.5550, "beds_total": null, "beds_available": null, "specialties": []},
+  {"name": "Shahpur Fire Station", "kind": "fire_station", "lat": 23.0340, "lng": 72.5820, "beds_total": null, "beds_available": null, "specialties": []},
+  {"name": "Odhav GIDC Fire Station", "kind": "fire_station", "lat": 23.0280, "lng": 72.6630, "beds_total": null, "beds_available": null, "specialties": ["hazmat"]}
+]
