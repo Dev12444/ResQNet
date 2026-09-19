@@ -5,7 +5,6 @@ field names is injected so these routes can still be exercised end-to-end.
 """
 import os
 import sys
-import types
 from datetime import datetime, timedelta, timezone
 
 os.environ["AI_ENABLED"] = "false"
@@ -13,98 +12,12 @@ os.environ["AI_ENABLED"] = "false"
 import pytest  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine  # noqa: E402
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 import app.models as real_models  # noqa: E402
-
-if hasattr(real_models, "Incident"):
-    models = real_models
-    from app.db import Base
-else:
-    Base = declarative_base()
-
-    class Incident(Base):
-        __tablename__ = "incidents"
-        id = Column(Integer, primary_key=True)
-        code = Column(String)
-        type = Column(String)
-        severity = Column(Integer)
-        priority = Column(String)
-        status = Column(String, default="new")
-        title = Column(String)
-        lat = Column(Float)
-        lng = Column(Float)
-        address = Column(String)
-        hazards = Column(JSON, default=list)
-        ai_summary = Column(Text)
-        ai_actions = Column(JSON, default=list)
-        report_count = Column(Integer, default=1)
-        created_at = Column(DateTime(timezone=True))
-        updated_at = Column(DateTime(timezone=True))
-        dispatched_at = Column(DateTime(timezone=True))
-        resolved_at = Column(DateTime(timezone=True))
-        reports = relationship("Report", back_populates="incident")
-
-    class Report(Base):
-        __tablename__ = "reports"
-        id = Column(Integer, primary_key=True)
-        source = Column(String)
-        text = Column(Text)
-        lang = Column(String)
-        lat = Column(Float)
-        lng = Column(Float)
-        sensor = Column(JSON)
-        incident_id = Column(Integer, ForeignKey("incidents.id"))
-        created_at = Column(DateTime(timezone=True))
-        incident = relationship("Incident", back_populates="reports")
-
-    class Resource(Base):
-        __tablename__ = "resources"
-        id = Column(Integer, primary_key=True)
-        callsign = Column(String)
-        kind = Column(String)
-        status = Column(String)
-        lat = Column(Float)
-        lng = Column(Float)
-        base = Column(String)
-        phone = Column(String)
-        current_incident_id = Column(Integer)
-
-    class Facility(Base):
-        __tablename__ = "facilities"
-        id = Column(Integer, primary_key=True)
-        name = Column(String)
-        kind = Column(String)
-        lat = Column(Float)
-        lng = Column(Float)
-        beds_total = Column(Integer)
-        beds_available = Column(Integer)
-        specialties = Column(JSON, default=list)
-
-    class Assignment(Base):
-        __tablename__ = "assignments"
-        id = Column(Integer, primary_key=True)
-        incident_id = Column(Integer)
-        resource_id = Column(Integer)
-        status = Column(String)
-        eta_min = Column(Integer)
-        created_at = Column(DateTime(timezone=True))
-        updated_at = Column(DateTime(timezone=True))
-
-    class Alert(Base):
-        __tablename__ = "alerts"
-        id = Column(Integer, primary_key=True)
-        incident_id = Column(Integer)
-        kind = Column(String)
-        message = Column(Text)
-        acknowledged = Column(Integer, default=0)
-        created_at = Column(DateTime(timezone=True))
-
-    models = types.SimpleNamespace(
-        Incident=Incident, Report=Report, Resource=Resource, Facility=Facility, Assignment=Assignment, Alert=Alert
-    )
+from tests.be2_models import Base, models  # noqa: E402
 
 
 @pytest.fixture()
@@ -183,6 +96,11 @@ def test_summarize_and_sitrep(client):
     assert r.status_code == 200 and r.json()["ai_summary"] and r.json()["ai_actions"]
     s = client.post("/api/ai/sitrep")
     assert s.status_code == 200 and s.json()["active_count"] == 1 and "INC-0001" in s.json()["markdown"]
+
+
+def test_ai_status(client):
+    body = client.get("/api/ai/status").json()
+    assert body["ai_enabled"] is False and "models" in body
 
 
 def test_analytics_endpoints(client):

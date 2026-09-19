@@ -11,12 +11,17 @@ class Settings(BaseSettings):
 
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"  # fastest; eval: 100% type acc on 50-report set
-    # Tried when the primary model is overloaded (503/429) or unavailable.
-    gemini_fallback_model: str = "gemini-3.6-flash"
+    # Tried in order when the primary is overloaded (503), rate-limited (429) or out of daily quota.
+    # Comma-separated; each model has its OWN free-tier quota, so more models = more capacity.
+    gemini_fallback_model: str = "gemini-3.1-flash-lite,gemini-3.6-flash"
+    # Client-side pacing per model (free tier is ~15 RPM for flash-lite; lower if you still see 429s).
+    gemini_rpm: int = 12
     # "minimal" | "low" | "" (model default). Lower = faster; ignored by models that don't support it.
     gemini_thinking_level: str = "minimal"
     gemini_embed_model: str = "gemini-embedding-001"
     ai_enabled: bool = True
+    # BE2: persistent AI cache (relative to backend/). Empty string disables it.
+    llm_cache_path: str = ".cache/llm_cache.sqlite3"
 
     telegram_bot_token: str = ""
     telegram_authority_chat_id: str = ""

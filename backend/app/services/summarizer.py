@@ -65,7 +65,7 @@ Reports may be in Gujarati or Hindi — always answer in clear English."""
 SUMMARY_SCHEMA = {
     "type": "object",
     "properties": {
-        "summary": {"type": "string", "description": "Max 3 sentences: what, where, who is at risk, how many reports confirm."},
+        "summary": {"type": "string", "description": "Max 3 sentences: what is happening, where, who is at risk. Do not state report counts."},
         "actions": {
             "type": "array",
             "items": {"type": "string"},
