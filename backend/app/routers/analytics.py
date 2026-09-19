@@ -199,7 +199,7 @@ def compute_hotspots(incidents, reports) -> list[dict]:
             "lat": round(c["lat"] / c["count"], 5),
             "lng": round(c["lng"] / c["count"], 5),
             "count": c["count"],
-            "top_type": c["types"].most_common(1)[0][0] if c["types"] else None,
+            "top_type": c["types"].most_common(1)[0][0] if c["types"] else "other",
         }
         for c in cells.values()
     ]
@@ -256,9 +256,28 @@ def hotspots(since: str | None = Query(None), db: Session = Depends(get_db)) -> 
     return compute_hotspots(d["incidents"], d["reports"])
 
 
+@router.get("/insights")
+def insights(db: Session = Depends(get_db)) -> list[dict]:
+    """Data-derived operational insights (FE2 `OperationalInsight[]`), most urgent first."""
+    from app.models import Incident, Report, Resource
+    from app.services.insights import OPEN, compute_insights
+
+    incidents = db.query(Incident).filter(Incident.status.in_(OPEN)).all()
+    ids = [i.id for i in incidents]
+    reports = db.query(Report).filter(Report.incident_id.in_(ids)).all() if ids else []
+    return compute_insights(incidents, reports, db.query(Resource).all())
+
+
+EVAL_SETS = {
+    "main": EVAL_RESULTS,  # 50 clean EN/GU/HI reports
+    "stress": EVAL_RESULTS.with_name("stress_results.json"),  # Romanized GU/HI, typos, pranks, no GPS
+}
+
+
 @router.get("/eval")
-def eval_results() -> dict:
-    if not EVAL_RESULTS.exists():
+def eval_results(set: str = Query("main", pattern="^(main|stress)$")) -> dict:
+    path = EVAL_SETS[set]
+    if not path.exists():
         return {"n": 0, "type_accuracy": None, "severity_within_1": None, "dedup_precision": None,
                 "dedup_recall": None, "avg_latency_ms": None, "run_at": None}
-    return json.loads(EVAL_RESULTS.read_text())
+    return json.loads(path.read_text(encoding="utf-8"))

@@ -32,6 +32,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { usePathname } from "next/navigation";
 import type { Lang, WeatherAlert } from "@/types";
 import { getWeatherAlerts } from "@/lib/api";
 import { Sidebar } from "./Sidebar";
@@ -66,6 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [alerts, setAlerts] = useState<WeatherAlert[]>([]);
   const connectivity = useConnectivity();
+  const pathname = usePathname() ?? "";
 
   // Restore the saved language after mount — reading storage during render
   // would desync the server-rendered markup.
@@ -101,6 +103,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       /* ignore */
     }
   }, []);
+
+  // The control room is a full-screen console with its own header, 112 bar and live status.
+  if (pathname.startsWith("/dashboard")) return <>{children}</>;
 
   return (
     <LangContext.Provider value={{ lang, setLang }}>

@@ -1,4 +1,4 @@
-"""Pre-compute Gemini results for the demo so the live run is instant and survives network hiccups. Owner: BE2.
+"""Pre-compute AI results for the demo so the live run is instant and survives network hiccups. Owner: BE2.
 
 Runs classify() + embeddings for every text in the demo scenario (BE1's
 app/data/scenario_ahmedabad_flood.json) and the eval set, storing results in the persistent
@@ -26,7 +26,7 @@ DEFAULT_FILES = [
 
 def _items(path: Path) -> list[dict]:
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         print(f"  skip {path.name}: {e}")
         return []
@@ -41,7 +41,7 @@ def main() -> None:
 
     st = get_settings()
     if not st.ai_available:
-        sys.exit("GEMINI_API_KEY missing or AI_ENABLED=false — nothing to warm.")
+        sys.exit("No OPENAI_API_KEY or GEMINI_API_KEY, or AI_ENABLED=false — nothing to warm.")
     if not st.llm_cache_path:
         sys.exit("LLM_CACHE_PATH is empty — results would not persist.")
 
@@ -54,7 +54,7 @@ def main() -> None:
         texts = []
         for it in items:
             waited = 0
-            while not llm.has_capacity() and waited < 90:  # stay under the free-tier RPM instead of falling back
+            while not llm.has_capacity() and waited < 90:  # stay under provider RPM limits instead of falling back
                 time.sleep(2)
                 waited += 2
             c = classifier.classify(it.get("text"), it.get("source", "citizen"), sensor=it.get("sensor"))

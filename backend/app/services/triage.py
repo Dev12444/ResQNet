@@ -1,27 +1,27 @@
-"""One-call AI triage for BE1's POST /api/reports pipeline. Owner: BE2.
+"""AI triage for BE1's POST /api/reports pipeline (app/pipeline.py). Owner: BE2.
 
-    from app.services.triage import triage, apply_to_incident, refresh_summary
+    from app.services.triage import prepare, triage, apply_to_incident, refresh_summary
 
-    report = Report(**payload, created_at=now); db.add(report); db.flush()   # BE1: store raw first
-    t = triage(db, report)                                  # classify + geocode + dedup (never raises)
-    report.lat, report.lng = t.lat, t.lng                   # filled from gazetteer if missing
-    report.lang = t.classification.lang
-    report.ai_json = t.classification.to_dict()             # optional: keep AI output on the report
-    is_new = t.match is None
-    if is_new:
-        incident = Incident(code=next_code(), status="new", lat=t.lat, lng=t.lng,
-                            address=t.address, report_count=1, created_at=now)   # BE1
-        apply_to_incident(incident, t.classification, is_new=True)
-        db.add(incident); db.flush()
-    else:
-        incident = t.match
-        incident.report_count = (incident.report_count or 1) + 1
-        apply_to_incident(incident, t.classification, is_new=False)
-    report.incident_id = incident.id
-    db.flush(); db.refresh(incident)                        # so incident.reports includes this report
-    refresh_summary(incident)                               # sets ai_summary / ai_actions
-    db.commit()                                             # BE1 commits, then broadcasts
-    # broadcast "incident.created" if is_new else "incident.merged"
+    report = save_raw(body)                          # BE1: committed first, never lost
+    prep = prepare(report)                           # AI classify + geocode + embed, ~1-2 s, NO DB:
+                                                     #   run it OUTSIDE the pipeline lock so concurrent
+                                                     #   reports are classified in parallel
+    with PIPELINE_LOCK:                              # only the fast, race-sensitive part is serialised
+        t = triage(db, report, prepared=prep)        # dedup (+ incident_id hint), milliseconds
+        report.lat, report.lng = t.lat, t.lng
+        report.lang, report.ai_json = t.classification.lang, t.classification.to_dict()
+        if t.match is None:
+            incident = Incident(status="new", lat=t.lat, lng=t.lng, address=t.address, report_count=1)
+            apply_to_incident(incident, t.classification, is_new=True); db.add(incident); db.flush()
+        else:
+            incident = t.match
+            incident.report_count += 1
+            apply_to_incident(incident, t.classification, is_new=False)   # escalates, never downgrades
+        report.incident_id = incident.id
+        db.commit()
+    # broadcast, then in the background: refresh_summary(incident) -> commit -> incident.updated
+
+triage(db, report) without `prepared` still works (it calls prepare() itself).
 """
 from __future__ import annotations
 
@@ -53,8 +53,23 @@ def _get(obj: Any, name: str, default: Any = None) -> Any:
     return obj.get(name, default) if isinstance(obj, dict) else getattr(obj, name, default)
 
 
-def triage(db, report: Any) -> TriageResult:
-    """Classify, locate and de-duplicate one saved report. Never raises."""
+@dataclass
+class Prepared:
+    """The slow, DB-free half of triage (AI classification, geocoding, embedding warm-up)."""
+    classification: ClassificationResult
+    lat: float
+    lng: float
+    address: str | None
+    geocoded: bool
+    approximate: bool
+
+
+def prepare(report: Any) -> Prepared:
+    """AI + geocoding for one report. No DB access, thread-safe, never raises.
+
+    Run this OUTSIDE any pipeline lock (it takes ~1-2 s with an LLM), then pass the result to
+    triage(db, report, prepared=...) inside the lock; that part is only dedup (milliseconds).
+    """
     text = _get(report, "text")
     cls = classify(
         text,
@@ -80,6 +95,34 @@ def triage(db, report: Any) -> TriageResult:
             cls.reasoning = f"{cls.reasoning} Location not given; placed at city centre for verification.".strip()
     if not address:
         address = cls.location_text
+    if text and text.strip():
+        try:
+            dedup.embed_batch([text])  # warm the per-text embedding cache so dedup under the lock is local
+        except Exception as e:  # dedup falls back to geo + time on its own
+            log.info("embedding warm-up skipped: %s", e)
+    return Prepared(cls, lat, lng, address, geocoded, approximate)
+
+
+def triage(db, report: Any, prepared: Prepared | None = None) -> TriageResult:
+    """Classify, locate and de-duplicate one saved report. Never raises.
+
+    Pass `prepared=prepare(report)` (computed outside your lock) to keep only the fast dedup step
+    inside it; without it, prepare() runs here.
+    """
+    p = prepared if prepared is not None else prepare(report)
+    cls, lat, lng, address = p.classification, p.lat, p.lng, p.address
+    geocoded, approximate = p.geocoded, p.approximate
+    text = _get(report, "text")
+
+    # A report that already names its incident (e.g. a responder's field update from /field)
+    # attaches to it directly — no duplicate guessing, even without GPS.
+    hinted = _hinted_incident(db, _get(report, "incident_id"))
+    if hinted is not None:
+        if approximate:
+            lat, lng = _get(hinted, "lat") or lat, _get(hinted, "lng") or lng
+            address = _get(hinted, "address") or address
+            approximate = False
+        return TriageResult(cls, hinted, lat, lng, address, geocoded, approximate)
 
     view = SimpleNamespace(
         id=_get(report, "id"),
@@ -92,6 +135,19 @@ def triage(db, report: Any) -> TriageResult:
     )
     match = dedup.find_match(db, view, cls)
     return TriageResult(cls, match, lat, lng, address, geocoded, approximate)
+
+
+def _hinted_incident(db, incident_id: Any) -> Any | None:
+    if not incident_id:
+        return None
+    try:
+        from app.models import Incident
+
+        inc = db.get(Incident, incident_id)
+        return inc if inc is not None and _get(inc, "status") != "resolved" else None
+    except Exception as e:
+        log.info("incident hint %s ignored: %s", incident_id, e)
+        return None
 
 
 def apply_to_incident(incident: Any, cls: ClassificationResult, is_new: bool) -> Any:

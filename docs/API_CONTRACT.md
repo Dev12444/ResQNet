@@ -171,9 +171,11 @@ Capability map (which kinds an incident type needs — used by recommender):
   "distance_km": 2.4,
   "eta_min": 9,
   "score": 0.87,
+  "matched_capabilities": ["swift_water"],
   "reason": "Closest available boat; 9 min via river channel."
 }
 ```
+`matched_capabilities` = the unit's capabilities this incident calls for (e.g. `aerial_ladder` + `rescue` for people trapped in a fire, `cardiac` for chest pain). Show them as chips; they raise the unit's score, so a slightly farther but better-equipped unit can rank first.
 
 ### Alert
 ```json
@@ -215,6 +217,7 @@ Request:
 }
 ```
 - `text` required unless `source = "sensor"` (then `sensor` required)
+- `incident_id` (optional, for `/field` responder updates): attach the report to that open incident directly — no duplicate matching, and its location is used when the report has no GPS. Without it, a field update with `lat/lng = null` would open a new incident at the city centre
 - `photo_url` (optional): a `data:image/jpeg|png|webp;base64,...` URL (≤ 6 MB — FE should downscale to ~1280 px) or a public `https://` image URL. Analysed by Gemini Vision in parallel; a relevant photo can raise severity by +1
 - `lat/lng` optional — if missing, BE2 extracts `location_text` and BE1 geocodes against a small Ahmedabad gazetteer (fallback: city centre + flag low confidence)
 
@@ -234,7 +237,7 @@ Response `201`:
   }
 }
 ```
-`source_model` is `"gemini"`, `"fallback"` (rules) or `"rules"` (sensor).
+`source_model` is `"openai"`, `"gemini"`, `"fallback"` (keyword rules) or `"rules"` (sensor); `classification.model` is e.g. `"openai:gpt-4.1-mini"` (prefixed `cache:` when served from the AI cache).
 `classification.photo` is `null` or `{ "relevant": bool, "type": ..., "severity_hint": 1-5, "hazards": [...], "description": "...", "confidence": 0-1 }`.
 Reports without GPS are geocoded from the text (Ahmedabad gazetteer); if that fails the incident is placed at the city centre with `confidence <= 0.4` — FE should show "location unverified".
 
@@ -291,8 +294,33 @@ Setting `status: "escalated"` creates an `escalation` alert and sends Telegram.
 #### `POST /api/incidents/{id}/summarize`
 Forces a re-summary → `{ "ai_summary": "...", "ai_actions": ["..."] }`
 
+#### `GET /api/incidents/{id}/trust`
+How well supported an incident is (independent of severity) — matches FE2 `IncidentTrust`:
+```json
+{
+  "incident_id": 7,
+  "verification": "conflicting",
+  "sources": { "reports": 4, "unique_sources": 3, "citizen": 2, "call": 1, "sensor": 0, "field": 1 },
+  "duplicate_state": "review_required",
+  "sensor_corroboration": { "sensor_id": "VASNA-WL-01", "detail": "water_level_m 4.9m against a 4.2m threshold." },
+  "conflicts": [
+    { "field": "people_affected",
+      "claims": [ { "value": "3 people", "source": "citizen", "report_id": 41, "at": "2026-09-19T08:42:10Z" },
+                  { "value": "12 people", "source": "call", "report_id": 44, "at": "2026-09-19T08:44:02Z" } ] }
+  ]
+}
+```
+- `verification`: `conflicting` (any conflict) > `verified` (a field report) > `corroborated` (≥ 2 distinct reporters or a sensor over threshold) > `unverified`
+- `conflicts[].field`: `people_affected` (≥ 2× and ≥ 3 apart) · `severity` (≥ 2 apart) · `type` · `situation` ("contained" vs "worsening")
+- `duplicate_state`: `review_required` (type/situation conflict) · `possible_duplicate` (same reporter repeated) · `matched`
+
+#### `GET /api/ai/advice?type=flood&hazards=trapped_people,rising_water&lang=gu` · `GET /api/incidents/{id}/advice?lang=gu`
+Safety tips for the citizen who just reported. Show them on the `/report` success screen using `classification.type`, `classification.hazards` and `classification.lang` from the `POST /api/reports` response. These are fixed, reviewed templates, **not AI-generated**: instant, offline-safe, EN/GU/HI.
+→ `{ "lang": "gu", "headline": "તમારો રિપોર્ટ કંટ્રોલ રૂમ સુધી પહોંચી ગયો છે...", "tips": ["જો તમે ફસાયા હો...", "..."], "helplines": [{ "number": "112", "label": "ઇમરજન્સી" }, { "number": "108", "label": "એમ્બ્યુલન્સ" }, ...] }`
+Hazard tips come first (most urgent), max 5 tips. Unknown `type`/`hazards` fall back to general tips; `lang` outside `en|gu|hi` → 422.
+
 #### `GET /api/ai/status`
-→ `{ "ai_enabled": true, "generation_available": true, "embeddings_available": true, "models": { "gemini-3.5-flash-lite": { "calls_last_min": 3, "benched_for_sec": 0 } }, "embed_model": "gemini-embedding-001", "rpm_per_model": 12, "disk_cache": true }`
+→ `{ "ai_enabled": true, "providers": ["openai", "gemini"], "generation_available": true, "embeddings_available": true, "models": { "openai:gpt-4.1-mini": { "calls_last_min": 3, "benched_for_sec": 0, "provider_cooling_sec": 0 } }, "embed_providers": ["gemini:gemini-embedding-001", "openai:text-embedding-3-small"], "openai_spent_usd": 0.05, "openai_budget_usd": 8.0, "openai_over_budget": false, "disk_cache": true, "demo_seed_answers": 93 }`
 Debug/demo helper: if every model is benched, the system is running on rule-based fallback.
 
 #### `POST /api/ai/sitrep`
@@ -374,8 +402,18 @@ All accept optional `?since=<ISO time>` (default: all data).
 ```
 Grid ≈ 500 m (round lat/lng to 0.0045°). FE renders as MapLibre heatmap.
 
-#### `GET /api/analytics/eval`
-Returns the last `scripts/eval.py` result (saved to `app/data/eval_results.json`):
+#### `GET /api/analytics/insights`
+Data-derived observations, most urgent first — matches FE2 `OperationalInsight[]`. No LLM; `evidence` has the numbers.
+```json
+[ { "id": "sla_breach:INC-0009", "kind": "sla_breach", "severity": "critical",
+    "headline": "INC-0009 (P1 industrial) waiting 4m 10s for dispatch",
+    "detail": "Gas leak at Vatva GIDC has no unit assigned. Dispatch or escalate now.",
+    "evidence": "created 08:46:00 UTC; P1 dispatch SLA 120s; waited 250s" } ]
+```
+`kind`: `sla_breach` · `shortage` (primary need of undispatched incidents > available units) · `coverage` (nearest suitable unit ETA > 20 min; 35 for boats/NDRF) · `conflict` · `trend` (≥ 3 reports and ≥ 2× the previous 10 min).
+
+#### `GET /api/analytics/eval?set=main|stress`
+Returns the last `scripts/eval.py` result. `set=main` (default): 50 clean EN/GU/HI reports (`eval_results.json`). `set=stress`: 32 messy reports (Romanized Gujarati/Hindi, typos, pranks, no GPS; `stress_results.json`). Same shape:
 ```json
 { "n": 50, "type_accuracy": 0.94, "severity_within_1": 0.9, "dedup_precision": 0.9, "dedup_recall": 0.86, "avg_latency_ms": 1180, "run_at": "..." }
 ```
@@ -461,7 +499,7 @@ def eta_minutes(distance_km: float, kind: str) -> int: ...
 Rules:
 - Services **never raise** to the pipeline — on any error return a fallback result.
 - Services **don't commit** the DB session and don't broadcast; BE1's router does.
-- Any Gemini call has a 12 s timeout (API minimum is 10 s), one retry, then the fallback model, then rules.
+- Any LLM call has a 12 s timeout, one retry on 5xx, then the next model, then the next provider (OpenAI → Gemini), then rules.
 
 ---
 
@@ -470,3 +508,9 @@ Rules:
 |---|---|---|
 | 2026-09-19 | v1 | team |
 | 2026-09-19 | `photo_url` formats, `classification.photo`, geocoding note, `GET /api/ai/status`, `triage.py` internal API | BE2 |
+| 2026-09-19 | OpenAI primary provider: `source_model` values, `classification.model`, `/api/ai/status` shape | BE2 |
+| 2026-09-19 | `GET /api/ai/advice`, `GET /api/incidents/{id}/advice` (citizen safety tips EN/GU/HI) | BE2 |
+| 2026-09-19 | `GET /api/analytics/eval?set=stress` (robustness set) | BE2 |
+| 2026-09-19 | `/api/ai/status.demo_seed_answers` (pre-computed demo AI answers shipped in git) | BE2 |
+| 2026-09-19 | `Recommendation.matched_capabilities`; recommender weighs unit capabilities + hospital specialties (cardiac, burns, trauma, pediatric) | BE2 |
+| 2026-09-19 | `GET /api/incidents/{id}/trust`, `GET /api/analytics/insights`; hotspot `top_type` never null; optional `incident_id` on `POST /api/reports` | BE2 |

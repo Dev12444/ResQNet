@@ -5,7 +5,7 @@ A report matches an open incident when ALL hold:
   1. compatible type (same, or either side is "other")
   2. within radius (300 m; 1 km for floods — they cover areas)
   3. incident's last activity within 30 min
-  4. text similarity (embedding cosine) >= threshold — skipped if embeddings are unavailable
+  4. text similarity (embedding cosine) >= per-model threshold — skipped if embeddings are unavailable
 The best-scoring candidate wins. Never raises; returns None on any problem.
 """
 from __future__ import annotations
@@ -23,13 +23,29 @@ log = logging.getLogger("resqnet.dedup")
 RADIUS_KM = 0.3
 FLOOD_RADIUS_KM = 1.0
 TIME_WINDOW = timedelta(minutes=30)
-SIM_THRESHOLD = 0.80
-# Very close reports need less text agreement (people describe the same scene very differently,
-# and cross-language embeddings score lower).
 CLOSE_KM = 0.15
-CLOSE_SIM_THRESHOLD = 0.60
-# Without coordinates we only merge on very strong text similarity.
-NO_GEO_SIM_THRESHOLD = 0.90
+
+
+@dataclass(frozen=True)
+class Thresholds:
+    sim: float        # cosine needed to merge (within radius)
+    close_sim: float  # within CLOSE_KM people describe one scene very differently → accept less
+    no_geo_sim: float  # one side has no coordinates → only near-identical text merges
+
+
+# Cosine scales differ per embedding model; calibrated on app/data/eval_incidents.json (EN/GU/HI):
+#   gemini-embedding-001     same-event pairs min 0.86 / median 0.91; nearby different events max 0.83
+#   text-embedding-3-small   same-event min 0.09 / median 0.23 (EN↔GU pairs ~0.1); different events up to 0.70
+#   text-embedding-3-large   same-event min 0.23 / median 0.54; nearby different events up to 0.53
+# OpenAI embeddings can't separate cross-language duplicates, so with them text similarity never
+# vetoes a merge (geo + time + type decide, which scored P/R 1.0/1.0 alone); it's only used to allow
+# a merge when one side has no coordinates and the texts are near-identical.
+THRESHOLDS: dict[str, Thresholds] = {
+    "gemini-embedding-001": Thresholds(0.80, 0.60, 0.90),
+    "text-embedding-3-small": Thresholds(0.0, 0.0, 0.85),
+    "text-embedding-3-large": Thresholds(0.0, 0.0, 0.85),
+}
+DEFAULT_THRESHOLDS = Thresholds(0.80, 0.60, 0.90)
 MAX_REPORTS_COMPARED = 5
 OPEN_STATUSES = ("new", "triaged", "dispatched", "on_scene", "escalated")
 
@@ -63,6 +79,18 @@ def embed(text: str) -> list[float] | None:
     return vecs[0] if vecs else None
 
 
+def embed_batch(texts: list[str]) -> tuple[str, dict[str, list[float]]] | None:
+    """Embed texts in ONE provider call so all vectors are comparable. -> (model, {text: vector})."""
+    uniq = list(dict.fromkeys(t.strip() for t in texts if t and t.strip()))[:100]  # API batch limit
+    if not uniq:
+        return None
+    r = llm.embed_with_model(uniq)
+    if r is None:
+        return None
+    model, vecs = r
+    return model, dict(zip(uniq, vecs))
+
+
 def _utc(dt: datetime | None) -> datetime:
     if dt is None:
         return datetime.now(timezone.utc)
@@ -92,9 +120,13 @@ def match_score(
     new_at: datetime,
     new_text: str | None,
     cand: Candidate,
-    use_embeddings: bool = True,
+    vectors: dict[str, list[float]] | None = None,
+    embed_model: str | None = None,
 ) -> float | None:
-    """Return a 0..1 match score if `cand` is a duplicate target, else None."""
+    """Return a 0..1 match score if `cand` is a duplicate target, else None.
+
+    `vectors` maps text -> embedding, all from `embed_model` (see embed_batch); None = no embeddings.
+    """
     if not _types_compatible(new_type, cand.type):
         return None
     if abs(_utc(new_at) - _utc(cand.last_at)) > TIME_WINDOW:
@@ -106,16 +138,20 @@ def match_score(
     if dist is not None and dist > radius:
         return None
 
+    th = THRESHOLDS.get(embed_model or "", DEFAULT_THRESHOLDS)
     sim = None
-    if use_embeddings and new_text and cand.texts:
-        new_vec = embed(new_text)
+    if vectors and new_text and cand.texts:
+        new_vec = vectors.get(new_text.strip())
         if new_vec is not None:
-            sims = [cosine(new_vec, v) for t in cand.texts[-MAX_REPORTS_COMPARED:] if (v := embed(t)) is not None]
+            sims = [
+                cosine(new_vec, v) for t in cand.texts[-MAX_REPORTS_COMPARED:]
+                if (v := vectors.get(t.strip())) is not None and len(v) == len(new_vec)
+            ]
             sim = max(sims) if sims else None
 
     if dist is None:
         # No location on one side: only merge on near-identical text.
-        if sim is None or sim < NO_GEO_SIM_THRESHOLD:
+        if sim is None or sim < th.no_geo_sim:
             return None
         return round(sim * 0.9, 3)
 
@@ -123,7 +159,7 @@ def match_score(
     if sim is None:
         # Embeddings unavailable → geo + time + type only (PRD fallback).
         return round(0.5 + 0.5 * geo_score, 3)
-    needed = CLOSE_SIM_THRESHOLD if dist <= CLOSE_KM else SIM_THRESHOLD
+    needed = th.close_sim if dist <= CLOSE_KM else th.sim
     if sim < needed:
         return None
     return round(0.6 * sim + 0.4 * geo_score, 3)
@@ -140,14 +176,16 @@ def best_match(
     use_embeddings: bool = True,
 ) -> tuple[Candidate, float] | None:
     best: tuple[Candidate, float] | None = None
-    if use_embeddings and new_text:
-        # Warm the embedding cache with ONE batched API call instead of one per text.
-        texts = [new_text.strip()] + [t.strip() for c in candidates for t in c.texts[-MAX_REPORTS_COMPARED:] if t]
-        llm.embed(list(dict.fromkeys(t for t in texts if t))[:100])  # API batch limit
+    vectors = embed_model = None
+    if use_embeddings and new_text and candidates:
+        # ONE batched call (one provider/model) for the new text and every candidate text.
+        texts = [new_text] + [t for c in candidates for t in c.texts[-MAX_REPORTS_COMPARED:]]
+        if (r := embed_batch(texts)) is not None:
+            embed_model, vectors = r
     for c in candidates:
         s = match_score(
             new_type=new_type, new_lat=new_lat, new_lng=new_lng, new_at=new_at,
-            new_text=new_text, cand=c, use_embeddings=use_embeddings,
+            new_text=new_text, cand=c, vectors=vectors, embed_model=embed_model,
         )
         if s is not None and (best is None or s > best[1]):
             best = (c, s)

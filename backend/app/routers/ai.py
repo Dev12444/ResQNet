@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.services import llm, recommender, summarizer
+from app.services import advice, llm, recommender, summarizer, trust
 
 router = APIRouter(prefix="/api", tags=["ai"])
 
@@ -30,6 +30,29 @@ def _incident_or_404(db: Session, incident_id: int):
 def get_recommendations(incident_id: int, db: Session = Depends(get_db)) -> dict:
     inc = _incident_or_404(db, incident_id)
     return recommender.recommend(db, inc)
+
+
+@router.get("/ai/advice")
+def get_advice(
+    type: str = Query("other", description="incident type from the classification"),
+    hazards: str = Query("", description="comma list, e.g. trapped_people,rising_water"),
+    lang: str = Query("en", pattern="^(en|gu|hi)$"),
+) -> dict:
+    """Safety tips for the citizen who just reported (fixed, reviewed templates; EN/GU/HI)."""
+    return advice.safety_advice(type, [h.strip() for h in hazards.split(",") if h.strip()], lang)
+
+
+@router.get("/incidents/{incident_id}/advice")
+def get_incident_advice(incident_id: int, lang: str = Query("en", pattern="^(en|gu|hi)$"),
+                        db: Session = Depends(get_db)) -> dict:
+    inc = _incident_or_404(db, incident_id)
+    return advice.safety_advice(inc.type, list(inc.hazards or []), lang)
+
+
+@router.get("/incidents/{incident_id}/trust")
+def get_trust(incident_id: int, db: Session = Depends(get_db)) -> dict:
+    """Corroboration, conflicts between reports and sensor confirmation (FE2 `IncidentTrust`)."""
+    return trust.incident_trust(_incident_or_404(db, incident_id))
 
 
 @router.post("/incidents/{incident_id}/summarize")
@@ -58,14 +81,19 @@ def generate_sitrep(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/ai/status")
 def ai_status() -> dict:
-    """Which Gemini models are usable right now (quota/pacing) — handy during the demo."""
+    """Which AI providers/models are usable right now (quota, pacing, OpenAI spend) — handy during the demo."""
     st = get_settings()
     return {
         "ai_enabled": st.ai_available,
+        "providers": [p.name for p in llm._providers("gen")],
         "generation_available": llm.available("gen"),
         "embeddings_available": llm.available("emb"),
         "models": llm.quota_status(),
-        "embed_model": st.gemini_embed_model,
-        "rpm_per_model": st.gemini_rpm,
+        "embed_providers": [f"{p.name}:{p.embed_model}" for p in llm._providers("emb")],
+        # v1 keys kept for existing frontend types
+        "embed_model": next((p.embed_model for p in llm._providers("emb")), None),
+        "rpm_per_model": next((p.rpm for p in llm._providers("gen")), None),
+        **llm.spend_status(),
         "disk_cache": bool(st.llm_cache_path),
+        "demo_seed_answers": llm.demo_seed_size(),
     }
