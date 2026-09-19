@@ -21,6 +21,7 @@ from app.pipeline import cancel_trailing_refreshes
 from app.routers import ai, alerts, analytics, dispatch, incidents, reports, resources, ws
 from app.schemas import HealthOut
 from app.seed import seed_if_empty
+from app.services.escalation import loop as escalation_loop
 from app.ws_manager import manager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -47,10 +48,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     init_db()
     startup_seed()
     await manager.start()
+    await escalation_loop.start(SessionLocal, settings.escalation_tick_sec)
     log.info("ResQNet API started (ai_available=%s)", settings.ai_available)
     try:
         yield
     finally:
+        await escalation_loop.stop()
         cancel_trailing_refreshes()
         await manager.stop()
 

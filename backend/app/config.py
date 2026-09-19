@@ -54,7 +54,10 @@ class Settings(BaseSettings):
     sla_p1_dispatch_sec: int = 120
     sla_p2_dispatch_sec: int = 300
     sla_no_update_sec: int = 600
-    escalation_tick_sec: int = 15
+    escalation_tick_sec: int = 15  # <= 0 disables the background loop
+    # Auto-escalate an undispatched incident after this many missed dispatch SLA periods
+    # (PRD FR-6: 2). 0 = escalation only via the dashboard (PATCH status=escalated).
+    auto_escalate_after_breaches: int = 2
 
     @property
     def ai_available(self) -> bool:

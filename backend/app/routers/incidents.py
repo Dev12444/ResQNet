@@ -65,7 +65,12 @@ def incident_detail_query() -> Select:
 
 
 def get_incident_or_404(db: Session, incident_id: int) -> m.Incident:
-    incident = db.scalars(incident_detail_query().where(m.Incident.id == incident_id)).one_or_none()
+    # populate_existing: if this incident is already in the session (e.g. an endpoint just changed
+    # it and appended an alert/assignment in memory), reload its relations in the declared order
+    # instead of keeping the stale in-memory lists (alerts must be newest first, contract §2).
+    incident = db.scalars(
+        incident_detail_query().where(m.Incident.id == incident_id).execution_options(populate_existing=True)
+    ).one_or_none()
     if incident is None:
         raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found")
     return incident

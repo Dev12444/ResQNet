@@ -37,6 +37,7 @@ TEST_POSTGRES_URL=postgresql://... pytest tests/test_db.py   # optional real-Pos
 | `SEED_ON_STARTUP` | `true` | Seeds an **empty** DB at startup; never wipes |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_AUTHORITY_CHAT_ID`, `TELEGRAM_RESPONDER_CHAT_ID` | empty | Empty = notifications off |
 | `SLA_P1_DISPATCH_SEC` / `SLA_P2_DISPATCH_SEC` / `SLA_NO_UPDATE_SEC` / `ESCALATION_TICK_SEC` | 120 / 300 / 600 / 15 | Demo SLA timings |
+| `AUTO_ESCALATE_AFTER_BREACHES` | `2` | Auto-escalate after N missed dispatch SLA periods (PRD FR-6); `0` = only the dashboard escalates |
 
 BE2's AI settings (models, budgets, cache) are documented in `app/config.py`.
 
