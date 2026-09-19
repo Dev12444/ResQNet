@@ -237,3 +237,45 @@ def test_whitespace_only_api_keys_do_not_count_as_ai_available(monkeypatch):
 def test_analytics_rejects_an_unparseable_since(file_db):
     assert file_db.client.get("/api/analytics/summary", params={"since": "yesterday"}).status_code == 422
     assert file_db.client.get("/api/analytics/summary", params={"since": "2026-09-19T08:00:00Z"}).status_code == 200
+
+
+# ---------------------------------------------------------------- LLM: a rejected API key stays benched
+
+def _auth_error(name, msg):
+    return type(name, (Exception,), {})(msg)
+
+
+def test_rejected_openai_key_is_benched_for_minutes_not_seconds(env):  # noqa: F811
+    rejected = _auth_error("AuthenticationError", "Error code: 401 Incorrect API key")
+    client = env.install(FakeOpenAI(error_once=[rejected]))
+    assert llm.generate_text("hello", temperature=0.0) == '{"from": "gemini"}'
+    wait = llm._cooldown_until[("openai", "gen")] - llm.time.monotonic()
+    assert wait > 60  # not retried (and re-failed, adding latency to every report) every 10 s
+    assert llm.generate_text("hello again", temperature=0.0) == '{"from": "gemini"}'
+    assert len(client.requests) == 1
+
+
+def test_rejected_gemini_embedding_key_is_benched_for_minutes(env):  # noqa: F811
+    env.monkeypatch.setattr(env.st, "embed_providers", "gemini,openai")
+    env.install(FakeOpenAI(embed_dim=3))
+
+    def gemini_rejects(p, client, texts):
+        if p.name == "gemini":
+            raise _auth_error("ClientError", "400 INVALID_ARGUMENT. API key not valid. Please pass a valid API key.")
+        return [[1.0, 0.0, 0.0] for _ in texts]
+
+    env.monkeypatch.setattr(llm, "_embed_call", gemini_rejects)
+    assert llm.embed_with_model(["x"])[0] == "text-embedding-3-small"
+    assert llm._cooldown_until[("gemini", "emb")] - llm.time.monotonic() > 60
+
+
+def test_ordinary_outage_still_cools_briefly(env):  # noqa: F811
+    env.install(FakeOpenAI(error_once=[_auth_error("InternalServerError", "500")] * 4))
+    llm.generate_text("hello", temperature=0.0)
+    assert llm._cooldown_until[("openai", "gen")] - llm.time.monotonic() <= llm.COOLDOWN_SEC
+
+
+def test_permission_denied_for_one_model_still_tries_the_fallback_model(env):  # noqa: F811
+    client = env.install(FakeOpenAI(error_once=[_auth_error("PermissionDeniedError", "403 model not allowed")]))
+    assert llm.generate_text("hello", temperature=0.0) == '{"ok": true}'  # gpt-4.1-nano answered
+    assert len(client.requests) == 2

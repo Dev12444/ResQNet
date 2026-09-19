@@ -37,6 +37,8 @@ TIMEOUT_SEC = 12  # Gemini's API minimum is 10 s
 CACHE_VERSION = 3  # bump to invalidate every cached answer (e.g. after a big prompt change)
 _CACHE_MAX = 2000
 COOLDOWN_SEC = 10
+# A rejected key only changes with the env (a restart); retrying it every 10 s adds seconds to reports.
+AUTH_COOLDOWN_SEC = 600
 RETRY_BACKOFF_SEC = 1.0
 DAILY_BENCH_SEC = 3600
 
@@ -323,10 +325,18 @@ def available(kind: str = "gen") -> bool:
     return get_settings().ai_enabled and any(_provider_ok(p, kind) for p in _providers(kind))
 
 
+def _is_auth(e: Exception) -> bool:
+    """The key itself was rejected (not a 403 for one model, which the next model may not hit)."""
+    msg = str(e)
+    return type(e).__name__ == "AuthenticationError" or "API key not valid" in msg or "API_KEY_INVALID" in msg
+
+
 def _trip(p: Provider, kind: str, e: Exception) -> None:
-    _cooldown_until[(p.name, kind)] = time.monotonic() + COOLDOWN_SEC
+    secs = AUTH_COOLDOWN_SEC if _is_auth(e) else COOLDOWN_SEC
+    _cooldown_until[(p.name, kind)] = time.monotonic() + secs
     cause = f" <- {type(e.__cause__).__name__}: {str(e.__cause__)[:120]}" if e.__cause__ else ""
-    log.warning("%s %s failed (%s: %s%s) — skipping it for %ss", p.name, kind, type(e).__name__, str(e)[:200], cause, COOLDOWN_SEC)
+    log.warning("%s %s failed (%s: %s%s) — skipping it for %ss",
+                p.name, kind, type(e).__name__, str(e)[:200], cause, secs)
 
 
 def _is_quota(e: Exception) -> bool:
@@ -560,8 +570,8 @@ def _generate(prompt: str, system: str | None, schema: dict | None, temperature:
             continue
         outage: Exception | None = None
         for model in p.models:
-            if outage is not None and _is_timeout(outage):
-                break  # the provider is not answering: don't spend another TIMEOUT_SEC on its next model
+            if outage is not None and (_is_timeout(outage) or _is_auth(outage)):
+                break  # not answering / key rejected: its next model would fail the same way
             if not _take_slot(p, model):
                 continue
             retried = False
@@ -587,7 +597,7 @@ def _generate(prompt: str, system: str | None, schema: dict | None, temperature:
                         retried = True
                         time.sleep(RETRY_BACKOFF_SEC)
                         continue
-                    if type(e).__name__ in ("AuthenticationError", "PermissionDeniedError"):
+                    if _is_auth(e) or type(e).__name__ == "PermissionDeniedError":
                         log.error("%s rejected the API key: %s", p.name, str(e)[:160])
                     outage = e
                     log.info("%s model %s failed (%s), trying next", p.name, model, type(e).__name__)
