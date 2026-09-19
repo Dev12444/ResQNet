@@ -314,6 +314,11 @@ How well supported an incident is (independent of severity) — matches FE2 `Inc
 - `conflicts[].field`: `people_affected` (≥ 2× and ≥ 3 apart) · `severity` (≥ 2 apart) · `type` · `situation` ("contained" vs "worsening")
 - `duplicate_state`: `review_required` (type/situation conflict) · `possible_duplicate` (same reporter repeated) · `matched`
 
+#### `GET /api/ai/advice?type=flood&hazards=trapped_people,rising_water&lang=gu` · `GET /api/incidents/{id}/advice?lang=gu`
+Safety tips for the citizen who just reported. Show them on the `/report` success screen using `classification.type`, `classification.hazards` and `classification.lang` from the `POST /api/reports` response. These are fixed, reviewed templates, **not AI-generated**: instant, offline-safe, EN/GU/HI.
+→ `{ "lang": "gu", "headline": "તમારો રિપોર્ટ કંટ્રોલ રૂમ સુધી પહોંચી ગયો છે...", "tips": ["જો તમે ફસાયા હો...", "..."], "helplines": [{ "number": "112", "label": "ઇમરજન્સી" }, { "number": "108", "label": "એમ્બ્યુલન્સ" }, ...] }`
+Hazard tips come first (most urgent), max 5 tips. Unknown `type`/`hazards` fall back to general tips; `lang` outside `en|gu|hi` → 422.
+
 #### `GET /api/ai/status`
 → `{ "ai_enabled": true, "providers": ["openai", "gemini"], "generation_available": true, "embeddings_available": true, "models": { "openai:gpt-4.1-mini": { "calls_last_min": 3, "benched_for_sec": 0, "provider_cooling_sec": 0 } }, "embed_providers": ["gemini:gemini-embedding-001", "openai:text-embedding-3-small"], "openai_spent_usd": 0.05, "openai_budget_usd": 8.0, "openai_over_budget": false, "disk_cache": true, "demo_seed_answers": 93 }`
 Debug/demo helper: if every model is benched, the system is running on rule-based fallback.
@@ -504,6 +509,7 @@ Rules:
 | 2026-09-19 | v1 | team |
 | 2026-09-19 | `photo_url` formats, `classification.photo`, geocoding note, `GET /api/ai/status`, `triage.py` internal API | BE2 |
 | 2026-09-19 | OpenAI primary provider: `source_model` values, `classification.model`, `/api/ai/status` shape | BE2 |
+| 2026-09-19 | `GET /api/ai/advice`, `GET /api/incidents/{id}/advice` (citizen safety tips EN/GU/HI) | BE2 |
 | 2026-09-19 | `GET /api/analytics/eval?set=stress` (robustness set) | BE2 |
 | 2026-09-19 | `/api/ai/status.demo_seed_answers` (pre-computed demo AI answers shipped in git) | BE2 |
 | 2026-09-19 | `Recommendation.matched_capabilities`; recommender weighs unit capabilities + hospital specialties (cardiac, burns, trauma, pediatric) | BE2 |
