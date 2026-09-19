@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db, init_db
-from app.routers import ai, analytics
+from app.routers import ai, alerts, analytics, incidents, reports, resources
 from app.schemas import HealthOut
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -69,8 +69,11 @@ def health(db: Session = Depends(get_db)) -> JSONResponse:
     return JSONResponse(status_code=200 if db_ok else 503, content=body.model_dump())
 
 
+# BE1 routers (contract §3).
+app.include_router(incidents.router)
+app.include_router(reports.router)
+app.include_router(resources.router)
+app.include_router(alerts.router)
 # BE2 routers (contract §3 AI + Analytics).
 app.include_router(ai.router)
 app.include_router(analytics.router)
-# BE1 routers are registered in their own tasks as they are implemented:
-# reports (8), incidents (6/10), dispatch (9), resources (6/10), alerts (6/12), simulator (14), ws (7).
