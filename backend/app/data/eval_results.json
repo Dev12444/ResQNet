@@ -2,23 +2,23 @@
   "n": 50,
   "type_accuracy": 1.0,
   "severity_within_1": 1.0,
-  "severity_exact": 0.8,
-  "p1_recall": 0.968,
+  "severity_exact": 0.64,
+  "p1_recall": 0.903,
   "lang_accuracy": 1.0,
   "dedup_precision": 1.0,
   "dedup_recall": 1.0,
   "true_incidents": 27,
   "predicted_incidents": 27,
-  "avg_latency_ms": 1399,
+  "avg_latency_ms": 0,
   "from_cache": false,
   "models": {
-    "openai": 50
+    "fallback": 50
   },
   "answered_by": {
-    "openai:gpt-4.1-mini": 50
+    "fallback": 50
   },
-  "embeddings": true,
-  "llm_model": "openai:gpt-4.1-mini",
-  "openai_cost_usd": 0.0268,
-  "run_at": "2026-09-19T06:36:05.279335Z"
+  "embeddings": false,
+  "llm_model": "fallback",
+  "openai_cost_usd": 0.0,
+  "run_at": "2026-09-19T14:54:42.244084Z"
 }
