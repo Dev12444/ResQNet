@@ -300,9 +300,17 @@ def fallback_classify(text: str | None, lang_hint: str | None = None) -> Classif
         + (f"; hazards: {', '.join(hazards)}" if hazards else "")
         + ".",
         confidence=round(min(0.75, 0.35 + 0.1 * best), 2) if best else 0.2,
-        lang=lang_hint or detect_lang(text),
+        lang=_fallback_lang(text, lang_hint),
         source_model="fallback",
     )
+
+
+def _fallback_lang(text: str | None, lang_hint: str | None) -> str:
+    """Gujarati/Devanagari script decides; the hint (the reporter's UI language) only when there is none.
+    A Gujarati message sent from an English-language form must still get Gujarati safety advice."""
+    if text and re.search(r"[઀-૿ऀ-ॿ]", text):
+        return detect_lang(text)
+    return lang_hint or detect_lang(text)
 
 
 # ---------------------------------------------------------------- sensors (rules only)
@@ -506,5 +514,5 @@ def classify(
             type="other", severity=3, priority="P2", title=_make_title("other", None, text),
             location_text=None, people_affected_est=None, hazards=[],
             reasoning="Classification error; defaulted to P2 for human review.", confidence=0.1,
-            lang=lang_hint or detect_lang(text), source_model="fallback",
+            lang=_fallback_lang(text, lang_hint), source_model="fallback",
         )

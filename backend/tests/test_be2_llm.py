@@ -53,7 +53,9 @@ def env(monkeypatch):
     }.items():
         monkeypatch.setattr(st, k, v)
     for name, val in {"_calls": {}, "_benched_until": {}, "_cooldown_until": {}, "_dropped": {},
-                      "_spend_mem": {}, "_clients": {}, "_cache": llm.OrderedDict(), "_seed": {}}.items():
+                      "_spend_mem": {}, "_clients": {}, "_cache": llm.OrderedDict(), "_seed": {},
+                      # a disk cache opened by an earlier app test must not be read or written with fakes
+                      "_disk": None, "_disk_failed": False}.items():
         monkeypatch.setattr(llm, name, val)
     monkeypatch.setattr(llm, "RETRY_BACKOFF_SEC", 0)
     gemini_calls = []

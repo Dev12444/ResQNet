@@ -26,10 +26,17 @@ def _incident_or_404(db: Session, incident_id: int):
     return inc
 
 
+# The LLM routes below read what they need, then END the DB transaction before calling the model:
+# a transaction held open for seconds pins a pooled connection and (on Postgres) keeps table locks
+# that make a demo reset's TRUNCATE wait, and every other request then queues behind that TRUNCATE.
+
+
 @router.get("/incidents/{incident_id}/recommendations")
 def get_recommendations(incident_id: int, db: Session = Depends(get_db)) -> dict:
     inc = _incident_or_404(db, incident_id)
-    return recommender.recommend(db, inc)
+    data = recommender.snapshot(db, inc)
+    db.rollback()  # read-only request: release the connection before the LLM writes its reasons
+    return recommender.recommend_from_snapshot(*data)
 
 
 @router.get("/ai/advice")
@@ -57,21 +64,27 @@ def get_trust(incident_id: int, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/incidents/{incident_id}/summarize")
 def resummarize(incident_id: int, db: Session = Depends(get_db)) -> dict:
+    from app.pipeline import refresh_summary_in_background
+
+    _incident_or_404(db, incident_id)
+    db.rollback()
+    # BE1's summary writer: LLM with no connection held, writes only the summary columns of this
+    # same incident (not one that reused the id after a reset), then broadcasts incident.updated.
+    refresh_summary_in_background(db.get_bind(), incident_id, force=True)
     inc = _incident_or_404(db, incident_id)
-    result = summarizer.summarize_incident(inc, list(getattr(inc, "reports", None) or []), force=True)
-    inc.ai_summary = result["summary"]
-    inc.ai_actions = result["actions"]
-    if hasattr(inc, "updated_at"):
-        inc.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    return {"ai_summary": result["summary"], "ai_actions": result["actions"]}
+    return {"ai_summary": inc.ai_summary, "ai_actions": list(inc.ai_actions or [])}
+
+
+_SITREP_FIELDS = ("code", "type", "severity", "priority", "status", "address", "report_count", "ai_summary", "title")
 
 
 @router.post("/ai/sitrep")
 def generate_sitrep(db: Session = Depends(get_db)) -> dict:
     from app.models import Incident
 
-    incidents = db.query(Incident).filter(Incident.status != "resolved").all()
+    incidents = [{k: getattr(i, k) for k in _SITREP_FIELDS}
+                 for i in db.query(Incident).filter(Incident.status != "resolved").all()]
+    db.rollback()
     return {
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "markdown": summarizer.sitrep(incidents),

@@ -61,7 +61,9 @@ class Settings(BaseSettings):
 
     @property
     def ai_available(self) -> bool:
-        return self.ai_enabled and bool(self.openai_api_key or self.gemini_api_key)
+        # Stripped like llm._provider does: a whitespace-only key is no key (else /health says ai=true
+        # while every call falls back to rules).
+        return self.ai_enabled and bool(self.openai_api_key.strip() or self.gemini_api_key.strip())
 
     @property
     def cors_list(self) -> list[str]:

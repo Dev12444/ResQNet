@@ -97,11 +97,22 @@ def _load_image(photo_url: str) -> tuple[bytes, str] | None:
             return None
         try:
             # No redirects: a public URL could otherwise redirect to an internal address.
-            with httpx.Client(timeout=FETCH_TIMEOUT_SEC, follow_redirects=False) as client:
-                r = client.get(photo_url)
+            # Streamed with a hard cap: a huge (or endless) response is abandoned at MAX_BYTES instead
+            # of being read into memory first and size-checked afterwards.
+            with (
+                httpx.Client(timeout=FETCH_TIMEOUT_SEC, follow_redirects=False) as client,
+                client.stream("GET", photo_url) as r,
+            ):
                 r.raise_for_status()
-            data = r.content
-            mime = r.headers.get("content-type", "").split(";")[0].strip().lower()
+                mime = r.headers.get("content-type", "").split(";")[0].strip().lower()
+                chunks, size = [], 0
+                for chunk in r.iter_bytes():
+                    size += len(chunk)
+                    if size > MAX_BYTES:
+                        log.info("Photo at %s is larger than %d bytes; skipped", photo_url[:80], MAX_BYTES)
+                        return None
+                    chunks.append(chunk)
+            data = b"".join(chunks)
         except httpx.HTTPError as e:
             log.info("Could not fetch photo %s: %s", photo_url[:80], e)
             return None

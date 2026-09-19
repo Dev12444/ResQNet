@@ -41,6 +41,7 @@ RETRY_BACKOFF_SEC = 1.0
 DAILY_BENCH_SEC = 3600
 
 _cache: OrderedDict[str, Any] = OrderedDict()
+_cache_lock = threading.Lock()  # prepare() runs in parallel threads: check-then-move/evict must be atomic
 # eval.py --no-cache sets this: skip cache reads/writes but keep recording spend.
 BYPASS_CACHE = False
 # Which "provider:model" produced the last successful answer on this thread ("cache:<provider:model>" if cached).
@@ -132,11 +133,12 @@ def _cache_get(k: str) -> Any:
         return None
     if RECORD_KEYS is not None:
         RECORD_KEYS.add(k)
-    if k in _cache:
-        _cache.move_to_end(k)
-        return _cache[k]
+    with _cache_lock:
+        if k in _cache:
+            _cache.move_to_end(k)
+            return _cache[k]
     if (v := _seed_get(k)) is not None:
-        _cache[k] = v
+        _mem_put(k, v)
         return v
     conn = _disk_conn()
     if conn is not None:
@@ -147,9 +149,17 @@ def _cache_get(k: str) -> Any:
             row = None
         if row is not None:
             v = json.loads(row[0])
-            _cache[k] = v
+            _mem_put(k, v)
             return v
     return None
+
+
+def _mem_put(k: str, v: Any) -> None:
+    with _cache_lock:
+        _cache[k] = v
+        _cache.move_to_end(k)
+        while len(_cache) > _CACHE_MAX:
+            _cache.popitem(last=False)
 
 
 def _cache_put(k: str, v: Any) -> None:
@@ -157,10 +167,7 @@ def _cache_put(k: str, v: Any) -> None:
         return
     if RECORD_KEYS is not None:
         RECORD_KEYS.add(k)
-    _cache[k] = v
-    _cache.move_to_end(k)
-    while len(_cache) > _CACHE_MAX:
-        _cache.popitem(last=False)
+    _mem_put(k, v)
     conn = _disk_conn()
     if conn is not None:
         try:
@@ -333,6 +340,14 @@ def _transient(e: Exception) -> bool:
     return type(e).__name__ in ("APITimeoutError", "APIConnectionError", "InternalServerError", "ReadTimeout") or any(
         c in msg for c in ("500", "502", "503", "504", "UNAVAILABLE", "INTERNAL", "timed out")
     )
+
+
+def _is_timeout(e: Exception) -> bool:
+    """No answer within TIMEOUT_SEC. Unlike a 5xx this is slow to find out and usually provider-wide
+    (network, overload), so it is neither retried nor tried on the provider's next model: the report
+    moves straight to the next provider (worst case ~12 s per provider instead of ~50 s)."""
+    names = ("APITimeoutError", "ReadTimeout", "ConnectTimeout", "TimeoutException")
+    return type(e).__name__ in names or "timed out" in str(e).lower()
 
 
 def _take_slot(p: Provider, model: str) -> bool:
@@ -541,6 +556,8 @@ def _generate(prompt: str, system: str | None, schema: dict | None, temperature:
             continue
         outage: Exception | None = None
         for model in p.models:
+            if outage is not None and _is_timeout(outage):
+                break  # the provider is not answering: don't spend another TIMEOUT_SEC on its next model
             if not _take_slot(p, model):
                 continue
             retried = False
@@ -562,7 +579,7 @@ def _generate(prompt: str, system: str | None, schema: dict | None, temperature:
                             _benched_until[f"{p.name}:{model}"] = time.monotonic() + DAILY_BENCH_SEC
                         log.warning("%s model %s not found — check the model name in .env", p.name, model)
                         break
-                    if _transient(e) and not retried:
+                    if _transient(e) and not retried and not _is_timeout(e):
                         retried = True
                         time.sleep(RETRY_BACKOFF_SEC)
                         continue
@@ -710,6 +727,22 @@ def embed_with_model(texts: list[str]) -> tuple[str, list[list[float]]] | None:
             out[i] = vec
             _cache_put(_key("emb", p.embed_model, texts[i]), vec)
         return p.embed_model, out  # type: ignore[return-value]
+    return None
+
+
+def cached_embeddings(texts: list[str]) -> tuple[str, list[list[float] | None]] | None:
+    """Cache-only lookup, never a network call: safe while a lock is held.
+
+    Returns (embed_model, vectors) for the first model (EMBED_PROVIDERS order) that has texts[0]
+    cached; other texts' vectors are None when not cached for that model. None if texts[0] has no
+    cached vector for any model (or AI is disabled).
+    """
+    if not texts or not get_settings().ai_enabled:
+        return None
+    for model in _embed_models():
+        first = _cache_get(_key("emb", model, texts[0]))
+        if first is not None:
+            return model, [first] + [_cache_get(_key("emb", model, t)) for t in texts[1:]]
     return None
 
 

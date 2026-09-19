@@ -8,9 +8,12 @@ Deterministic ranking; Gemini only writes the one-line reasons (template fallbac
 """
 from __future__ import annotations
 
+import copy
 import logging
 import math
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from typing import Any
 
 from app.services import llm
@@ -302,15 +305,15 @@ REASON_SCHEMA = {
 }
 
 
-def _add_reasons(incident: Any, ranked: dict) -> None:
-    all_recs = [rec for recs in ranked["recommendations"].values() for rec in recs]
-    if not all_recs:
-        return
-    for kind, recs in ranked["recommendations"].items():
-        best_eta = min((x["eta_min"] for x in recs), default=0)
-        for rec in recs:
-            rec["reason"] = _template_reason(rec, best_eta)
+# The dispatcher needs the ranked units now; the LLM only rewords the reasons. If it hasn't answered
+# within this budget the template reasons are returned, and the call finishes in the background so its
+# answer is cached for the panel's next refresh.
+REASON_BUDGET_SEC = 4.0
+_REASON_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="reasons")
 
+
+def _llm_reasons(incident: Any, all_recs: list[dict]) -> dict[Any, str]:
+    """{resource id: one-line reason} from the LLM ({} on failure). Reads its inputs only."""
     lines = [
         f'- id={rec["resource"]["id"]} {rec["resource"]["callsign"]} ({rec["kind"]}), base {rec["resource"]["base"]}, '
         f'{rec["distance_km"]} km, ETA {rec["eta_min"]} min, score {rec["score"]}, '
@@ -326,8 +329,30 @@ def _add_reasons(incident: Any, ranked: dict) -> None:
     )
     data = llm.generate_json(prompt, REASON_SCHEMA, system=REASON_SYSTEM, temperature=0.2)
     if not isinstance(data, dict):
+        return {}
+    return {x.get("id"): x.get("reason") for x in data.get("reasons", []) if isinstance(x, dict)}
+
+
+def _add_reasons(incident: Any, ranked: dict) -> None:
+    all_recs = [rec for recs in ranked["recommendations"].values() for rec in recs]
+    if not all_recs:
         return
-    by_id = {x.get("id"): x.get("reason") for x in data.get("reasons", []) if isinstance(x, dict)}
+    for kind, recs in ranked["recommendations"].items():
+        best_eta = min((x["eta_min"] for x in recs), default=0)
+        for rec in recs:
+            rec["reason"] = _template_reason(rec, best_eta)
+    # The worker gets its own copies: if it outlives the budget it must not touch the response.
+    future = _REASON_POOL.submit(_llm_reasons, dict(incident) if isinstance(incident, dict) else incident,
+                                 copy.deepcopy(all_recs))
+    try:
+        by_id = future.result(timeout=REASON_BUDGET_SEC)
+    except FutureTimeout:
+        log.info("LLM reasons for incident %s not ready in %ss; template reasons returned",
+                 _get(incident, "id"), REASON_BUDGET_SEC)
+        return
+    except Exception as e:  # reasons are cosmetic: never fail the recommendation
+        log.info("LLM reasons failed: %s", e)
+        return
     for rec in all_recs:
         reason = by_id.get(rec["resource"]["id"])
         if isinstance(reason, str) and reason.strip():
@@ -350,21 +375,45 @@ def build_recommendation(incident: Any, resources: list[Any], facilities: list[A
     }
 
 
-def recommend(db, incident: Any) -> dict:
-    """Contract §5 entry point: shape = GET /api/incidents/{id}/recommendations. Never raises."""
-    try:
-        from app.models import Facility, Resource  # BE1's models
+_INCIDENT_FIELDS = ("id", "type", "severity", "hazards", "lat", "lng", "title", "address", "ai_summary",
+                    "ai_reasoning", "people_affected_est")
 
-        resources = db.query(Resource).all()
-        facilities = db.query(Facility).all()
+
+def snapshot(db, incident: Any) -> tuple[dict, list[dict], list[dict]]:
+    """Plain-dict copies of everything the recommender reads, so the caller can end its DB
+    transaction before the (slow) LLM step: (incident, resources, facilities)."""
+    from app.models import Facility, Resource  # BE1's models
+
+    inc = {k: _get(incident, k) for k in _INCIDENT_FIELDS}
+    inc["hazards"] = list(inc["hazards"] or [])
+    resources = [resource_dict(r) for r in db.query(Resource).all()]
+    return inc, resources, [facility_dict(f) for f in db.query(Facility).all()]
+
+
+def _empty(incident: Any) -> dict:
+    return {
+        "incident_id": _get(incident, "id"),
+        "needed_kinds": needed_kinds(_get(incident, "type", "other")),
+        "recommendations": {},
+        "suggested_resource_ids": [],
+        "facility": None,
+        "shortages": [],
+    }
+
+
+def recommend_from_snapshot(incident: dict, resources: list[dict], facilities: list[dict]) -> dict:
+    """build_recommendation on snapshot() output (no DB). Never raises."""
+    try:
         return build_recommendation(incident, resources, facilities)
     except Exception as e:
         log.exception("recommend failed: %s", e)
-        return {
-            "incident_id": _get(incident, "id"),
-            "needed_kinds": needed_kinds(_get(incident, "type", "other")),
-            "recommendations": {},
-            "suggested_resource_ids": [],
-            "facility": None,
-            "shortages": [],
-        }
+        return _empty(incident)
+
+
+def recommend(db, incident: Any) -> dict:
+    """Contract §5 entry point: shape = GET /api/incidents/{id}/recommendations. Never raises."""
+    try:
+        return recommend_from_snapshot(*snapshot(db, incident))
+    except Exception as e:
+        log.exception("recommend failed: %s", e)
+        return _empty(incident)

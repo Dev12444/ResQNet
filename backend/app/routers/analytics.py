@@ -13,7 +13,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -222,7 +222,12 @@ def _load(db: Session, since: datetime | None) -> dict[str, list[Any]]:
 
 
 def _parse_since(since: str | None) -> datetime | None:
-    return _dt(since) if since else None
+    if not since:
+        return None
+    parsed = _dt(since)
+    if parsed is None:  # silently ignoring it would return ALL data labelled as the requested window
+        raise HTTPException(status_code=422, detail="since must be an ISO-8601 time, e.g. 2026-09-19T08:00:00Z")
+    return parsed
 
 
 # ---------------------------------------------------------------- endpoints

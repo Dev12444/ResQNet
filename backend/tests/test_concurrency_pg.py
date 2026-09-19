@@ -9,6 +9,7 @@ checks the end state is one of the valid serial outcomes.
 """
 import os
 import threading
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -350,3 +351,33 @@ def test_simultaneous_acks_are_audited_once(pg, monkeypatch):
     with Session() as db:
         rows = db.scalars(select(m.AuditLog).where(m.AuditLog.action == "alert.acknowledged")).all()
     assert len(rows) == 1
+
+
+def test_reset_is_not_blocked_by_a_slow_recommendations_llm_call(pg, monkeypatch):
+    """GET /recommendations must end its read transaction before the LLM writes the reasons: an open
+    transaction keeps table locks, so a demo reset's TRUNCATE (and every request queued behind it)
+    would wait for the LLM."""
+    from app.services import recommender
+
+    client, Session = pg
+    inc_id = _incident(Session)
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_llm(prompt, schema, system=None, temperature=0.0):
+        entered.set()
+        release.wait(10)
+        return {"reasons": []}
+
+    monkeypatch.setattr(recommender.llm, "generate_json", slow_llm)
+    monkeypatch.setattr(recommender, "REASON_BUDGET_SEC", 30)  # isolate the transaction fix from the time budget
+    codes = []
+    t = _run(lambda: codes.append(client.get(f"/api/incidents/{inc_id}/recommendations").status_code))
+    try:
+        assert entered.wait(5)
+        started = time.monotonic()
+        assert client.post("/api/simulator/reset").status_code == 200
+        assert time.monotonic() - started < 3  # not held up by the 10 s LLM call
+    finally:
+        release.set()
+        t.join(15)
+    assert codes == [200]

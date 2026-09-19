@@ -79,16 +79,20 @@ def embed(text: str) -> list[float] | None:
     return vecs[0] if vecs else None
 
 
-def embed_batch(texts: list[str]) -> tuple[str, dict[str, list[float]]] | None:
-    """Embed texts in ONE provider call so all vectors are comparable. -> (model, {text: vector})."""
+def embed_batch(texts: list[str], cache_only: bool = False) -> tuple[str, dict[str, list[float]]] | None:
+    """Embed texts in ONE provider call so all vectors are comparable. -> (model, {text: vector}).
+
+    cache_only=True never calls the API (for use under the pipeline lock): texts without a cached
+    vector for the first text's model are simply left out.
+    """
     uniq = list(dict.fromkeys(t.strip() for t in texts if t and t.strip()))[:100]  # API batch limit
     if not uniq:
         return None
-    r = llm.embed_with_model(uniq)
+    r = llm.cached_embeddings(uniq) if cache_only else llm.embed_with_model(uniq)
     if r is None:
         return None
     model, vecs = r
-    return model, dict(zip(uniq, vecs))
+    return model, {t: v for t, v in zip(uniq, vecs) if v is not None}
 
 
 def _utc(dt: datetime | None) -> datetime:
@@ -174,13 +178,14 @@ def best_match(
     new_text: str | None,
     candidates: list[Candidate],
     use_embeddings: bool = True,
+    embed_cache_only: bool = False,
 ) -> tuple[Candidate, float] | None:
     best: tuple[Candidate, float] | None = None
     vectors = embed_model = None
     if use_embeddings and new_text and candidates:
         # ONE batched call (one provider/model) for the new text and every candidate text.
         texts = [new_text] + [t for c in candidates for t in c.texts[-MAX_REPORTS_COMPARED:]]
-        if (r := embed_batch(texts)) is not None:
+        if (r := embed_batch(texts, cache_only=embed_cache_only)) is not None:
             embed_model, vectors = r
     for c in candidates:
         s = match_score(
@@ -222,6 +227,11 @@ def find_match(db, report: Any, cls: Any) -> Any | None:
 
     `report` needs .text/.lat/.lng/.created_at; `cls` is a ClassificationResult.
     Pass the report BEFORE linking it to an incident (it must not match itself).
+
+    Runs under BE1's PIPELINE_LOCK, so it uses cached embeddings only (prepare() warmed the new
+    report's vector, and every earlier report's vector was warmed by its own prepare()). A text
+    that is not cached is compared on geo + time + type, as when embeddings are unavailable —
+    never a network call that would make every other report wait.
     """
     try:
         if getattr(report, "source", None) == "sensor":
@@ -240,6 +250,7 @@ def find_match(db, report: Any, cls: Any) -> Any | None:
             new_at=_utc(getattr(report, "created_at", None)),
             new_text=text,
             candidates=candidates,
+            embed_cache_only=True,
         )
         if hit:
             log.info("Report merged into incident %s (score %.2f)", getattr(hit[0].key, "id", "?"), hit[1])

@@ -17,7 +17,7 @@ log = logging.getLogger("resqnet.summarizer")
 
 MIN_INTERVAL_SEC = 20  # re-summarise an incident at most this often (PRD)
 MAX_REPORTS_IN_PROMPT = 12
-_last: dict[Any, tuple[float, dict]] = {}  # incident id -> (monotonic ts, result)
+_last: dict[Any, tuple[float, dict]] = {}  # (incident id, created_at) -> (monotonic ts, result)
 
 TYPE_ACTIONS: dict[str, list[str]] = {
     "flood": [
@@ -110,7 +110,10 @@ def _fallback_summary(incident: Any, reports: list[Any]) -> dict:
 def summarize_incident(incident: Any, reports: list[Any], force: bool = False) -> dict:
     """-> {"summary": str, "actions": list[str]}. Never raises."""
     try:
-        key = _get(incident, "id")
+        # (id, created_at): ids restart at 1 after a demo reset, and a new incident must never be
+        # handed the debounced summary of the old incident that had the same id.
+        iid = _get(incident, "id")
+        key = None if iid is None else (iid, str(_get(incident, "created_at")))
         now = time.monotonic()
         if not force and key is not None and key in _last and now - _last[key][0] < MIN_INTERVAL_SEC:
             return _last[key][1]
