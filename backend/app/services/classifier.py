@@ -88,23 +88,28 @@ def _make_title(type_: str, location: str | None, text: str | None) -> str:
 TYPE_KEYWORDS: dict[str, list[str]] = {
     "industrial": [
         "gas leak", "chemical", "factory", "gidc", "boiler", "toxic", "ammonia", "chlorine", "reactor", "plant explosion",
+        "industrial", "fumes", "બોઈલર", "જીઆઈડીસી", "જીઆઇડીસી", "जीआईडीसी", "इंडस्ट्रियल", "क्लोरीन",
         "ગેસ લીક", "કેમિકલ", "ફેક્ટરી", "ગેસ ગળતર", "गैस रिसाव", "गैस लीक", "केमिकल", "फैक्ट्री", "रसायन",
     ],
     "building_collapse": [
         "collapse", "collapsed", "wall fell", "wall fall", "building fell", "roof fell", "debris", "under rubble",
+        "cracks in", "big cracks", "tilting", "દરાર", "તિરાડ", "दरार",
         "ધરાશાયી", "દીવાલ પડી", "મકાન પડ્યું", "ઇમારત", "ढह", "दीवार गिर", "इमारत गिर", "मलबा",
     ],
     "fire": [
-        "fire", "smoke", "burning", "flames", "blaze", "short circuit", "cylinder blast",
+        "fire", "smoke", "burning", "flames", "blaze", "short circuit", "cylinder blast", "cylinder",
+        "સિલિન્ડર", "सिलेंडर",
         "આગ", "ધુમાડો", "સળગ", "आग", "धुआं", "धुआँ", "जल रहा", "लपटें",
     ],
     "flood": [
         "flood", "water logging", "waterlogging", "waterlogged", "water level", "submerged", "underpass", "drowning",
-        "heavy rain", "overflow", "boat", "knee deep", "waist deep",
+        "heavy rain", "overflow", "boat", "knee deep", "waist deep", "open drain", "drain", "swept away",
+        "ગટર", "નાળું", "नाला", "नाली",
         "પાણી", "પૂર", "ભરાયા", "ડૂબ", "વરસાદ", "बाढ़", "पानी", "जलभराव", "डूब", "बारिश",
     ],
     "road_accident": [
-        "accident", "collision", "crash", "hit by", "overturned", "truck", "bike", "car hit", "pile-up", "highway",
+        "accident", "collision", "collided", "crash", "hit by", "hit a", "overturned", "truck", "bike", "car hit",
+        "pile-up", "highway", "pedestrian", "બાઈક", "બાઇક", "સ્લિપ", "ટ્રક", "बाइक", "ट्रक",
         "અકસ્માત", "ટક્કર", "એક્સિડન્ટ", "दुर्घटना", "हादसा", "टक्कर", "एक्सीडेंट",
     ],
     "medical": [
@@ -119,7 +124,8 @@ TYPE_ORDER = ["industrial", "building_collapse", "fire", "road_accident", "medic
 HAZARD_KEYWORDS: dict[str, list[str]] = {
     "trapped_people": [
         "trapped", "stuck", "stranded", "can't get out", "cannot get out", "inside", "under rubble", "rescue",
-        "ફસાઈ", "ફસાયા", "ફસાયેલ", "फंसे", "फँसे", "फंसा", "फँसा",
+        "ફસાઈ", "ફસાયા", "ફસાયેલ", "દબાયા", "फंसे", "फँसे", "फंसा", "फँसा", "फंसी", "फँसी", "दबे",
+        "can't see him", "can't see her", "missing", "swept", "family inside", "children trapped",
     ],
     "gas_leak": ["gas leak", "gas smell", "leaking gas", "ગેસ લીક", "ગેસ ગળતર", "गैस रिसाव", "गैस लीक"],
     "fire_spread": ["spreading", "spread to", "out of control", "whole building", "ફેલાઈ", "फैल"],
@@ -135,7 +141,7 @@ HAZARD_KEYWORDS: dict[str, list[str]] = {
 }
 
 BASE_SEVERITY = {
-    "industrial": 4, "building_collapse": 4, "fire": 3, "road_accident": 3, "medical": 3, "flood": 2, "other": 2,
+    "industrial": 3, "building_collapse": 4, "fire": 3, "road_accident": 3, "medical": 3, "flood": 2, "other": 2,
 }
 
 _NUM_PEOPLE = re.compile(
@@ -153,6 +159,10 @@ def _people_estimate(t: str) -> int | None:
             return n
     return None
 
+
+_EXPLOSION = ("explosion", "exploded", "blast", "ફાટ્યું", "ફાટ્યો", "વિસ્ફોટ", "फटा", "विस्फोट", "धमाका")
+_MINOR = ("minor", "small scratch", "scratches", "slightly", "નાની ઈજા", "નાની ઇજા", "મામૂલી", "मामूली", "हल्की चोट")
+_CONTAINED = ("already put out", "put out", "extinguished", "under control", "કાબૂમાં", "बुझ गई", "काबू में")
 
 # Negated mentions ("nobody hurt", "કોઈ ઘાયલ નથી", "कोई घायल नहीं") must not count as hazards.
 _NEGATED = re.compile(
@@ -182,8 +192,14 @@ def fallback_classify(text: str | None, lang_hint: str | None = None) -> Classif
     sev = BASE_SEVERITY[type_]
     if "trapped_people" in hazards or "gas_leak" in hazards:
         sev += 2
-    elif "injuries" in hazards or "fire_spread" in hazards or "chemical" in hazards:
+    elif "injuries" in hazards or "fire_spread" in hazards or ("chemical" in hazards and type_ != "industrial"):
         sev += 1
+    if any(k in t for k in _EXPLOSION):
+        sev += 1
+    if any(k in t for k in _CONTAINED):
+        sev -= 2
+    elif any(k in t for k in _MINOR):
+        sev -= 2
     if "rising_water" in hazards and type_ == "flood" and sev < 4:
         sev += 1
     people = _people_estimate(t)
