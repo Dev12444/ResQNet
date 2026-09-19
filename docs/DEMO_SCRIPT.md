@@ -59,7 +59,8 @@
 | # | Action | What the audience sees | Say |
 |---|---|---|---|
 | C1 | *(don't dispatch Vatva)* | Vatva GIDC gas leak P1, ammonia sensor 180 ppm (threshold 50) merged into the same incident | "The Vatva gas leak was confirmed by a citizen and by an ammonia sensor, and it's busy, so nobody dispatched it." |
-| C2 | Wait for ~2:36 into the scenario | 🔴 **SLA breach** banner → **escalation** · 📟 authority Telegram buzzes | "Two minutes for a P1 with no dispatch, so ResQNet escalates automatically to the authority's phone. Incidents don't slip through." |
+| C2 | Wait for ~2:36 into the scenario | 🔴 **SLA breach** alert banner · 📟 authority Telegram buzzes | "Two minutes for a P1 with no dispatch, so ResQNet raises an alert on screen and on the authority's phone. Incidents don't slip through." |
+| C2b | 🖱️ Click **Escalate** on the Vatva incident | Status → *escalated*, audit entry | "The human decides to escalate. If nobody acts, it escalates itself after a second missed SLA." |
 | C3 | 🖱️ Insights panel | "INC-0004 waiting 3m for dispatch", "nearest hazmat unit is 23 min away", "Flood reports rising" | "It also warns you: the only hazmat unit is 23 minutes away. That's a coverage gap to fix *before* the next leak." |
 
 ### Flow D: supervisor view · 2:30–3:00

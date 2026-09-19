@@ -51,7 +51,7 @@ flowchart LR
 ```
 
 **Design principles**
-1. **AI recommends, humans decide.** The AI classifies, merges and ranks. Dispatch and escalation are always a human click, and every action is written to `audit_log`.
+1. **AI recommends, humans decide.** The AI classifies, merges and ranks. Dispatch is always a human click. The system raises alerts automatically, but an incident is marked *escalated* only by a human, or automatically after a **second** missed SLA. Every action is written to `audit_log`.
 2. **Never drop a report.** Every AI step has a deterministic fallback, so an outage degrades quality, not availability.
 3. **Explainable.** Every AI output carries `reasoning`, `confidence`, the model that answered, and the evidence behind it.
 4. **Contract-first.** Frontend and backend develop in parallel against `API_CONTRACT.md`, and the frontend has a mock mode.
@@ -210,7 +210,7 @@ Seed data covers real Ahmedabad locations: 25 units (10 × 108 ambulances, 4 fir
 
 ## 6. Realtime & alerts
 - **WebSocket** `/ws` events: `incident.created`, `incident.merged`, `incident.updated`, `assignment.updated`, `alert.created`, `resource.updated`.
-- **Escalation loop** (every `ESCALATION_TICK_SEC`): P1 undispatched > 120 s / P2 > 300 s → `sla_breach` → `escalation`. It also raises shortage alerts and never duplicates an alert for the same incident and kind.
+- **Escalation loop** (every `ESCALATION_TICK_SEC`): a P1 undispatched > 120 s or a P2 > 300 s raises an `sla_breach` alert automatically (dashboard banner + authority Telegram). The incident becomes `escalated` when a dispatcher clicks **Escalate**, or automatically on a **second** breach (2× the SLA) as a safety net. The loop also raises shortage alerts and never duplicates an alert for the same incident and kind.
 - **Telegram:** critical and escalation alerts go to the authority chat, dispatches go to the responder chat, each with a Google Maps link.
 
 ## 7. Deployment & security
