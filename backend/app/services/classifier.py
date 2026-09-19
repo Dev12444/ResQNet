@@ -60,7 +60,10 @@ def detect_lang(text: str | None) -> str:
 
 
 def priority_for(severity: int, hazards: list[str]) -> str:
-    if severity >= 4 or CRITICAL_HAZARDS.intersection(hazards):
+    critical = set(hazards) & CRITICAL_HAZARDS
+    if severity < 3:
+        critical.discard("fire_spread")  # a "spreading" fire rated minor is contradictory; trust severity
+    if severity >= 4 or critical:
         return "P1"
     return {3: "P2", 2: "P3"}.get(severity, "P4")
 
@@ -286,6 +289,7 @@ Rules:
 - severity 1-5: 1 minor/no danger, 2 limited property risk, 3 risk to people or several affected,
   4 life-threatening / people trapped / spreading, 5 mass-casualty or city-scale threat.
 - hazards: choose only from the allowed list; include trapped_people whenever anyone is stuck/stranded/under debris.
+  List only hazards that are present NOW — never ones the report says are absent, over or under control.
 - title: short English headline, max 60 characters, include the place if known.
 - location_text: the place/landmark mentioned (transliterate to English, e.g. "Akhbarnagar underpass"), else null.
 - people_affected_est: integer estimate if the report implies it, else null.

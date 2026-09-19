@@ -2,18 +2,18 @@
   "n": 50,
   "type_accuracy": 1.0,
   "severity_within_1": 1.0,
-  "severity_exact": 0.62,
-  "p1_recall": 0.839,
+  "severity_exact": 0.88,
+  "p1_recall": 0.968,
   "lang_accuracy": 1.0,
   "dedup_precision": 1.0,
   "dedup_recall": 1.0,
   "true_incidents": 27,
   "predicted_incidents": 27,
-  "avg_latency_ms": 0,
+  "avg_latency_ms": 2907,
   "models": {
-    "fallback": 50
+    "gemini": 50
   },
-  "embeddings": false,
-  "llm_model": "rules",
-  "run_at": "2026-09-19T05:41:16.505595Z"
+  "embeddings": true,
+  "llm_model": "gemini-3.5-flash-lite",
+  "run_at": "2026-09-19T05:55:04.284564Z"
 }

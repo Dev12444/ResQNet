@@ -57,7 +57,7 @@ def main() -> None:
     lang_ok = [c.lang == r["lang"] for c, r in zip(results, rows)]
 
     # ---------- dedup: stream reports in time order, cluster greedily like the live pipeline
-    use_emb = llm.available()
+    use_emb = llm.available("emb")
     clusters: list[dict] = []  # {"cand": Candidate, "members": [idx]}
     order = sorted(range(n), key=lambda i: rows[i]["t_min"])
     for i in order:
