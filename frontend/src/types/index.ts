@@ -205,6 +205,14 @@ export interface ReportCreate {
   photo_url: string | null;
   reporter: string | null;
   sensor: SensorReading | null;
+  /**
+   * PENDING CONTRACT ADDITION — the type the citizen picked on `/report`, as a
+   * hint for the classifier. `ReportCreate` has no such field yet, so this is
+   * sent additively and ignored by the current backend. Raised with the group;
+   * until BE1 adds it, the citizen's selection only affects the client-side
+   * reading shown on the receipt.
+   */
+  citizen_type?: IncidentType | null;
 }
 
 /** Gemini Vision analysis of an attached photo. Advisory only. */

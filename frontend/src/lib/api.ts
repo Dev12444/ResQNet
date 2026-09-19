@@ -29,9 +29,12 @@ import type {
   Envelope,
   Facility,
   FacilityView,
+  Hazard,
   Incident,
+  IncidentType,
   IncidentDetail,
   IncidentTrust,
+  Priority,
   Report,
   ReportCreate,
   ReportCreateResponse,
@@ -39,6 +42,7 @@ import type {
   ResourceView,
   RecommendationsResponse,
   Sensor,
+  Severity,
   ShortageView,
   SituationUpdate,
   SourceBreakdown,
@@ -46,6 +50,8 @@ import type {
 } from "@/types";
 import {
   CAPABILITY_MAP,
+  GUJARAT_CENTER,
+  INCIDENT_TYPE_META,
   OFFLINE_AFTER_SEC,
   STALE_AFTER_SEC,
 } from "./constants";
@@ -186,20 +192,36 @@ export async function submitReport(body: ReportCreate): Promise<ReportCreateResp
   });
 }
 
-/** Deterministic stand-in for the real triage pipeline. */
+/**
+ * Deterministic stand-in for the real triage pipeline.
+ *
+ * A report only merges into an existing incident when it actually has
+ * coordinates near one. Without a location fix it opens a genuinely new
+ * incident with the next unused code — never an existing incident relabelled
+ * as new, which would misrepresent corroboration on the receipt.
+ */
 function mockSubmit(body: ReportCreate): ReportCreateResponse {
   const now = new Date().toISOString();
   const id = 900 + mock.MOCK_REPORTS.length;
-  const type = inferType(body.text ?? "");
-  const nearby = mock.MOCK_INCIDENTS.find(
-    (i) =>
-      i.type === type &&
-      body.lat !== null &&
-      body.lng !== null &&
-      Math.abs(i.lat - body.lat) < 0.01 &&
-      Math.abs(i.lng - body.lng) < 0.01,
-  );
-  const incident = nearby ?? mock.MOCK_INCIDENTS[0];
+  // The citizen's own pick wins over keyword inference when they made one.
+  const type = body.citizen_type ?? inferType(body.text ?? "");
+  const nearby =
+    body.lat !== null && body.lng !== null
+      ? mock.MOCK_INCIDENTS.find(
+          (i) =>
+            i.type === type &&
+            i.status !== "resolved" &&
+            Math.abs(i.lat - body.lat!) < 0.01 &&
+            Math.abs(i.lng - body.lng!) < 0.01,
+        )
+      : undefined;
+
+  const hazards = inferHazards(body.text ?? "");
+  const severity = inferSeverity(type, hazards);
+  const incident: Incident = nearby
+    ? { ...nearby, report_count: nearby.report_count + 1, updated_at: now }
+    : newMockIncident({ type, severity, hazards, body, now });
+
   const report: Report = {
     id,
     source: body.source,
@@ -214,6 +236,7 @@ function mockSubmit(body: ReportCreate): ReportCreateResponse {
     incident_id: incident.id,
     created_at: now,
   };
+
   return {
     report,
     incident,
@@ -227,14 +250,88 @@ function mockSubmit(body: ReportCreate): ReportCreateResponse {
       people_affected_est: incident.people_affected_est,
       hazards: incident.hazards,
       reasoning: nearby
-        ? "Matches an open incident at this location within the flood time window."
+        ? `Matches open incident ${nearby.code} at this location within the time window.`
         : "Classified from the report text; no matching open incident nearby.",
-      confidence: nearby ? 0.86 : 0.64,
+      // Corroboration by an existing incident raises confidence; a lone report
+      // without a location fix stays in the review-advised band.
+      confidence: nearby ? 0.86 : body.lat !== null ? 0.71 : 0.64,
       lang: body.lang ?? "en",
       source_model: "fallback",
       photo: null,
     },
   };
+}
+
+function newMockIncident({
+  type,
+  severity,
+  hazards,
+  body,
+  now,
+}: {
+  type: IncidentType;
+  severity: Severity;
+  hazards: Hazard[];
+  body: ReportCreate;
+  now: string;
+}): Incident {
+  const nextId = Math.max(...mock.MOCK_INCIDENTS.map((i) => i.id)) + 1;
+  return {
+    id: nextId,
+    code: `INC-${String(nextId).padStart(4, "0")}`,
+    type,
+    severity,
+    priority: priorityFor(severity, hazards),
+    status: "new",
+    title: body.address
+      ? `${INCIDENT_TYPE_META[type].label} reported at ${body.address}`
+      : `${INCIDENT_TYPE_META[type].label} reported — location to confirm`,
+    lat: body.lat ?? GUJARAT_CENTER.lat,
+    lng: body.lng ?? GUJARAT_CENTER.lng,
+    address: body.address ?? "Location not supplied",
+    ai_summary:
+      "Single report awaiting corroboration. No other source has described this incident yet.",
+    ai_reasoning: "Classified from the report text by the rule-based fallback classifier.",
+    ai_actions: ["Confirm details with the reporter", "Seek a second source before dispatch"],
+    confidence: body.lat !== null ? 0.71 : 0.64,
+    hazards,
+    people_affected_est: null,
+    report_count: 1,
+    created_at: now,
+    updated_at: now,
+    dispatched_at: null,
+    resolved_at: null,
+  };
+}
+
+/** Mirrors the backend's deterministic priority rule closely enough for demo. */
+function priorityFor(severity: Severity, hazards: Hazard[]): Priority {
+  if (hazards.includes("trapped_people") || severity >= 5) return "P1";
+  if (severity === 4) return "P1";
+  if (severity === 3) return "P2";
+  if (severity === 2) return "P3";
+  return "P4";
+}
+
+function inferHazards(text: string): Hazard[] {
+  const t = text.toLowerCase();
+  const has = (...words: string[]) => words.some((w) => t.includes(w));
+  const hazards: Hazard[] = [];
+  if (has("ફસા", "trapped", "फंस", "stuck", "अंदर", "અંદર")) hazards.push("trapped_people");
+  if (has("પાણી", "पानी", "water", "flood", "बाढ़", "પૂર")) hazards.push("rising_water");
+  if (has("આગ", "आग", "fire", "smoke")) hazards.push("fire_spread");
+  if (has("ગેસ", "गैस", "gas", "chlorine", "chemical")) hazards.push("gas_leak");
+  if (has("લોહી", "खून", "injur", "blood", "ઈજા")) hazards.push("injuries");
+  if (has("દીવાલ", "collapse", "इमारत", "wall")) hazards.push("structural");
+  return hazards;
+}
+
+function inferSeverity(type: IncidentType, hazards: Hazard[]): Severity {
+  if (hazards.includes("trapped_people")) return 4;
+  if (type === "industrial" && hazards.includes("gas_leak")) return 4;
+  if (type === "fire" || type === "building_collapse") return 3;
+  if (type === "other") return 2;
+  return 3;
 }
 
 /** Keyword fallback mirroring the backend's rule-based classifier. */
