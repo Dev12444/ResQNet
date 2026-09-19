@@ -97,6 +97,9 @@ class ReportCreate(RequestModel):
     photo_url: PhotoUrl | None = None
     reporter: str | None = Field(default=None, max_length=120)
     sensor: SensorReading | None = None
+    # Contract v1.3: a /field responder update names its incident and attaches to it directly
+    # (no duplicate matching; the incident's location is used when the report has no GPS).
+    incident_id: int | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def _check_consistency(self) -> ReportCreate:
@@ -296,7 +299,8 @@ class ClassificationOut(BaseModel):
     reasoning: str
     confidence: float
     lang: str
-    source_model: str  # "gemini" | "fallback" (rules on text) | "rules" (sensor)
+    source_model: str  # "openai" | "gemini" | "fallback" (keyword rules) | "rules" (sensor)
+    model: str | None = None  # e.g. "openai:gpt-4.1-mini"; "cache:" prefix when served from the AI cache
     photo: PhotoAssessmentOut | None = None
 
 
