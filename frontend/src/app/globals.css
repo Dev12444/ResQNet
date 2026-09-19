@@ -1,29 +1,149 @@
-@import 'maplibre-gl/dist/maplibre-gl.css';
-:root{--bg:#07100f;--panel:#0d1816;--panel2:#111f1c;--subbar:#0a1211;--input:#101b19;--soft-bg:#172a25;--selected-bg:#122a23;--line:#22332f;--line-strong:#294139;--muted:#80928c;--body-text:#b8c6c1;--text:#edf5f2;--accent:#45e0a0;--accent-border:#3d8067;--danger:#ef4444;--amber:#f59e0b;--blue:#38bdf8;--button-bg:#15221f;--run-bg:#123b2f;--avatar:#1b302b;--action-bg:#173b31;--action-strong:#1b5945;--panel-glass:#0b1513ee;--map-loading:#10201d;--danger-soft:#3f2023;--danger-text:#ff8f9a;--nav-bg:#0b1715;--emergency-bg:#14231f}
-html[data-theme="light"]{--bg:#eef3f5;--panel:#c5e1da;--panel2:#f7fafb;--subbar:#f8fafb;--input:#f8fafc;--soft-bg:#edf3f1;--selected-bg:#e7f5ef;--line:#d8e1e5;--line-strong:#c6d3d8;--muted:#64748b;--body-text:#475569;--text:#17212b;--accent:#15845f;--accent-border:#15906a;--danger:#dc2626;--amber:#d97706;--blue:#0284c7;--button-bg:#f1f5f4;--run-bg:#e5f5ef;--avatar:#e2ebe8;--action-bg:#e8f5ef;--action-strong:#15845f;--panel-glass:rgba(255,255,255,.94);--map-loading:#e9eff1;--danger-soft:#fee2e2;--danger-text:#b4232f;--nav-bg:#81dcc4;--emergency-bg:#e8eef2}
-*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:"Segoe UI Variable Text","Segoe UI",Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:-.01em}button,input,select{font:inherit}button{cursor:pointer}.maplibregl-popup-content{background:#0b1513;color:#eaf4f0;border:1px solid #28413a;box-shadow:0 10px 30px #0008}.maplibregl-popup-tip{border-top-color:#0b1513}.maplibregl-ctrl-group{background:#0b1513;border:1px solid #28413a}.maplibregl-ctrl button{filter:invert(1)}
-.theme-toggle{height:31px;padding:3px;border:1px solid var(--line-strong);border-radius:7px;background:var(--button-bg);color:var(--muted);display:flex;align-items:center;gap:2px;transition:.18s ease}.theme-toggle span{width:24px;height:23px;border-radius:5px;display:grid;place-items:center}.theme-toggle span.active{background:var(--selected-bg);color:var(--accent)}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}50%{box-shadow:0 0 0 9px rgba(239,68,68,0)}}
-.pulse{animation:pulse 1.6s infinite}.scrollbar::-webkit-scrollbar{width:6px}.scrollbar::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:9px}
+@import "tailwindcss";
 
-/* Premium type hierarchy */
-.logo-wordmark,.kpi-value{font-family:"Segoe UI Variable Display","Segoe UI",Inter,sans-serif;letter-spacing:-.025em}
-.logo-wordmark{font-size:17px}
-.section-title,.drawer-title{font-family:"Segoe UI Variable Display","Segoe UI",Inter,sans-serif;letter-spacing:-.02em}
-button,input,select{letter-spacing:.005em}
+/*
+ * ResQNet — operational theme.
+ *
+ * Dense, high-contrast, printable-looking. Colour carries meaning only:
+ * red critical, orange high, yellow medium, green available/resolved,
+ * blue information/resources. Everything else is neutral so that a coloured
+ * pixel on screen always means something.
+ */
 
-/* NDEM-inspired emergency utility layer */
-.emergency-bar{height:38px;display:flex;align-items:center;gap:12px;padding:0 14px;background:var(--emergency-bg);border-bottom:1px solid var(--line);overflow:hidden;white-space:nowrap}
-.emergency-label{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:900;letter-spacing:.55px;color:var(--text);padding-right:12px;border-right:1px solid var(--line)}
-.emergency-links{display:flex;align-items:center;gap:0;min-width:0;overflow:hidden}
-.emergency-link{display:flex;align-items:center;gap:5px;padding:0 11px;text-decoration:none;color:var(--body-text);font-size:10px;border-right:1px solid var(--line)}
-.emergency-link strong{color:var(--text);font-size:11px}.emergency-link:hover{color:var(--accent)}
-.utility-live{margin-left:auto;font-size:9px;font-weight:800;color:var(--muted)}.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.12);margin-right:5px}
-.action-bar{display:flex;align-items:center;gap:10px;padding:7px 14px;background:var(--subbar);border-bottom:1px solid var(--line);min-width:0}
-.context-path{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted);white-space:nowrap}.context-path span:first-child{font-weight:900;color:var(--accent)}
-.action-search{height:38px;display:flex;align-items:center;gap:8px;flex:1;min-width:180px;max-width:520px;padding:0 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--input);color:var(--muted)}.action-search input{width:100%;border:0;outline:0;background:transparent;color:var(--text);font-size:11px}.action-search input::placeholder{color:var(--muted)}
-.report-btn{height:38px;display:flex;align-items:center;gap:9px;padding:0 15px;border:1px solid #b32635;border-radius:7px;background:linear-gradient(180deg,#c93446,#a71f31);color:white;font-size:10px;font-weight:900;box-shadow:0 5px 16px rgba(176,32,50,.22)}.report-btn span{font-size:17px;line-height:1;margin-left:5px}
-.safe-btn{height:38px;display:flex;align-items:center;gap:8px;min-width:185px;padding:0 11px;border:1px solid var(--line-strong);border-radius:7px;background:var(--panel);color:var(--text);text-align:left}.safe-btn>svg{color:#15845f;background:#e5f5ef;border-radius:6px;padding:4px;box-sizing:content-box}.safe-btn span:nth-child(2){display:flex;flex-direction:column;line-height:1.05}.safe-btn strong{font-size:10px}.safe-btn small{font-size:8px;color:var(--muted);margin-top:3px}.safe-arrow{margin-left:auto;font-size:18px;color:var(--muted)}.safe-btn:hover{border-color:var(--accent)}.safe-btn.safe-sent{border-color:#15845f;background:var(--selected-bg)}
-.action-tools{display:flex;align-items:center;gap:6px;margin-left:auto}
-.modal-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(2,8,7,.64);backdrop-filter:blur(4px);display:grid;place-items:center;padding:20px}.report-modal{width:min(500px,94vw);background:var(--panel);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 30px 80px rgba(0,0,0,.45);padding:20px}.modal-head{display:flex;justify-content:space-between;gap:15px;margin-bottom:18px}.modal-kicker{font-size:9px;font-weight:900;letter-spacing:1.2px;color:#ef4444}.report-modal h2{margin:4px 0 5px;font-size:20px;letter-spacing:-.03em}.report-modal p{margin:0;color:var(--muted);font-size:11px}.icon-btn{width:32px;height:32px;border:1px solid var(--line);background:var(--button-bg);color:var(--muted);border-radius:7px;display:grid;place-items:center}.report-modal label{display:flex;flex-direction:column;gap:7px;font-size:10px;font-weight:800;color:var(--body-text);margin:12px 0}.report-modal select,.report-modal textarea{width:100%;border:1px solid var(--line-strong);background:var(--input);color:var(--text);border-radius:7px;padding:10px;font-size:11px;outline:0}.report-modal textarea{min-height:100px;resize:vertical}.report-location{display:flex;align-items:center;gap:7px;padding:10px;border-radius:7px;background:var(--soft-bg);color:var(--muted);font-size:9px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:17px}.secondary-btn,.submit-report{height:35px;padding:0 12px;border-radius:7px;font-size:10px;font-weight:900}.secondary-btn{border:1px solid var(--line-strong);background:var(--button-bg);color:var(--body-text)}.submit-report{border:1px solid #b32635;background:#b32635;color:#fff;display:flex;align-items:center;gap:7px}.submit-report:disabled{opacity:.45;cursor:not-allowed}
-@media(max-width:1180px){.context-path{display:none}.safe-btn{min-width:160px}.emergency-link{padding:0 7px}.emergency-label{display:none}.action-tools{display:none}}
+:root {
+  --background: #f4f4f5;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --foreground: #18181b;
+  --muted: #52525b;
+  --faint: #71717a;
+  --border: #d4d4d8;
+  --border-strong: #a1a1aa;
+
+  /* Operational palette */
+  --critical: #dc2626;
+  --critical-deep: #7f1d1d;
+  --high: #f97316;
+  --medium: #eab308;
+  --ok: #22c55e;
+  --info: #3b82f6;
+  --simulated: #a855f7;
+
+  /* Tinted backgrounds for banded rows and callouts */
+  --critical-bg: #fef2f2;
+  --high-bg: #fff7ed;
+  --medium-bg: #fefce8;
+  --ok-bg: #f0fdf4;
+  --info-bg: #eff6ff;
+
+  --focus: #1d4ed8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-critical: var(--critical);
+  --color-high: var(--high);
+  --color-medium: var(--medium);
+  --color-ok: var(--ok);
+  --color-info: var(--info);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #09090b;
+    --surface: #131316;
+    --surface-2: #1c1c20;
+    --foreground: #f4f4f5;
+    --muted: #a1a1aa;
+    --faint: #8b8b93;
+    --border: #2e2e35;
+    --border-strong: #52525b;
+
+    --critical-bg: #2a1214;
+    --high-bg: #2a1a0e;
+    --medium-bg: #2a2410;
+    --ok-bg: #0f2418;
+    --info-bg: #10203a;
+
+    --focus: #60a5fa;
+  }
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  /* Plex covers Latin; Noto Gujarati picks up the Indic scripts behind it. */
+  font-family: var(--font-plex-sans), var(--font-noto-gujarati), "Nirmala UI",
+    "Segoe UI", system-ui, sans-serif;
+  font-synthesis-weight: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Technical data — IDs, timestamps, ETAs, coordinates, readings. */
+.mono,
+code,
+kbd,
+samp {
+  font-family: var(--font-plex-mono), ui-monospace, "Cascadia Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Visible focus everywhere — operators use keyboards under pressure. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Respect reduced-motion; there is no decorative animation to lose. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Skip link, revealed on focus. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+}
+.skip-link:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 2px solid var(--focus);
+}
+
+/* A single, slow pulse reserved for unattended P1 — never decorative. */
+@keyframes resq-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.pulse-critical {
+  animation: resq-pulse 2s ease-in-out infinite;
+}
