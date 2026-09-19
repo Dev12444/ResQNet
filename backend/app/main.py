@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db, init_db
+from app.pipeline import cancel_trailing_refreshes
 from app.routers import ai, alerts, analytics, incidents, reports, resources, ws
 from app.schemas import HealthOut
 from app.ws_manager import manager
@@ -35,6 +36,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        cancel_trailing_refreshes()
         await manager.stop()
 
 
