@@ -98,10 +98,24 @@ def test_coverage_gap_when_nearest_unit_far():
 
 
 def test_trend_detects_surge():
-    incidents = [inc(1, "flood", "P2", 30)]
-    reports = [rep(i, mins_ago=m) for i, m in enumerate([1, 2, 3, 4, 5, 6, 15], start=1)]
+    incidents = [inc(1, "flood", "P2", 30), inc(2, "flood", "P2", 3)]
+    reports = [rep(i, mins_ago=m, incident_id=1 + i % 2) for i, m in enumerate([1, 2, 3, 4, 5, 6, 15], start=1)]
     out = insights.trends(incidents, reports, NOW)
     assert out and out[0]["id"] == "trend:flood" and "6 reports in last 10 min vs 1" in out[0]["evidence"]
+
+
+def test_many_reports_about_one_incident_is_not_a_trend():
+    incidents = [inc(1, "fire", "P1", 3)]
+    reports = [rep(i, mins_ago=i) for i in range(1, 6)]
+    assert insights.trends(incidents, reports, NOW) == []
+
+
+def test_rain_gauge_corroborates_but_does_not_escalate():
+    from app.services.classifier import classify_sensor
+    rain = classify_sensor({"sensor_id": "PALDI-RG-02", "metric": "rainfall_mm_hr", "value": 68, "threshold": 50})
+    level = classify_sensor({"sensor_id": "VASNA-WL-01", "metric": "water_level_m", "value": 5.3, "threshold": 4.2})
+    assert rain.type == "flood" and rain.severity == 3 and rain.priority == "P2"
+    assert level.severity == 5 and level.priority == "P1"
 
 
 def test_compute_insights_sorted_and_includes_conflicts():

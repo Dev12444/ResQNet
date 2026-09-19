@@ -21,6 +21,7 @@ UNDISPATCHED = ("new", "triaged", "escalated")
 TREND_WINDOW = timedelta(minutes=10)
 TREND_MIN_REPORTS = 3
 TREND_RATIO = 2.0
+TREND_MIN_INCIDENTS = 2  # distinct incidents of the type in the window
 # A P1/P2 incident whose nearest suitable unit is further than this is under-covered.
 # Boats/NDRF move slowly through floodwater, so they get a wider allowance (avoids flagging every flood).
 COVERAGE_ETA_MIN = {"rescue_boat": 35, "ndrf_team": 35}
@@ -52,8 +53,16 @@ def _dur(sec: float) -> str:
     return f"{sec // 60}m {sec % 60:02d}s" if sec >= 60 else f"{sec}s"
 
 
-def _kind_label(kind: str) -> str:
-    return kind.replace("_", " ")
+_KIND_LABELS = {"ndrf_team": "NDRF team", "hazmat": "hazmat unit", "police": "police unit"}
+
+
+def _kind_label(kind: str, plural: bool = False) -> str:
+    label = _KIND_LABELS.get(kind, kind.replace("_", " "))
+    return label + "s" if plural else label
+
+
+def _cap(s: str) -> str:
+    return s[:1].upper() + s[1:]  # keeps "NDRF" intact, unlike str.capitalize()
 
 
 def sla_breaches(incidents: list[Any], now: datetime) -> list[dict]:
@@ -102,7 +111,7 @@ def shortages(incidents: list[Any], resources: list[Any]) -> list[dict]:
             "id": f"shortage:{kind}",
             "kind": "shortage",
             "severity": "critical" if have == 0 else "warning",
-            "headline": f"{_kind_label(kind).capitalize()}s short by {short}",
+            "headline": f"{_cap(_kind_label(kind, plural=True))} short by {short}",
             "detail": f"{need} open incident{'s' if need != 1 else ''} need a {_kind_label(kind)} first, "
                       f"but only {have} {'is' if have == 1 else 'are'} available. Request mutual aid or re-prioritise.",
             "evidence": f"demand {need} (primary need of undispatched incidents); available {have} of {total.get(kind, 0)}",
@@ -149,6 +158,7 @@ def trends(incidents: list[Any], reports: list[Any], now: datetime) -> list[dict
     type_of = {_get(i, "id"): _get(i, "type") for i in incidents}
     cur: Counter[str] = Counter()
     prev: Counter[str] = Counter()
+    cur_incidents: dict[str, set] = {}
     for r in reports:
         t, at = type_of.get(_get(r, "incident_id")), _dt(_get(r, "created_at"))
         if not t or at is None:
@@ -156,6 +166,7 @@ def trends(incidents: list[Any], reports: list[Any], now: datetime) -> list[dict
         age = now - at
         if age <= TREND_WINDOW:
             cur[t] += 1
+            cur_incidents.setdefault(t, set()).add(_get(r, "incident_id"))
         elif age <= 2 * TREND_WINDOW:
             prev[t] += 1
     out = []
@@ -163,6 +174,8 @@ def trends(incidents: list[Any], reports: list[Any], now: datetime) -> list[dict
         before = prev.get(t, 0)
         if n < TREND_MIN_REPORTS or n < TREND_RATIO * max(before, 1):
             continue
+        if len(cur_incidents.get(t, ())) < TREND_MIN_INCIDENTS:
+            continue  # many reports about ONE incident is corroboration, not a trend
         change = "new surge" if before == 0 else f"{n / before:.1f}x"
         out.append({
             "id": f"trend:{t}",
