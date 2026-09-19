@@ -32,7 +32,7 @@ ASSIGNMENT_KEYS = {"id", "incident_id", "resource_id", "resource", "status", "et
                    "created_at", "updated_at"}
 ALERT_KEYS = {"id", "incident_id", "incident_code", "kind", "message", "acknowledged", "created_at"}
 CLASSIFICATION_KEYS = {"type", "severity", "priority", "title", "location_text", "people_affected_est",
-                       "hazards", "reasoning", "confidence", "lang", "source_model", "photo"}
+                       "hazards", "reasoning", "confidence", "lang", "source_model", "model", "photo"}
 
 
 @pytest.fixture()
@@ -299,3 +299,22 @@ def test_classification_out_never_rejects_out_of_range_ai_values():
                  "confidence": -0.1}
     out = s.ClassificationOut.model_validate(cls).model_dump(mode="json")
     assert out["confidence"] == 1.02 and out["photo"]["severity_hint"] == 7
+
+
+def test_report_create_incident_id_hint():
+    """Contract v1.3: /field updates may name their incident."""
+    r = s.ReportCreate(source="field", text="On scene, 2 people rescued", incident_id=7)
+    assert r.incident_id == 7
+    assert s.ReportCreate(source="citizen", text="flood").incident_id is None
+    for bad in (0, -1, "abc"):
+        with pytest.raises(ValidationError):
+            s.ReportCreate(source="field", text="x", incident_id=bad)
+
+
+def test_classification_model_field():
+    cls = fallback_classify("flood at Paldi")
+    cls.model = "cache:openai:gpt-4.1-mini"
+    out = s.ClassificationOut.model_validate(cls).model_dump(mode="json")
+    assert out["model"] == "cache:openai:gpt-4.1-mini"
+    cls.model = None
+    assert s.ClassificationOut.model_validate(cls).model_dump(mode="json")["model"] is None
