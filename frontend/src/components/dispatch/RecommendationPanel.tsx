@@ -1,9 +1,9 @@
 'use client';
-import { AlertTriangle, Check, Hospital, Loader2, Send } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertTriangle, Check, Hospital, Loader2, RefreshCw, Send } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { getRecommendations } from '@/lib/api';
 import { dispatchIncident } from '@/lib/command';
-import type { RecommendationsResponse } from '@/types';
+import type { DataMode, RecommendationsResponse } from '@/types';
 
 const label = (k: string) => k.replace(/_/g, ' ');
 
@@ -15,25 +15,43 @@ export function RecommendationPanel({ incidentId, version, dispatched, onDispatc
   const [selected, setSelected] = useState<number[]>([]);
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState('');
+  // Provenance of what is on screen. Without it a failed call left this panel
+  // spinning "Ranking units…" indefinitely, which reads as "the AI is thinking"
+  // rather than "the AI never answered".
+  const [mode, setMode] = useState<DataMode | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
+  const retry = useCallback(() => { setMode(null); setAttempt((n) => n + 1); }, []);
+
+  // One loader for both the first fetch and the refresh that follows a
+  // dispatch elsewhere. `keepTicks` is what stops a background refresh from
+  // wiping a selection the dispatcher has already made.
   useEffect(() => {
     let alive = true;
+    const keepTicks = rec !== null;
     getRecommendations(incidentId).then((env) => {
       if (!alive) return;
       setRec(env.data);
-      setSelected(env.data?.suggested_resource_ids ?? []);
+      setMode(env.mode);
+      setNote(env.error);
+      if (!keepTicks) setSelected(env.data?.suggested_resource_ids ?? []);
     });
     return () => { alive = false; };
-  }, [incidentId]);
+    // `rec` is read for keepTicks but must not retrigger the fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incidentId, version, attempt]);
 
-  // Keep the list fresh (units get assigned elsewhere) without resetting the dispatcher's ticks.
-  useEffect(() => {
-    let alive = true;
-    getRecommendations(incidentId).then((env) => { if (alive) setRec(env.data); });
-    return () => { alive = false; };
-  }, [incidentId, version]);
+  if (!rec && mode === null) return <div style={{ fontSize: 10, color: 'var(--muted)', display: 'flex', gap: 6, alignItems: 'center' }}><Loader2 size={12} className="spin" /> Ranking units…</div>;
 
-  if (!rec) return <div style={{ fontSize: 10, color: 'var(--muted)', display: 'flex', gap: 6, alignItems: 'center' }}><Loader2 size={12} className="spin" /> Ranking units…</div>;
+  // The recommender returned nothing and there is no cached answer. Say so,
+  // and leave a way to ask again — the API sleeps, and the retry usually wins.
+  if (!rec) return <div style={{ padding: '9px 10px', borderRadius: 6, background: 'var(--soft-bg)', border: '1px solid var(--line-strong)' }}>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, fontWeight: 800, color: 'var(--danger-text)' }}><AlertTriangle size={12} /> NO RECOMMENDATION AVAILABLE</div>
+    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>{note ?? 'The recommender did not answer.'}</div>
+    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>Dispatch from the unit list instead — this panel only ranks, it is not required to send anybody.</div>
+    <button type="button" onClick={retry} style={{ marginTop: 8, display: 'flex', gap: 5, alignItems: 'center', padding: '5px 9px', borderRadius: 5, border: '1px solid var(--line-strong)', background: 'var(--input)', color: 'var(--body-text)', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}><RefreshCw size={11} /> Try again</button>
+  </div>;
   if (dispatched && state !== 'sent') return <div style={{ fontSize: 10, color: 'var(--accent)', display: 'flex', gap: 6, alignItems: 'center' }}><Check size={13} /> Units dispatched. Track them in the timeline.</div>;
 
   const toggle = (id: number) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -51,6 +69,10 @@ export function RecommendationPanel({ incidentId, version, dispatched, onDispatc
   };
 
   return <div>
+    {mode !== null && mode !== 'live' && <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', padding: '6px 8px', marginBottom: 8, borderRadius: 6, background: 'var(--soft-bg)', border: '1px solid var(--line-strong)', fontSize: 9, color: 'var(--muted)', lineHeight: 1.5 }}>
+      <AlertTriangle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
+      <span><b style={{ color: 'var(--body-text)' }}>{mode === 'simulated' ? 'DEMO RANKING' : 'NOT LIVE'}</b> — {note ?? (mode === 'simulated' ? 'These units are demo data, not the live fleet.' : 'Showing the last answer the recommender gave, not the current fleet.')} Confirm availability before dispatching.</span>
+    </div>}
     {rec.shortages.length > 0 && <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '7px 8px', marginBottom: 8, borderRadius: 6, background: 'var(--danger-soft)', color: 'var(--danger-text)', fontSize: 9, fontWeight: 800 }}><AlertTriangle size={12} /> NO AVAILABLE {rec.shortages.map(label).join(', ').toUpperCase()}</div>}
     {rec.needed_kinds.map((kind) => {
       const units = rec.recommendations[kind] ?? [];

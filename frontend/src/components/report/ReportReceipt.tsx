@@ -36,6 +36,7 @@ export function ReportReceipt({
   lang,
   submittedAt,
   originalText,
+  queued = false,
   onNewReport,
 }: {
   result: ReportCreateResponse;
@@ -43,22 +44,42 @@ export function ReportReceipt({
   submittedAt: string;
   /** The citizen's text exactly as typed — not re-read from the response. */
   originalText: string;
+  /** True when the device was offline and this is sitting in the local queue. */
+  queued?: boolean;
   onNewReport: () => void;
 }) {
   const t = UI_STRINGS[lang];
   const { report, incident, classification, merged } = result;
 
-  // The pipeline has run through linking; a human has not yet reviewed it.
-  const currentStage: ReportStage = "incident_linked";
+  // Offline, nothing downstream has happened yet; otherwise the pipeline has
+  // run through linking and a human has not yet reviewed it.
+  const currentStage: ReportStage = queued ? "received" : "incident_linked";
   const currentIndex = STAGE_ORDER.indexOf(currentStage);
 
   return (
     <div className="space-y-4">
+      {/* An unsent report must never look like a received one. */}
       <div
         className="border-l-4 px-3 py-3"
-        style={{ borderColor: "var(--ok)", background: "var(--ok-bg)" }}
+        style={{
+          borderColor: queued ? "var(--medium)" : "var(--ok)",
+          background: queued ? "var(--medium-bg)" : "var(--ok-bg)",
+        }}
       >
-        <h1 className="text-lg font-bold">{t.received}</h1>
+        <h1 className="text-lg font-bold">
+          {queued ? "Saved on this device — not yet sent" : t.received}
+        </h1>
+        {queued && (
+          <p className="mt-1 text-sm">
+            There is no connection right now, so this report has <strong>not</strong>{" "}
+            reached the control room. It will be sent automatically when you are back
+            online. If this is life-threatening, call{" "}
+            <a href="tel:112" className="font-bold underline">
+              112
+            </a>{" "}
+            now.
+          </p>
+        )}
         <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           <dt className="text-xs uppercase tracking-wide text-[var(--muted)]">{t.reportId}</dt>
           <dt className="text-xs uppercase tracking-wide text-[var(--muted)]">{t.submittedAt}</dt>
@@ -83,7 +104,7 @@ export function ReportReceipt({
                   className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
                   style={{
                     background: done ? "var(--ok)" : "var(--surface-2)",
-                    color: done ? "#052e16" : "var(--muted)",
+                    color: done ? "#0d2a1d" : "var(--muted)",
                     border: done ? "none" : "1px solid var(--border-strong)",
                   }}
                 >

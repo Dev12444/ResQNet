@@ -217,7 +217,20 @@ export interface ReportCreate {
   citizen_type?: IncidentType | null;
   /** `/field` updates: attach to this open incident directly (contract v1.3). */
   incident_id?: number | null;
+  /**
+   * PENDING CONTRACT ADDITIONS — captured on the SOS form because responders
+   * need them, but `ReportCreate` has no fields for them yet. Sent additively
+   * and ignored by the current backend; raised with BE1. The citizen's `text`
+   * is never rewritten to smuggle these in.
+   */
+  disaster_type?: DisasterType | null;
+  citizen_urgency?: CitizenUrgency | null;
+  people_affected?: number | null;
+  special_assistance?: string[];
 }
+
+/** How urgent the reporter believes the situation is. Advisory, not a priority. */
+export type CitizenUrgency = "immediate" | "urgent" | "standard";
 
 /** Gemini Vision analysis of an attached photo. Advisory only. */
 export interface PhotoAnalysis {
@@ -409,7 +422,20 @@ export type ConfidenceBand = "high" | "review_advised" | "manual_required";
 export type ConnectionStatus = "live" | "reconnecting" | "offline";
 
 /** Provenance of the data currently on screen. */
-export type DataMode = "live" | "cached" | "stale" | "simulated";
+export type DataMode =
+  | "live"
+  | "cached"
+  | "stale"
+  | "simulated"
+  /**
+   * Live mode, the server did not answer, and there is nothing real to
+   * show. Distinct from "simulated" on purpose: simulated means "these are
+   * demo figures", unavailable means "we have no figures". Screens that
+   * would otherwise fill with fixtures during a demo show an explanation
+   * instead — an invented incident on a live dashboard is worse than a
+   * blank one.
+   */
+  | "unavailable";
 
 /**
  * Counts of corroborating evidence. `unique_sources` is what makes an incident
@@ -590,4 +616,361 @@ export interface ReportReceipt {
   submitted_at: string;
   classification: Classification | null;
   verification: VerificationStatus;
+}
+
+/* ================================================================== */
+/* 7. Gujarat State Emergency Response Platform                        */
+/* ------------------------------------------------------------------ */
+/* Public-facing state platform concepts, layered on top of the        */
+/* dispatcher contract above. These are FE-owned view models: nothing  */
+/* here changes a wire shape in sections 1-5.                          */
+/* ================================================================== */
+
+/** District-level risk posture, lowest to highest. */
+export type RiskLevel = "normal" | "watch" | "moderate" | "high" | "critical";
+
+/** Disaster categories used across the public platform. */
+export type DisasterType =
+  | "cyclone"
+  | "flood"
+  | "fire"
+  | "earthquake"
+  | "medical"
+  | "road_block"
+  | "infrastructure"
+  | "missing_person"
+  | "heavy_rainfall"
+  | "other";
+
+/** Map layers a user can toggle on the Gujarat GIS view. */
+export type MapLayer =
+  | "cyclone"
+  | "flood"
+  | "fire"
+  | "heavy_rainfall"
+  | "warning"
+  | "shelter"
+  | "hospital"
+  | "response_team"
+  | "blocked_road"
+  | "citizen_report";
+
+export type MapBaseLayer = "map" | "satellite" | "hybrid";
+
+/**
+ * Trust ladder shown on citizen-sourced content. Distinct from the
+ * dispatcher-side `VerificationStatus`: this is the public wording.
+ */
+export type GroundTruthLevel =
+  | "unverified"
+  | "community_confirmed"
+  | "authority_verified";
+
+/** ResQ Chain - the four stages the platform promises end to end. */
+export type ResQChainStage = "reported" | "verified" | "responding" | "resolved";
+
+/** Finer-grained status shown on an incident's chain timeline. */
+export type ChainStatus =
+  | "unverified"
+  | "community_confirmed"
+  | "authority_verified"
+  | "assigned"
+  | "response_en_route"
+  | "resolved";
+
+export interface ChainEvent {
+  status: ChainStatus;
+  at: string;
+  actor: string;
+  note: string | null;
+}
+
+/** Network posture. Drives the offline queue and the status indicator. */
+export type ConnectivityState = "online" | "low" | "offline";
+
+/* ------------------------------------------------------------------ */
+/* Districts                                                           */
+/* ------------------------------------------------------------------ */
+
+export interface DistrictInfo {
+  id: string;
+  name: string;
+  nameGu: string;
+  nameHi: string;
+  lat: number;
+  lng: number;
+}
+
+/** Live situation for one district, shown when its map region is clicked. */
+export interface DistrictSituation {
+  district: string;
+  risk: RiskLevel;
+  headline: string;
+  activeIncidents: number;
+  sheltersOpen: number;
+  responseTeams: number;
+  peopleAffected: number;
+  lat: number;
+  lng: number;
+  updatedAt: string;
+}
+
+/**
+ * ResQ Pulse - district-level live emergency intelligence, the signature
+ * rollup. Every number here is a count of something real in the data set.
+ */
+export interface ResQPulse {
+  district: string;
+  level: RiskLevel;
+  headline: string;
+  reports: number;
+  blockedRoads: number;
+  sheltersActive: number;
+  responseTeams: number;
+  priorityArea: string;
+  updatedAt: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Shelters                                                            */
+/* ------------------------------------------------------------------ */
+
+export type ShelterStatus = "open" | "near_capacity" | "full" | "closed";
+
+export interface Shelter {
+  id: string;
+  name: string;
+  district: string;
+  address: string;
+  lat: number;
+  lng: number;
+  status: ShelterStatus;
+  occupancy: number;
+  capacity: number;
+  amenities: {
+    food: boolean;
+    water: boolean;
+    medical: boolean;
+    accessible: boolean;
+  };
+  contact: string;
+  updatedAt: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Citizen ground truth                                                */
+/* ------------------------------------------------------------------ */
+
+export type MediaKind = "photo" | "video" | "voice" | "text";
+
+/** A citizen-submitted observation, before and after verification. */
+export interface GroundTruthReport {
+  id: string;
+  disaster: DisasterType;
+  district: string;
+  location: string;
+  lat: number;
+  lng: number;
+  text: string;
+  lang: Lang;
+  media: MediaKind[];
+  level: GroundTruthLevel;
+  confirmations: number;
+  submittedAt: string;
+  chain: ChainEvent[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Missing persons                                                     */
+/* ------------------------------------------------------------------ */
+
+export type MissingStatus = "missing" | "potential_match" | "located" | "reunited";
+
+/**
+ * Deliberately minimal. An age band rather than a date of birth, no contact
+ * details and no home address - enough to help identify someone, not enough
+ * to expose them.
+ */
+export interface MissingPerson {
+  id: string;
+  name: string;
+  ageBand: string;
+  district: string;
+  lastSeenLocation: string;
+  lastSeenAt: string;
+  status: MissingStatus;
+  description: string;
+  hasPhoto: boolean;
+  reportedAt: string;
+  caseOfficer: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Volunteers and relief requests                                      */
+/* ------------------------------------------------------------------ */
+
+export type ReliefKind = "food" | "water" | "medical" | "rescue" | "transport";
+export type ReliefStatus = "open" | "claimed" | "in_transit" | "delivered";
+
+export interface ReliefRequest {
+  id: string;
+  kind: ReliefKind;
+  quantity: number;
+  unit: string;
+  priority: Priority;
+  district: string;
+  location: string;
+  status: ReliefStatus;
+  claimedBy: string | null;
+  requestedAt: string;
+  updatedAt: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Weather                                                             */
+/* ------------------------------------------------------------------ */
+
+export interface WeatherAlert {
+  id: string;
+  disaster: DisasterType;
+  severity: RiskLevel;
+  district: string;
+  headline: string;
+  detail: string;
+  issuedAt: string;
+  source: string;
+}
+
+export interface ForecastDay {
+  day: string;
+  rainfallMm: number;
+  maxTempC: number;
+  windKph: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dispatch log                                                        */
+/* ------------------------------------------------------------------ */
+
+export type LogKind =
+  | "incident"
+  | "unit"
+  | "shelter"
+  | "verification"
+  | "weather"
+  | "resource";
+
+export interface DispatchLogEntry {
+  id: string;
+  at: string;
+  kind: LogKind;
+  severity: "info" | "warning" | "critical";
+  district: string | null;
+  unit: string | null;
+  message: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* SafeRoute                                                           */
+/* ------------------------------------------------------------------ */
+
+export interface RouteStep {
+  instruction: string;
+  distanceKm: number;
+}
+
+/**
+ * A route to a shelter or hospital. `live` is false whenever the path was
+ * not computed by a real routing engine - the UI must say so rather than
+ * implying the roads were checked.
+ */
+export interface SafeRoute {
+  fromLabel: string;
+  toLabel: string;
+  toKind: "shelter" | "hospital";
+  distanceKm: number;
+  etaMin: number;
+  steps: RouteStep[];
+  hazardsAvoided: string[];
+  live: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/* Safe check-in                                                       */
+/* ------------------------------------------------------------------ */
+
+export interface SafeCheckIn {
+  id: string;
+  name: string;
+  district: string;
+  note: string;
+  notifyContacts: boolean;
+  at: string;
+  /** False while the check-in is only stored on this device. */
+  synced: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reports suite                                                       */
+/* ------------------------------------------------------------------ */
+
+export type ReportKind =
+  | "situation"
+  | "incident"
+  | "district"
+  | "response_performance"
+  | "resource"
+  | "after_action";
+
+export type ReportStatus = "draft" | "published" | "archived";
+
+export interface ReportSection {
+  heading: string;
+  body: string;
+  /** Optional tabular block rendered as a bordered table. */
+  table?: { columns: string[]; rows: string[][] };
+}
+
+export interface ReportDoc {
+  id: string;
+  kind: ReportKind;
+  title: string;
+  district: string | null;
+  periodStart: string;
+  periodEnd: string;
+  generatedAt: string;
+  author: string;
+  status: ReportStatus;
+  summary: string;
+  sections: ReportSection[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Offline queue                                                       */
+/* ------------------------------------------------------------------ */
+
+/** A submission held on the device because the network was unavailable. */
+export interface QueuedSubmission {
+  id: string;
+  kind: "report" | "safe_check_in" | "relief_request";
+  label: string;
+  queuedAt: string;
+  attempts: number;
+  /**
+   * The exact body to resend. Without it an entry is a note that something was
+   * once typed, not a report that can still be delivered — and the queue used
+   * to hold nothing else, so "queued" meant the text was discarded as soon as
+   * the connection returned.
+   *
+   * Optional because entries written by older builds are still in people's
+   * browsers and must be handled rather than silently dropped.
+   */
+  payload?: ReportCreate;
+  /** Why the last resend attempt failed, shown to whoever is waiting. */
+  lastError?: string | null;
+  /**
+   * Set on an entry that cannot be resent — no stored body. It is kept and
+   * shown, never quietly deleted: the citizen has to know to send it again.
+   */
+  undeliverable?: boolean;
 }

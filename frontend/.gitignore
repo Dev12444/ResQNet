@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template. It holds no secrets — only the names of the two
+# NEXT_PUBLIC_ variables a build needs, and the public URL of the deployed
+# API. Without it a fresh clone has no record of what to configure.
+!.env.example
 
 # vercel
 .vercel

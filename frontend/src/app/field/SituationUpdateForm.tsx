@@ -27,6 +27,7 @@ import {
   SEVERITY_LABEL,
 } from "@/lib/constants";
 import { readableOn } from "@/components/layout/primitives";
+import { isSecureContext } from "@/lib/secureContext";
 
 const SEVERITIES: Severity[] = [1, 2, 3, 4, 5];
 const ROAD_OPTIONS: RoadAccess[] = ["clear", "partially_blocked", "blocked", "unknown"];
@@ -66,6 +67,13 @@ export function SituationUpdateForm({
   const [locError, setLocError] = useState<string | null>(null);
 
   function useMyPosition() {
+    // A responder's phone on the LAN over plain HTTP gets no prompt at all.
+    if (!isSecureContext()) {
+      setLocError(
+        "This page is not on a secure (HTTPS) connection, so the browser blocks location. Describe the position in the notes instead.",
+      );
+      return;
+    }
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setLocError("Location unavailable on this device. Describe it in the notes instead.");
       return;

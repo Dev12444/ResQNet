@@ -1,5 +1,5 @@
 'use client';
-import { AlertTriangle, ArrowUpRight, Bot, CheckCircle2, ChevronRight, Clock3, FileText, Languages, MapPin, MessageSquare, Navigation, ShieldAlert, Siren, Users, X } from 'lucide-react';
+import { Bot, CheckCircle2, Languages, MapPin, MessageSquare, Navigation, Siren, X } from 'lucide-react';
 import type { Alert, Incident } from '@/components/command/view';
 import { useEffect, useState } from 'react';
 import { RecommendationPanel } from '@/components/dispatch/RecommendationPanel';
@@ -11,7 +11,7 @@ const TRUST_STYLE: Record<string, [string, string]> = {
  conflicting: ['var(--danger-soft)', 'var(--danger-text)'], unverified: ['var(--soft-bg)', 'var(--muted)'],
 };
 
-export function IncidentDrawer({incident,alerts,version,onEscalate,onResolve,onDispatched,onClose}:{incident:Incident|null;alerts:Alert[];version:number;onEscalate:()=>void;onResolve:()=>void;onDispatched:()=>void;onClose:()=>void}){
+export function IncidentDrawer({incident,version,onEscalate,onResolve,onDispatched,onClose}:{incident:Incident|null;alerts:Alert[];version:number;onEscalate:()=>void;onResolve:()=>void;onDispatched:()=>void;onClose:()=>void}){
  const [tab,setTab]=useState<'overview'|'reports'>('overview');
  const [trust,setTrust]=useState<IncidentTrust|null>(null);
  const id=incident?Number(incident.id):null;

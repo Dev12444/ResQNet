@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Lang } from "@/types";
 import { LANGS } from "@/lib/constants";
+import { isSecureContext } from "@/lib/secureContext";
 
 /* Minimal shape of the vendor-prefixed API; not in lib.dom for all targets. */
 interface SpeechRecognitionAlternativeLike {
@@ -59,6 +60,7 @@ export function VoiceInput({
   startLabel,
   stopLabel,
   unsupportedLabel,
+  insecureLabel,
   hintLabel,
 }: {
   lang: Lang;
@@ -68,9 +70,12 @@ export function VoiceInput({
   startLabel: string;
   stopLabel: string;
   unsupportedLabel: string;
+  /** Shown when the engine exists but the origin is not HTTPS. */
+  insecureLabel: string;
   hintLabel: string;
 }) {
   const [supported, setSupported] = useState(false);
+  const [insecure, setInsecure] = useState(false);
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +85,13 @@ export function VoiceInput({
     // Deferred: detection must not set state synchronously in the effect body,
     // and it can only run on the client, so it cannot be a lazy initial value
     // without causing a hydration mismatch.
-    const timer = setTimeout(() => setSupported(getRecognitionCtor() !== null), 0);
+    const timer = setTimeout(() => {
+      // Chrome still exposes webkitSpeechRecognition on a plain-HTTP origin,
+      // so a presence check alone renders a button that fails the moment it
+      // is pressed. Treat an insecure origin as its own, explainable state.
+      setInsecure(!isSecureContext());
+      setSupported(getRecognitionCtor() !== null);
+    }, 0);
     return () => {
       clearTimeout(timer);
       recognition.current?.stop();
@@ -137,11 +148,13 @@ export function VoiceInput({
     setListening(false);
   }
 
-  if (!supported) {
+  if (!supported || insecure) {
     return (
       <div>
         <span className="block text-sm font-semibold">{label}</span>
-        <p className="mt-1 text-xs text-[var(--muted)]">{unsupportedLabel}</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          {insecure ? insecureLabel : unsupportedLabel}
+        </p>
       </div>
     );
   }

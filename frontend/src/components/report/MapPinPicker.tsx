@@ -14,6 +14,7 @@ import { Map as MapLibreMap, Marker, NavigationControl } from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { GUJARAT_CENTER } from "@/lib/constants";
+import { ensureMapLibreWorker } from "@/components/layout/maplibreWorker";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
@@ -52,6 +53,7 @@ export default function MapPinPicker({
     const init = () => {
       if (cancelled) return;
       try {
+        ensureMapLibreWorker();
         map = new MapLibreMap({
           container: el,
           style: STYLE_URL,
@@ -60,9 +62,10 @@ export default function MapPinPicker({
           attributionControl: { compact: true },
         });
         map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+        map.on("load", () => map?.resize());
         map.on("error", () => setFailed(true));
 
-        const pin = new Marker({ draggable: true, color: "#dc2626" })
+        const pin = new Marker({ draggable: true, color: "#e84d3d" })
           .setLngLat([start.current.lng, start.current.lat])
           .addTo(map);
         marker = pin;

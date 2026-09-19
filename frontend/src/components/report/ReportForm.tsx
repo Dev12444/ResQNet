@@ -1,32 +1,64 @@
 "use client";
 
 /**
- * Citizen reporting form — mobile first.
+ * Citizen SOS form — mobile first.
  *
- * The essential path is description → send. Everything else (type, location,
- * photo, voice, contact details) is optional and none of it can block
- * submission, because a person reporting an emergency may have no GPS
- * permission, no signal for tiles, a denied microphone, or one free hand.
+ * The essential path is description → send, and it stays under ~20 seconds.
+ * Emergency type, urgency, location, media, voice, people affected, special
+ * assistance and contact details are all optional, and none of them can block
+ * submission: someone reporting an emergency may have denied GPS, no signal
+ * for map tiles, a refused microphone, or one free hand.
+ *
+ * When the device is offline the submission is queued locally and the caller
+ * is told plainly that it has NOT reached the control room.
  */
 
 import { useState } from "react";
-import type { IncidentType, Lang, ReportCreateResponse, ReportSource } from "@/types";
-import { TYPE_LABEL_I18N, UI_STRINGS } from "@/lib/constants";
-import { submitReport } from "@/lib/api";
+import type {
+  CitizenUrgency,
+  DisasterType,
+  IncidentType,
+  Lang,
+  ReportCreate,
+  ReportCreateResponse,
+  ReportSource,
+} from "@/types";
+import {
+  DISASTER_META,
+  PLATFORM_STRINGS,
+  SOS_DISASTER_TYPES,
+  SPECIAL_ASSISTANCE,
+  UI_STRINGS,
+} from "@/lib/constants";
+import { enqueue, submitReport } from "@/lib/api";
 import { EmergencyCallBanner } from "@/components/layout/EmergencyContacts";
 import { LanguageToggle } from "./LanguageToggle";
 import { LocationPicker, type LocationValue } from "./LocationPicker";
 import { PhotoInput } from "./PhotoInput";
 import { VoiceInput } from "./VoiceInput";
 
-const TYPES: IncidentType[] = [
-  "flood",
-  "fire",
-  "road_accident",
-  "industrial",
-  "medical",
-  "building_collapse",
-  "other",
+/**
+ * The platform offers nine disaster categories; the dispatcher contract has
+ * seven incident types. This is the agreed reduction — cyclone and earthquake
+ * have no contract equivalent, so they map to their dominant hazard.
+ */
+const DISASTER_TO_INCIDENT: Record<DisasterType, IncidentType> = {
+  flood: "flood",
+  cyclone: "flood",
+  fire: "fire",
+  earthquake: "building_collapse",
+  medical: "medical",
+  road_block: "road_accident",
+  infrastructure: "building_collapse",
+  missing_person: "other",
+  heavy_rainfall: "flood",
+  other: "other",
+};
+
+const URGENCY: { id: CitizenUrgency; label: string; tone: string }[] = [
+  { id: "immediate", label: "Life at risk now", tone: "var(--critical)" },
+  { id: "urgent", label: "Urgent help needed", tone: "var(--high)" },
+  { id: "standard", label: "Needs attention", tone: "var(--medium)" },
 ];
 
 export function ReportForm({
@@ -36,12 +68,20 @@ export function ReportForm({
 }: {
   lang: Lang;
   onLangChange: (lang: Lang) => void;
-  onSubmitted: (result: ReportCreateResponse, originalText: string) => void;
+  onSubmitted: (
+    result: ReportCreateResponse,
+    originalText: string,
+    queued: boolean,
+  ) => void;
 }) {
   const t = UI_STRINGS[lang];
+  const p = PLATFORM_STRINGS[lang];
 
   const [text, setText] = useState("");
-  const [type, setType] = useState<IncidentType | null>(null);
+  const [disaster, setDisaster] = useState<DisasterType | null>(null);
+  const [urgency, setUrgency] = useState<CitizenUrgency | null>(null);
+  const [people, setPeople] = useState("");
+  const [assistance, setAssistance] = useState<string[]>([]);
   const [location, setLocation] = useState<LocationValue>({
     lat: null,
     lng: null,
@@ -49,7 +89,7 @@ export function ReportForm({
     source: "none",
     accuracy_m: null,
   });
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [media, setMedia] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState<ReportSource>("citizen");
@@ -68,25 +108,43 @@ export function ReportForm({
     setSubmitting(true);
     setError(null);
     const originalText = text.trim();
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+
+    // Built once so the queued copy is byte-for-byte what the send attempted.
+    // Queueing a summary instead of the body is how a report gets lost.
+    const body: ReportCreate = {
+      source,
+      text: originalText,
+      lang,
+      lat: location.lat,
+      lng: location.lng,
+      address: location.address.trim() || null,
+      photo_url: media,
+      reporter: buildReporter(name, phone),
+      sensor: null,
+      citizen_type: disaster ? DISASTER_TO_INCIDENT[disaster] : null,
+      disaster_type: disaster,
+      citizen_urgency: urgency,
+      people_affected: people.trim() === "" ? null : Number(people),
+      special_assistance: assistance,
+    };
+
     try {
-      const result = await submitReport({
-        source,
-        text: originalText,
-        lang,
-        lat: location.lat,
-        lng: location.lng,
-        address: location.address.trim() || null,
-        photo_url: photo,
-        reporter: buildReporter(name, phone),
-        sensor: null,
-        citizen_type: type,
-      });
-      onSubmitted(result, originalText);
+      const result = await submitReport(body);
+      onSubmitted(result, originalText, offline);
     } catch (err) {
+      // A failed send is queued rather than lost, but the caller is told.
+      enqueue({ kind: "report", label: originalText.slice(0, 60), payload: body });
       setError(err instanceof Error ? err.message : t.submitError);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function toggleAssistance(id: string) {
+    setAssistance((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id],
+    );
   }
 
   return (
@@ -127,29 +185,67 @@ export function ReportForm({
         )}
       </div>
 
+      {/* Emergency type */}
       <div>
         <span className="block text-sm font-semibold">{t.emergencyType}</span>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {TYPES.map((option) => {
-            const active = type === option;
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+          {SOS_DISASTER_TYPES.map((option) => {
+            const active = disaster === option;
+            const meta = DISASTER_META[option];
             return (
               <button
                 key={option}
                 type="button"
-                onClick={() => setType(active ? null : option)}
+                onClick={() => setDisaster(active ? null : option)}
                 aria-pressed={active}
-                className={`min-h-11 border px-3 text-sm font-medium ${
+                className="flex min-h-12 items-center gap-2 border px-2.5 text-left text-[13px] font-medium"
+                style={
                   active
-                    ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--surface)]"
-                    : "border-[var(--border-strong)] bg-[var(--surface)] hover:bg-[var(--surface-2)]"
-                }`}
+                    ? { borderColor: meta.color, background: `${meta.color}14`, color: meta.color }
+                    : { borderColor: "var(--border-strong)" }
+                }
               >
-                {TYPE_LABEL_I18N[lang][option]}
+                <span
+                  aria-hidden
+                  className="inline-block size-2.5 shrink-0 rounded-full"
+                  style={{ background: meta.color }}
+                />
+                <span className="truncate">{meta.label}</span>
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* Urgency */}
+      <fieldset>
+        <legend className="text-sm font-semibold">How urgent is it?</legend>
+        <div className="mt-1.5 flex flex-col gap-1.5 sm:flex-row">
+          {URGENCY.map((u) => {
+            const active = urgency === u.id;
+            return (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => setUrgency(active ? null : u.id)}
+                aria-pressed={active}
+                className="min-h-12 flex-1 border px-2 text-sm font-semibold"
+                style={
+                  active
+                    ? { borderColor: u.tone, background: `${u.tone}14`, color: u.tone }
+                    : { borderColor: "var(--border-strong)" }
+                }
+              >
+                {u.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          This helps the control room order the queue. It does not set the official
+          priority — an operator does that.
+        </p>
+      </fieldset>
 
       <LocationPicker
         value={location}
@@ -159,6 +255,7 @@ export function ReportForm({
           useMyLocation: t.useMyLocation,
           locating: t.locating,
           locationDenied: t.locationDenied,
+          locationInsecure: t.locationInsecure,
           adjustLocation: t.adjustLocation,
           landmarkLabel: t.landmarkLabel,
           landmarkPlaceholder: t.landmarkPlaceholder,
@@ -166,9 +263,9 @@ export function ReportForm({
       />
 
       <PhotoInput
-        value={photo}
-        onChange={setPhoto}
-        label={t.photo}
+        value={media}
+        onChange={setMedia}
+        label={`${t.photo} / video`}
         addLabel={t.addPhoto}
         removeLabel={t.removePhoto}
         errorLabel={t.photoError}
@@ -181,8 +278,50 @@ export function ReportForm({
         startLabel={t.startVoice}
         stopLabel={t.stopVoice}
         unsupportedLabel={t.voiceUnsupported}
+        insecureLabel={t.voiceInsecure}
         hintLabel={t.voiceHint}
       />
+
+      {/* People affected */}
+      <label className="block">
+        <span className="text-sm font-semibold">How many people are affected?</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          value={people}
+          onChange={(e) => setPeople(e.target.value)}
+          placeholder="Leave blank if you are not sure"
+          className="mt-1.5 min-h-12 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-base"
+        />
+      </label>
+
+      {/* Special assistance */}
+      <fieldset>
+        <legend className="text-sm font-semibold">
+          Does anyone need special assistance?
+        </legend>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {SPECIAL_ASSISTANCE.map((option) => {
+            const active = assistance.includes(option.id);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => toggleAssistance(option.id)}
+                aria-pressed={active}
+                className={`min-h-11 border px-3 text-sm ${
+                  active
+                    ? "border-[var(--info)] bg-[var(--info-bg)] font-semibold text-[var(--info)]"
+                    : "border-[var(--border-strong)]"
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <details className="border border-[var(--border)]">
         <summary className="min-h-11 cursor-pointer px-3 py-2.5 text-sm font-semibold">
@@ -213,13 +352,19 @@ export function ReportForm({
         </div>
       </details>
 
-      {/* Demo aid: lets the same form stand in for a 112 call or sensor feed. */}
+      {/* Demo aid: lets the same form stand in for a 112 call or a field unit.
+          "sensor" is deliberately absent. A sensor report is only valid with a
+          sensor block attached, and this form has no sensor to describe, so
+          choosing it sent `sensor: null` and the API rejected every one with a
+          422. An option that cannot succeed does not belong on a form a
+          citizen is using during an emergency. Sensor ingestion belongs to the
+          simulator on /dashboard, which has real readings to send. */}
       <details className="border border-dashed border-[var(--border)]">
         <summary className="min-h-11 cursor-pointer px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
           Demo — submit as
         </summary>
         <div className="flex flex-wrap gap-1.5 px-3 pb-3">
-          {(["citizen", "call", "sensor", "field"] as ReportSource[]).map((option) => (
+          {(["citizen", "call", "field"] as ReportSource[]).map((option) => (
             <button
               key={option}
               type="button"
@@ -245,15 +390,23 @@ export function ReportForm({
         >
           <p className="text-sm font-semibold">{t.submitError}</p>
           <p className="mono mt-1 text-xs text-[var(--muted)]">{error}</p>
+          <p className="mt-1 text-xs">
+            Your report has been saved on this device and will be sent when the
+            connection returns. If this is life-threatening, call{" "}
+            <a href="tel:112" className="font-bold underline">
+              112
+            </a>{" "}
+            now.
+          </p>
         </div>
       )}
 
       <button
         type="submit"
         disabled={submitting}
-        className="min-h-14 w-full border-2 border-[#7f1d1d] bg-[var(--critical)] px-4 text-lg font-bold uppercase tracking-wide text-white hover:bg-[#b91c1c] disabled:opacity-70"
+        className="min-h-14 w-full border border-[var(--coral-deep)] bg-[var(--coral)] px-4 text-lg font-bold uppercase tracking-wide text-white hover:bg-[#9a1b27] disabled:opacity-70"
       >
-        {submitting ? t.submitting : error ? t.retry : t.submit}
+        {submitting ? t.submitting : error ? t.retry : p.reportEmergency}
       </button>
     </form>
   );

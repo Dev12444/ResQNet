@@ -26,6 +26,7 @@ import { useEnvelope } from "@/components/layout/useEnvelope";
 import {
   Badge,
   ErrorState,
+  UnavailableState,
   LoadingState,
   Panel,
   PartialDataNote,
@@ -108,11 +109,11 @@ export default function ResourcesPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl px-3 py-4">
-      <header className="mb-3 flex flex-wrap items-end justify-between gap-2">
+      <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Resources</h1>
+          <h1 className="cmd text-[24px] leading-none">Resources</h1>
           <p className="text-sm text-[var(--muted)]">
-            Units, facilities and sensors across Gujarat.
+            Units, facilities and sensors across the state.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -261,6 +262,15 @@ export default function ResourcesPage() {
         >
           {facilities.loading && !facilities.data ? (
             <LoadingState />
+          ) : facilities.mode === "unavailable" ? (
+            /* An empty list here would read as "no hospitals, no shelters",
+               which is an answer nobody should act on. Say the endpoint did
+               not answer instead. */
+            <UnavailableState
+              what="hospitals and shelters"
+              note={facilities.error}
+              onRetry={facilities.reload}
+            />
           ) : (
             <FacilitiesPanel facilities={filteredFacilities} />
           )}

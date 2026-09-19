@@ -13,6 +13,7 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
+import { isSecureContext } from "@/lib/secureContext";
 
 const MapPinPicker = dynamic(() => import("./MapPinPicker"), {
   ssr: false,
@@ -44,15 +45,25 @@ export function LocationPicker({
     useMyLocation: string;
     locating: string;
     locationDenied: string;
+    locationInsecure: string;
     adjustLocation: string;
     landmarkLabel: string;
     landmarkPlaceholder: string;
   };
 }) {
-  const [status, setStatus] = useState<"idle" | "locating" | "denied">("idle");
+  const [status, setStatus] = useState<
+    "idle" | "locating" | "denied" | "insecure"
+  >("idle");
   const [showMap, setShowMap] = useState(false);
 
   function locate() {
+    // A phone opening this over the LAN on plain HTTP is not a secure context,
+    // so the browser refuses before it ever prompts. Saying "denied" there
+    // blames the citizen for a refusal they were never offered.
+    if (!isSecureContext()) {
+      setStatus("insecure");
+      return;
+    }
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setStatus("denied");
       return;
@@ -99,13 +110,13 @@ export function LocationPicker({
         </p>
       )}
 
-      {status === "denied" && (
+      {(status === "denied" || status === "insecure") && (
         <p
           role="status"
           className="mt-2 border-l-4 px-2 py-1.5 text-xs"
           style={{ borderColor: "var(--high)", background: "var(--high-bg)" }}
         >
-          {labels.locationDenied}
+          {status === "insecure" ? labels.locationInsecure : labels.locationDenied}
         </p>
       )}
 

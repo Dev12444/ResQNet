@@ -25,9 +25,24 @@ export interface EnvelopeState<T> {
   reload: () => void;
 }
 
+export interface EnvelopeOptions {
+  /**
+   * Refetch every this many milliseconds. A responder watching a dispatch has
+   * no other way to learn that the control room changed it, so any screen that
+   * a decision is made from should either poll or hold a socket — a page that
+   * silently shows a minutes-old assignment is worse than one that admits it
+   * cannot reach the server.
+   *
+   * Polling pauses while the tab is hidden and resumes with an immediate fetch
+   * on return, so a phone in a pocket does not burn battery or quota.
+   */
+  pollMs?: number;
+}
+
 export function useEnvelope<T>(
   load: () => Promise<Envelope<T>>,
   deps: React.DependencyList = [],
+  options: EnvelopeOptions = {},
 ): EnvelopeState<T> {
   const [state, setState] = useState<{
     data: T | null;
@@ -77,6 +92,37 @@ export function useEnvelope<T>(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nonce, ...deps]);
+
+  const { pollMs } = options;
+  useEffect(() => {
+    if (!pollMs) return;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const stop = () => {
+      if (timer !== null) clearInterval(timer);
+      timer = null;
+    };
+    const start = () => {
+      stop();
+      timer = setInterval(() => void run(false), pollMs);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        stop();
+      } else {
+        // Coming back to the tab, the displayed value is as old as the time
+        // spent away. Refresh before resuming the cadence.
+        void run(false);
+        start();
+      }
+    };
+    if (document.visibilityState !== "hidden") start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pollMs, run, ...deps]);
 
   return {
     ...state,

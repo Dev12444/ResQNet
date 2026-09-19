@@ -1,12 +1,15 @@
 "use client";
 
 /**
- * Optional photo attachment.
+ * Optional photo or short video attachment.
  *
- * Downscaled in the browser to ~1280 px before it becomes a data URL, because
- * the contract caps `photo_url` at 6 MB and a phone camera JPEG will blow past
- * that. Every failure path — unreadable file, no canvas, oversized result —
- * ends with the photo dropped and the report still submittable.
+ * Photos are downscaled in the browser to ~1280 px before becoming a data URL,
+ * because the contract caps `photo_url` at 6 MB and a phone camera JPEG will
+ * blow past that. Video is passed through untouched and rejected if it exceeds
+ * the cap — we do not transcode in the browser.
+ *
+ * Every failure path — unreadable file, no canvas, oversized result — ends with
+ * the attachment dropped and the report still submittable.
  */
 
 import { useRef, useState } from "react";
@@ -32,16 +35,25 @@ export function PhotoInput({
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [isVideo, setIsVideo] = useState(false);
 
   async function handleFile(file: File) {
     setError(null);
     setBusy(true);
     try {
-      const dataUrl = await downscale(file);
+      const video = file.type.startsWith("video/");
+      // Video cannot be shrunk client-side, so an oversized clip is refused
+      // outright rather than silently truncated.
+      const dataUrl = video ? await readAsDataUrl(file) : await downscale(file);
       if (dataUrl.length > MAX_BYTES) {
-        setError(errorLabel);
+        setError(
+          video
+            ? "That video is too large to attach. Send the report without it, or attach a photo instead."
+            : errorLabel,
+        );
         onChange(null);
       } else {
+        setIsVideo(video);
         onChange(dataUrl);
       }
     } catch {
@@ -61,7 +73,7 @@ export function PhotoInput({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         capture="environment"
         className="sr-only"
         id="report-photo"
@@ -73,18 +85,29 @@ export function PhotoInput({
 
       {value ? (
         <div className="mt-1.5">
-          {/* Local data URL of unknown dimensions — next/image adds nothing here. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={value}
-            alt="Attached photo preview"
-            className="max-h-48 w-full border border-[var(--border)] object-contain"
-          />
+          {isVideo ? (
+            <video
+              src={value}
+              controls
+              className="max-h-48 w-full border border-[var(--border)] bg-black object-contain"
+            />
+          ) : (
+            <>
+              {/* Local data URL of unknown dimensions — next/image adds nothing here. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={value}
+                alt="Attached photo preview"
+                className="max-h-48 w-full border border-[var(--border)] object-contain"
+              />
+            </>
+          )}
           <button
             type="button"
             onClick={() => {
               onChange(null);
               setError(null);
+              setIsVideo(false);
             }}
             className="mt-1.5 min-h-11 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm font-semibold hover:bg-[var(--surface-2)]"
           >
@@ -107,6 +130,16 @@ export function PhotoInput({
       )}
     </div>
   );
+}
+
+/** Read a file straight through, for formats we cannot re-encode. */
+async function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Unreadable file"));
+    reader.readAsDataURL(file);
+  });
 }
 
 /** Resize to fit `MAX_EDGE` and re-encode as JPEG. */

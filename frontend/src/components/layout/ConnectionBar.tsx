@@ -169,6 +169,27 @@ export function FreshnessLabel({
   );
 }
 
+/**
+ * A client-side clock for freshness maths.
+ *
+ * Reading `Date.now()` during render is impure and would also differ between
+ * the server and client render. This sets it after mount and ticks it, so
+ * every "x min ago" on a page advances together and hydration stays stable.
+ */
+export function useNow(intervalMs = 30000): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const timer = setInterval(tick, intervalMs);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [intervalMs]);
+  return now;
+}
+
 export function formatAge(sec: number): string {
   if (sec < 60) return `${sec} sec`;
   if (sec < 3600) return `${Math.floor(sec / 60)} min`;
