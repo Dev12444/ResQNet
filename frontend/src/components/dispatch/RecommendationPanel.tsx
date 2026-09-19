@@ -1,0 +1,17 @@
+'use client';
+import { Check, Hospital, Send } from 'lucide-react';
+import { recommendations, facilities } from '@/lib/fe1Mock';
+import { useState } from 'react';
+/**
+ * Dispatch recommendations for one incident.
+ *
+ * Selection and approval belong to a single incident, so the caller mounts this
+ * with `key={incident.id}`: React discards the state when the incident changes.
+ * Resetting in an effect instead would cascade a render, and would briefly show
+ * the previous incident's chosen units against the new one.
+ */
+export function RecommendationPanel({incidentId}:{incidentId:string}){
+ const [selected,setSelected]=useState<string[]>([]);
+ const [sent,setSent]=useState(false);
+ void incidentId;
+ return <div>{recommendations.map(r=>{const on=selected.includes(r.resource.id);return <button key={r.resource.id} onClick={()=>setSelected(s=>on?s.filter(x=>x!==r.resource.id):[...s,r.resource.id])} style={{width:'100%',display:'grid',gridTemplateColumns:'24px 1fr auto',gap:8,alignItems:'center',textAlign:'left',padding:'9px 8px',marginBottom:6,borderRadius:6,border:on?'1px solid var(--accent-border)':'1px solid var(--line-strong)',background:on?'var(--selected-bg)':'var(--input)',color:'var(--text)'}}><span style={{width:17,height:17,borderRadius:4,border:on?'1px solid var(--accent)':'1px solid var(--line-strong)',display:'grid',placeItems:'center',color:'var(--accent)'}}>{on&&<Check size={11}/>}</span><div><div style={{fontSize:10,fontWeight:800}}>{r.resource.callsign} <span style={{fontWeight:500,color:'var(--muted)'}}>· {r.resource.kind.replace('_',' ')}</span></div><div style={{fontSize:8.5,color:'var(--muted)',marginTop:3}}>{r.reason}</div></div><div style={{textAlign:'right'}}><div style={{fontSize:10,color:'var(--accent)',fontWeight:800}}>{r.eta} min</div><div style={{fontSize:8,color:'var(--muted)'}}>score {Math.round(r.score*100)}</div></div></button>})}<div style={{padding:9,border:'1px solid var(--line-strong)',borderRadius:6,background:'var(--input)',marginTop:8}}><div style={{display:'flex',alignItems:'center',gap:6,fontSize:9,fontWeight:800}}><Hospital size={12} color="var(--accent)"/> NEAREST FACILITY</div><div style={{fontSize:10,fontWeight:700,marginTop:6}}>{facilities[0].name}</div><div style={{fontSize:8.5,color:'var(--muted)',marginTop:2}}>{facilities[0].bedsAvailable} beds available · 1.8 km</div></div><button disabled={!selected.length||sent} onClick={()=>setSent(true)} style={{width:'100%',height:34,marginTop:8,borderRadius:6,border:'1px solid var(--accent-border)',background:sent?'var(--action-bg)':'var(--action-strong)',color:'var(--text)',fontSize:9,fontWeight:900,display:'flex',justifyContent:'center',alignItems:'center',gap:7,opacity:(!selected.length&&!sent)?.45:1}}>{sent?<><Check size={13}/> DISPATCH APPROVED</>:<><Send size={13}/> APPROVE DISPATCH ({selected.length})</>}</button></div>}

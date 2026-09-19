@@ -1,0 +1,50 @@
+'use client';
+import { ArrowUpRight, BellRing, Bot, CheckCircle2, Languages, MapPin, MessageSquare, Navigation, Siren, X } from 'lucide-react';
+import { Alert, Incident } from '@/types/fe1';
+import { useState } from 'react';
+import { RecommendationPanel } from '@/components/dispatch/RecommendationPanel';
+export function IncidentDrawer({incident,alerts,onEscalate}:{incident:Incident|null;alerts:Alert[];onEscalate:()=>void}){
+ const [tab,setTab]=useState<'overview'|'reports'>('overview');
+ if(!incident)return <div style={{height:'100%',display:'grid',placeItems:'center',color:'var(--muted)'}}><div style={{textAlign:'center'}}><MapPin size={30}/><div style={{marginTop:10,fontSize:12}}>Select an incident</div></div></div>;
+ return <div className="scrollbar" style={{height:'100%',overflow:'auto'}}>
+  <div style={{padding:'15px 16px 12px',borderBottom:'1px solid var(--line)',position:'sticky',top:0,background:'var(--panel)ee',backdropFilter:'blur(10px)',zIndex:3}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'start'}}><div><div style={{display:'flex',alignItems:'center',gap:7}}><span style={{fontSize:10,color:'var(--muted)'}}>{incident.code}</span><Badge text={incident.priority} danger={incident.priority==='P1'}/><Badge text={`SEV ${incident.severity}`} danger={incident.severity>=4}/><Badge text={incident.status.replace('_',' ')}/></div><h2 style={{fontSize:17,lineHeight:1.25,margin:'8px 0 4px'}}>{incident.title}</h2><div style={{display:'flex',alignItems:'center',gap:5,color:'var(--muted)',fontSize:10}}><MapPin size={12}/>{incident.address}</div></div><button style={iconButton}><X size={16}/></button></div><div style={{display:'flex',gap:6,marginTop:13}}><Tab active={tab==='overview'} onClick={()=>setTab('overview')}>OVERVIEW</Tab><Tab active={tab==='reports'} onClick={()=>setTab('reports')}>REPORTS <span style={{opacity:.65}}>({incident.reportCount})</span></Tab></div></div>
+  {tab==='reports'?<Reports incident={incident}/>:<>
+   <section style={section}><SectionTitle icon={<Bot size={14}/>} title="AI SITUATION SUMMARY" tag={`${Math.round(incident.confidence*100)}% CONFIDENCE`}/><p style={copy}>{incident.aiSummary}</p><div style={{padding:10,borderRadius:7,background:'var(--soft-bg)',border:'1px solid var(--line-strong)',fontSize:10,color:'var(--body-text)'}}><b style={{color:'var(--text)'}}>Reasoning:</b> {incident.reasoning}</div><div style={{marginTop:10}}><div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'var(--muted)',marginBottom:5}}><span>MODEL CONFIDENCE</span><b style={{color:'var(--accent)'}}>{Math.round(incident.confidence*100)}%</b></div><div style={{height:5,borderRadius:4,background:'var(--line-strong)',overflow:'hidden'}}><div style={{width:`${incident.confidence*100}%`,height:'100%',background:'var(--accent)'}}/></div></div></section>
+   <section style={section}><SectionTitle icon={<CheckCircle2 size={14}/>} title="RECOMMENDED ACTIONS"/><div>{incident.actions.map((x,i)=><div key={x} style={{display:'flex',gap:9,alignItems:'center',padding:'7px 0',borderBottom:i<incident.actions.length-1?'1px solid var(--line)':'none',fontSize:10,color:'var(--body-text)'}}><span style={{width:17,height:17,borderRadius:4,border:'1px solid var(--line-strong)',display:'grid',placeItems:'center',fontSize:8,color:'var(--accent)'}}>{i+1}</span>{x}</div>)}</div></section>
+   <section style={section}><SectionTitle icon={<Navigation size={14}/>} title="DISPATCH RECOMMENDATIONS"/><RecommendationPanel key={incident.id} incidentId={incident.id}/></section>
+   <IncidentAlerts incident={incident} alerts={alerts}/>
+   <section style={section}><SectionTitle icon={<MessageSquare size={14}/>} title="ACTIVITY TIMELINE"/><Timeline incident={incident}/></section>
+   <section style={{...section,borderBottom:0}}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7}}><button style={actionBtn('var(--action-bg)','var(--accent)')}><ArrowUpRight size={13}/> CHANGE STATUS</button><button onClick={onEscalate} style={actionBtn('#4a1d1d','#b91c1c')}><Siren size={13}/> ESCALATE</button></div></section>
+  </>}
+ </div>
+}
+function Badge({text,danger=false}:{text:string;danger?:boolean}){return <span style={{fontSize:8,fontWeight:850,letterSpacing:.5,padding:'3px 5px',borderRadius:4,background:danger?'var(--danger-soft)':'var(--soft-bg)',color:danger?'var(--danger-text)':'#9aada6'}}>{text}</span>}
+function Tab({active,onClick,children}:{active:boolean;onClick:()=>void;children:React.ReactNode}){return <button onClick={onClick} style={{padding:'6px 8px',border:0,borderBottom:active?'2px solid var(--accent)':'2px solid transparent',background:'transparent',color:active?'var(--text)':'var(--muted)',fontSize:9,fontWeight:800}}>{children}</button>}
+function SectionTitle({icon,title,tag}:{icon:React.ReactNode;title:string;tag?:string}){return <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:10,color:'var(--body-text)'}}><span style={{color:'var(--accent)'}}>{icon}</span><b style={{fontSize:9,letterSpacing:1}}>{title}</b>{tag&&<span style={{marginLeft:'auto',fontSize:8,color:'var(--accent)'}}>{tag}</span>}</div>}
+const section:React.CSSProperties={padding:'14px 16px',borderBottom:'1px solid var(--line)'};const copy:React.CSSProperties={fontSize:10.5,lineHeight:1.55,color:'var(--body-text)',margin:'0 0 9px'};const iconButton:React.CSSProperties={width:29,height:29,borderRadius:6,border:'1px solid var(--line-strong)',background:'var(--input)',color:'var(--muted)',display:'grid',placeItems:'center'};const actionBtn=(bg:string,color:string):React.CSSProperties=>({height:33,borderRadius:6,border:'1px solid var(--line-strong)',background:bg,color,display:'flex',justifyContent:'center',alignItems:'center',gap:6,fontSize:9,fontWeight:850});
+function Reports({incident}:{incident:Incident}){return <section style={section}>{incident.reports.map(r=><div key={r.id} style={{padding:'11px 0',borderBottom:'1px solid var(--line)'}}><div style={{display:'flex',alignItems:'center',gap:7}}><span style={{fontSize:8,padding:'3px 5px',borderRadius:3,background:'var(--soft-bg)',color:'var(--accent)'}}>{r.source.toUpperCase()}</span><Languages size={11} color="var(--muted)"/><span style={{fontSize:9,color:'var(--muted)'}}>{r.lang}</span><span style={{marginLeft:'auto',fontSize:9,color:'var(--muted)'}}>{r.time}</span></div><div style={{fontSize:10,color:'var(--body-text)',lineHeight:1.45,marginTop:7}}>{r.text}</div></div>)}</section>}
+function Timeline({incident}:{incident:Incident}){return <div style={{borderLeft:'1px solid var(--line-strong)',marginLeft:5,paddingLeft:13}}>{[['Report received','Multi-source report created','12:18'],['AI triage','Classified + prioritized','12:19'],['Deduplication',`${incident.reportCount} reports merged`,`12:28`],['Current state',incident.status.replace('_',' '),'12:30']].map(([a,b,c],i)=><div key={a} style={{position:'relative',paddingBottom:i<3?13:0}}><span style={{position:'absolute',left:-18,top:1,width:8,height:8,borderRadius:'50%',background:i===3?'var(--accent)':'var(--line-strong)',border:'2px solid var(--panel)'}}/><div style={{fontSize:9,fontWeight:800,color:'var(--body-text)'}}>{a}</div><div style={{fontSize:9,color:'var(--muted)',marginTop:2}}>{b} · {c}</div></div>)}</div>}
+
+/**
+ * Alerts raised against this incident.
+ *
+ * The drawer already received the alert list; it just never showed it, so an
+ * SLA breach or an escalation on the open incident was invisible unless the
+ * operator happened to catch the toast. Acknowledged alerts stay listed but
+ * recede, because the history matters during a handover.
+ */
+function IncidentAlerts({incident,alerts}:{incident:Incident;alerts:Alert[]}){
+ const mine=alerts.filter(a=>a.incidentId===incident.id);
+ if(!mine.length)return null;
+ return <section style={section}>
+  <SectionTitle icon={<BellRing size={14}/>} title="ALERTS ON THIS INCIDENT" tag={`${mine.filter(a=>!a.acknowledged).length} OPEN`}/>
+  {mine.map(a=><div key={a.id} style={{display:'flex',gap:8,alignItems:'start',padding:'7px 0',borderBottom:'1px solid var(--line)',opacity:a.acknowledged?.55:1}}>
+   <span style={{marginTop:2,width:7,height:7,borderRadius:'50%',flexShrink:0,background:a.kind==='critical'||a.kind==='escalation'?'var(--danger)':'var(--amber)'}}/>
+   <div style={{minWidth:0,flex:1}}>
+    <div style={{fontSize:9,fontWeight:800,letterSpacing:.5,color:'var(--body-text)'}}>{a.kind.replace('_',' ').toUpperCase()}</div>
+    <div style={{fontSize:10,color:'var(--body-text)',lineHeight:1.4,marginTop:3}}>{a.message}</div>
+   </div>
+   <span style={{fontSize:9,color:'var(--muted)',flexShrink:0}}>{a.acknowledged?'ACK':a.time}</span>
+  </div>)}
+ </section>
+}

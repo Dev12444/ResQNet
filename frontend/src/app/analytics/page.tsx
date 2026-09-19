@@ -1,44 +1,43 @@
 "use client";
 
 /**
- * `/analytics` — operational analytics. Desktop/tablet first.
+ * `/analytics` — Emergency Intelligence Centre.
+ *
+ * Filters are applied to the district/incident/shelter/resource sets on the
+ * client, and every KPI and chart is recomputed from the filtered rows — a
+ * filter is never decorative. Where a figure cannot be derived from the data
+ * we hold, the panel says so rather than showing a plausible number.
  *
  * Owner: FE2.
- *
- * Filters are applied to the incident set on the client and every chart is
- * recomputed from the filtered set, so a filter is never decorative. Where a
- * figure genuinely cannot be derived from the contract (see the triage-time
- * note below), the panel says so instead of showing a plausible number.
  */
 
 import { useCallback, useMemo, useState } from "react";
 import type {
-  AnalyticsFilters,
+  DisasterType,
   Incident,
+  IncidentStatus,
   IncidentTrust,
-  IncidentType,
-  OperationalInsight,
-  ReportSource,
-  ResourceKind,
+  RiskLevel,
   Severity,
-  VerificationStatus,
 } from "@/types";
 import {
-  DISTRICTS,
+  DISASTER_META,
+  GUJARAT_DISTRICTS,
+  INCIDENT_STATUS_LABEL,
   INCIDENT_TYPE_META,
   RESOURCE_KIND_META,
+  RISK_META,
+  RISK_ORDER,
   SEVERITY_LABEL,
-  SOURCE_META,
-  VERIFICATION_META,
   confidenceBand,
 } from "@/lib/constants";
 import {
   computeShortages,
-  getEval,
-  getHotspots,
+  getDistrictSituations,
   getIncidentsWithTrust,
+  getPulse,
   getResourceViews,
-  getResponseTimes,
+  getShelters,
 } from "@/lib/api";
 import { useEnvelope } from "@/components/layout/useEnvelope";
 import {
@@ -48,245 +47,310 @@ import {
   LoadingState,
   Panel,
 } from "@/components/layout/primitives";
-import { DataModeBadge } from "@/components/layout/ConnectionBar";
+import { DataModeBadge, useNow } from "@/components/layout/ConnectionBar";
 import { formatDuration } from "@/components/charts/chartTheme";
+import { CategoryBars } from "@/components/charts/Charts";
 import {
-  CategoryBars,
-  GroupedBars,
-  SeverityBars,
-  TimelineChart,
-} from "@/components/charts/Charts";
+  DistrictRisk,
+  IncidentTrend,
+  PulseDistribution,
+  ResourceUtilization,
+  ResponseTimeChart,
+  ShelterCapacity,
+} from "@/components/charts/PlatformCharts";
 
-const TYPES = Object.keys(INCIDENT_TYPE_META) as IncidentType[];
-const SEVERITIES: Severity[] = [1, 2, 3, 4, 5];
-const VERIFICATIONS = Object.keys(VERIFICATION_META) as VerificationStatus[];
-const SOURCES = Object.keys(SOURCE_META) as ReportSource[];
-const KINDS = Object.keys(RESOURCE_KIND_META) as ResourceKind[];
+/* ------------------------------------------------------------------ */
 
-/** Time windows offered by the date filter, in hours before now. */
-const WINDOWS: { label: string; hours: number | null }[] = [
-  { label: "All data", hours: null },
-  { label: "Last 1 h", hours: 1 },
-  { label: "Last 6 h", hours: 6 },
-  { label: "Last 24 h", hours: 24 },
+const WINDOWS = [
+  { id: "today", label: "Today", hours: 24 },
+  { id: "7d", label: "7 Days", hours: 24 * 7 },
+  { id: "30d", label: "30 Days", hours: 24 * 30 },
+  { id: "custom", label: "Custom", hours: null },
+] as const;
+
+type WindowId = (typeof WINDOWS)[number]["id"];
+
+const STATUSES: IncidentStatus[] = [
+  "new",
+  "triaged",
+  "dispatched",
+  "on_scene",
+  "resolved",
+  "escalated",
 ];
+const SEVERITIES: Severity[] = [1, 2, 3, 4, 5];
 
-const EMPTY_FILTERS: AnalyticsFilters = {
-  since: null,
-  until: null,
-  districts: [],
-  types: [],
-  severities: [],
-  verifications: [],
-  sources: [],
-  resourceKinds: [],
+/** Contract incident types mapped onto the public disaster vocabulary. */
+const INCIDENT_TO_DISASTER: Record<string, DisasterType> = {
+  flood: "flood",
+  fire: "fire",
+  road_accident: "road_block",
+  industrial: "infrastructure",
+  medical: "medical",
+  building_collapse: "infrastructure",
+  other: "other",
 };
 
 export default function AnalyticsPage() {
   const paired = useEnvelope(useCallback(() => getIncidentsWithTrust(), []));
+  const situations = useEnvelope(useCallback(() => getDistrictSituations(), []));
+  const shelters = useEnvelope(useCallback(() => getShelters(), []));
   const units = useEnvelope(useCallback(() => getResourceViews(), []));
-  const responseTimes = useEnvelope(useCallback(() => getResponseTimes(), []));
-  const hotspots = useEnvelope(useCallback(() => getHotspots(), []));
-  const evalResult = useEnvelope(useCallback(() => getEval(), []));
+  const pulse = useEnvelope(useCallback(() => getPulse(), []));
+  const now = useNow();
 
-  const [filters, setFilters] = useState<AnalyticsFilters>(EMPTY_FILTERS);
-  const [windowHours, setWindowHours] = useState<number | null>(null);
+  const [windowId, setWindowId] = useState<WindowId>("30d");
+  const [customDays, setCustomDays] = useState(3);
+  const [districts, setDistricts] = useState<string[]>([]);
+  const [disasters, setDisasters] = useState<DisasterType[]>([]);
+  const [severities, setSeverities] = useState<Severity[]>([]);
+  const [statuses, setStatuses] = useState<IncidentStatus[]>([]);
+
+  const windowHours =
+    windowId === "custom"
+      ? customDays * 24
+      : WINDOWS.find((w) => w.id === windowId)!.hours!;
+
+  const districtOf = useCallback((incident: Incident): string => {
+    const m = GUJARAT_DISTRICTS.find((d) => incident.address.includes(d.name));
+    return m?.name ?? "Ahmedabad";
+  }, []);
 
   /* ---------------- filtering ---------------- */
 
-  const districtOf = useCallback(
-    (incident: Incident): string => {
-      const match = DISTRICTS.find((d) => incident.address.includes(d));
-      return match ?? "Ahmedabad";
-    },
-    [],
-  );
-
   const rows = useMemo(() => {
     const all = paired.data ?? [];
-    const cutoff =
-      windowHours === null
-        ? null
-        : Date.parse(all[0]?.incident.updated_at ?? new Date().toISOString()) -
-          windowHours * 3600_000;
+    const cutoff = now === null ? null : now - windowHours * 3600_000;
 
-    return all.filter(({ incident, trust }) => {
+    return all.filter(({ incident }) => {
       if (cutoff !== null && Date.parse(incident.created_at) < cutoff) return false;
-      if (filters.types.length && !filters.types.includes(incident.type)) return false;
-      if (filters.severities.length && !filters.severities.includes(incident.severity)) {
+      if (districts.length && !districts.includes(districtOf(incident))) return false;
+      if (
+        disasters.length &&
+        !disasters.includes(INCIDENT_TO_DISASTER[incident.type] ?? "other")
+      ) {
         return false;
       }
-      if (filters.verifications.length && !filters.verifications.includes(trust.verification)) {
-        return false;
-      }
-      if (filters.districts.length && !filters.districts.includes(districtOf(incident))) {
-        return false;
-      }
-      if (filters.sources.length) {
-        // Keep incidents that carry at least one report from a selected source.
-        const hasSource = filters.sources.some((s) => trust.sources[s] > 0);
-        if (!hasSource) return false;
-      }
+      if (severities.length && !severities.includes(incident.severity)) return false;
+      if (statuses.length && !statuses.includes(incident.status)) return false;
       return true;
     });
-  }, [paired.data, filters, windowHours, districtOf]);
+  }, [paired.data, now, windowHours, districts, disasters, severities, statuses, districtOf]);
 
-  const filteredIncidents = useMemo(() => rows.map((r) => r.incident), [rows]);
+  const incidents = useMemo(() => rows.map((r) => r.incident), [rows]);
 
-  /** Resource filter narrows the unit set, not the incident set. */
-  const filteredUnits = useMemo(() => {
-    const all = units.data ?? [];
-    return filters.resourceKinds.length
-      ? all.filter((u) => filters.resourceKinds.includes(u.kind))
-      : all;
-  }, [units.data, filters.resourceKinds]);
-
-  /* ---------------- derived series ---------------- */
-
-  const byType = useMemo(
+  const scopedSituations = useMemo(
     () =>
-      TYPES.map((type) => ({
-        label: INCIDENT_TYPE_META[type].label,
-        value: filteredIncidents.filter((i) => i.type === type).length,
-      })).filter((d) => d.value > 0),
-    [filteredIncidents],
+      (situations.data ?? []).filter(
+        (s) => districts.length === 0 || districts.includes(s.district),
+      ),
+    [situations.data, districts],
   );
 
-  const bySeverity = useMemo(
+  const scopedShelters = useMemo(
     () =>
-      SEVERITIES.map((severity) => ({
-        severity,
-        count: filteredIncidents.filter((i) => i.severity === severity).length,
-      })),
-    [filteredIncidents],
+      (shelters.data ?? []).filter(
+        (s) => districts.length === 0 || districts.includes(s.district),
+      ),
+    [shelters.data, districts],
   );
 
-  const byVerification = useMemo(
+  const scopedUnits = useMemo(
     () =>
-      VERIFICATIONS.map((v) => ({
-        label: VERIFICATION_META[v].label,
-        value: rows.filter((r) => r.trust.verification === v).length,
-      })).filter((d) => d.value > 0),
-    [rows],
+      (units.data ?? []).filter(
+        (u) => districts.length === 0 || districts.includes(u.district),
+      ),
+    [units.data, districts],
   );
 
-  const bySource = useMemo(() => {
-    const totals: Record<ReportSource, number> = { citizen: 0, call: 0, sensor: 0, field: 0 };
-    for (const { trust } of rows) {
-      for (const s of SOURCES) totals[s] += trust.sources[s];
-    }
-    return SOURCES.map((s) => ({ label: SOURCE_META[s].label, value: totals[s] })).filter(
-      (d) => d.value > 0,
+  const scopedPulse = useMemo(
+    () =>
+      (pulse.data ?? []).filter(
+        (p) => districts.length === 0 || districts.includes(p.district),
+      ),
+    [pulse.data, districts],
+  );
+
+  /* ---------------- KPIs ---------------- */
+
+  const kpis = useMemo(() => {
+    const active = incidents.filter((i) => i.status !== "resolved").length;
+    const resolved = incidents.filter((i) => i.status === "resolved").length;
+
+    const dispatchTimes = incidents
+      .filter((i) => i.dispatched_at)
+      .map((i) => (Date.parse(i.dispatched_at!) - Date.parse(i.created_at)) / 1000);
+
+    const committed = scopedUnits.filter((u) => u.status !== "available").length;
+    const capacity = scopedShelters.reduce((a, s) => a + s.capacity, 0);
+    const occupancy = scopedShelters.reduce((a, s) => a + s.occupancy, 0);
+    const worstRisk = scopedSituations.reduce<RiskLevel>(
+      (worst, s) => (RISK_META[s.risk].rank > RISK_META[worst].rank ? s.risk : worst),
+      "normal",
     );
-  }, [rows]);
 
-  const timeline = useMemo(() => {
-    if (filteredIncidents.length === 0) return [];
-    // Bucket per 5 minutes across the filtered window.
+    return {
+      active,
+      resolved,
+      affected: scopedSituations.reduce((a, s) => a + s.peopleAffected, 0),
+      avgDispatch: dispatchTimes.length
+        ? dispatchTimes.reduce((a, b) => a + b, 0) / dispatchTimes.length
+        : null,
+      teams: scopedSituations.reduce((a, s) => a + s.responseTeams, 0),
+      shelterPct: capacity ? Math.round((occupancy / capacity) * 100) : null,
+      occupancy,
+      capacity,
+      worstRisk,
+      utilisation: scopedUnits.length
+        ? Math.round((committed / scopedUnits.length) * 100)
+        : null,
+    };
+  }, [incidents, scopedUnits, scopedShelters, scopedSituations]);
+
+  /* ---------------- series ---------------- */
+
+  const trend = useMemo(() => {
+    if (incidents.length === 0) return [];
     const buckets = new Map<number, { incidents: number; reports: number }>();
-    for (const incident of filteredIncidents) {
-      const key = Math.floor(Date.parse(incident.created_at) / 300_000) * 300_000;
-      const entry = buckets.get(key) ?? { incidents: 0, reports: 0 };
-      entry.incidents += 1;
-      entry.reports += incident.report_count;
-      buckets.set(key, entry);
+    const size = windowHours <= 24 ? 900_000 : 3_600_000 * 6;
+    for (const i of incidents) {
+      const key = Math.floor(Date.parse(i.created_at) / size) * size;
+      const e = buckets.get(key) ?? { incidents: 0, reports: 0 };
+      e.incidents += 1;
+      e.reports += i.report_count;
+      buckets.set(key, e);
     }
     return [...buckets.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([t, v]) => ({ t: new Date(t).toISOString(), ...v }));
-  }, [filteredIncidents]);
+      .map(([t, v]) => ({
+        label:
+          windowHours <= 24
+            ? new Date(t).toTimeString().slice(0, 5)
+            : new Date(t).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+        ...v,
+      }));
+  }, [incidents, windowHours]);
 
-  /** Report → dispatch and report → resolution, computed per incident type. */
+  const byType = useMemo(
+    () =>
+      Object.keys(INCIDENT_TYPE_META)
+        .map((type) => ({
+          label: INCIDENT_TYPE_META[type as keyof typeof INCIDENT_TYPE_META].label,
+          value: incidents.filter((i) => i.type === type).length,
+        }))
+        .filter((d) => d.value > 0)
+        .sort((a, b) => b.value - a.value),
+    [incidents],
+  );
+
   const responseByType = useMemo(() => {
-    const groups = new Map<IncidentType, { dispatch: number[]; resolve: number[] }>();
-    for (const incident of filteredIncidents) {
-      const entry = groups.get(incident.type) ?? { dispatch: [], resolve: [] };
-      const created = Date.parse(incident.created_at);
-      if (incident.dispatched_at) {
-        entry.dispatch.push((Date.parse(incident.dispatched_at) - created) / 1000);
-      }
-      if (incident.resolved_at) {
-        entry.resolve.push((Date.parse(incident.resolved_at) - created) / 1000);
-      }
-      groups.set(incident.type, entry);
+    const groups = new Map<string, { d: number[]; r: number[] }>();
+    for (const i of incidents) {
+      const e = groups.get(i.type) ?? { d: [], r: [] };
+      const created = Date.parse(i.created_at);
+      if (i.dispatched_at) e.d.push((Date.parse(i.dispatched_at) - created) / 1000);
+      if (i.resolved_at) e.r.push((Date.parse(i.resolved_at) - created) / 1000);
+      groups.set(i.type, e);
     }
     return [...groups.entries()]
       .map(([type, v]) => ({
-        label: INCIDENT_TYPE_META[type].label,
-        a: v.dispatch.length ? avg(v.dispatch) : null,
-        b: v.resolve.length ? avg(v.resolve) : null,
+        label: INCIDENT_TYPE_META[type as keyof typeof INCIDENT_TYPE_META].label,
+        dispatch: v.d.length ? avg(v.d) : null,
+        resolve: v.r.length ? avg(v.r) : null,
       }))
-      .filter((d) => d.a !== null || d.b !== null);
-  }, [filteredIncidents]);
+      .filter((d) => d.dispatch !== null || d.resolve !== null);
+  }, [incidents]);
 
-  const shortages = useMemo(
+  const shelterSeries = useMemo(
     () =>
-      filteredUnits.length
-        ? computeShortages(filteredIncidents, filteredUnits).filter((s) => s.required > 0)
-        : [],
-    [filteredIncidents, filteredUnits],
+      scopedShelters.map((s) => ({
+        label: s.name.length > 22 ? `${s.name.slice(0, 21)}…` : s.name,
+        occupancy: s.occupancy,
+        free: Math.max(0, s.capacity - s.occupancy),
+        capacity: s.capacity,
+      })),
+    [scopedShelters],
   );
 
-  const districtStats = useMemo(() => {
-    const groups = new Map<
-      string,
-      { incidents: number; p1: number; resolved: number; dispatch: number[] }
-    >();
-    for (const incident of filteredIncidents) {
-      const d = districtOf(incident);
-      const entry = groups.get(d) ?? { incidents: 0, p1: 0, resolved: 0, dispatch: [] };
-      entry.incidents += 1;
-      if (incident.priority === "P1") entry.p1 += 1;
-      if (incident.status === "resolved") entry.resolved += 1;
-      if (incident.dispatched_at) {
-        entry.dispatch.push(
-          (Date.parse(incident.dispatched_at) - Date.parse(incident.created_at)) / 1000,
-        );
-      }
-      groups.set(d, entry);
-    }
-    return [...groups.entries()]
-      .map(([district, v]) => ({
-        district,
-        incidents: v.incidents,
-        p1: v.p1,
-        resolved: v.resolved,
-        avgDispatch: v.dispatch.length ? avg(v.dispatch) : null,
-      }))
-      .sort((a, b) => b.incidents - a.incidents);
-  }, [filteredIncidents, districtOf]);
+  const riskSeries = useMemo(
+    () =>
+      [...scopedSituations]
+        .sort(
+          (a, b) =>
+            RISK_META[b.risk].rank - RISK_META[a.risk].rank ||
+            b.activeIncidents - a.activeIncidents,
+        )
+        .slice(0, 10)
+        .map((s) => ({
+          district: s.district,
+          risk: s.risk,
+          incidents: s.activeIncidents,
+        })),
+    [scopedSituations],
+  );
+
+  const utilisationSeries = useMemo(() => {
+    const kinds = [...new Set(scopedUnits.map((u) => u.kind))];
+    return kinds.map((kind) => {
+      const list = scopedUnits.filter((u) => u.kind === kind);
+      const available = list.filter((u) => u.status === "available").length;
+      return {
+        label: RESOURCE_KIND_META[kind].label,
+        committed: list.length - available,
+        available,
+      };
+    });
+  }, [scopedUnits]);
+
+  const pulseSeries = useMemo(
+    () =>
+      RISK_ORDER.map((risk) => ({
+        risk,
+        districts: scopedSituations.filter((s) => s.risk === risk).length,
+      })),
+    [scopedSituations],
+  );
+
+  const districtTable = useMemo(
+    () =>
+      [...scopedSituations]
+        .sort((a, b) => RISK_META[b.risk].rank - RISK_META[a.risk].rank)
+        .map((s) => {
+          const inDistrict = incidents.filter((i) => districtOf(i) === s.district);
+          const dispatchTimes = inDistrict
+            .filter((i) => i.dispatched_at)
+            .map((i) => (Date.parse(i.dispatched_at!) - Date.parse(i.created_at)) / 1000);
+          const p = scopedPulse.find((x) => x.district === s.district);
+          return {
+            district: s.district,
+            risk: s.risk,
+            incidents: s.activeIncidents,
+            shelters: s.sheltersOpen,
+            teams: s.responseTeams,
+            affected: s.peopleAffected,
+            avgDispatch: dispatchTimes.length ? avg(dispatchTimes) : null,
+            reports: p?.reports ?? null,
+          };
+        }),
+    [scopedSituations, incidents, scopedPulse, districtOf],
+  );
 
   const insights = useMemo(
-    () => deriveInsights(rows, shortages, districtOf),
-    [rows, shortages, districtOf],
+    () => deriveInsights(rows, scopedSituations, scopedUnits, scopedShelters, now),
+    [rows, scopedSituations, scopedUnits, scopedShelters, now],
   );
 
   const filtersActive =
-    windowHours !== null ||
-    filters.types.length > 0 ||
-    filters.severities.length > 0 ||
-    filters.verifications.length > 0 ||
-    filters.districts.length > 0 ||
-    filters.sources.length > 0 ||
-    filters.resourceKinds.length > 0;
-
-  function toggle<K extends keyof AnalyticsFilters>(
-    key: K,
-    value: AnalyticsFilters[K] extends (infer U)[] ? U : never,
-  ) {
-    setFilters((prev) => {
-      const list = prev[key] as unknown[];
-      const next = list.includes(value)
-        ? list.filter((v) => v !== value)
-        : [...list, value];
-      return { ...prev, [key]: next };
-    });
-  }
+    districts.length > 0 ||
+    disasters.length > 0 ||
+    severities.length > 0 ||
+    statuses.length > 0 ||
+    windowId !== "30d";
 
   if (paired.loading && !paired.data) return <LoadingState label="Loading analytics…" />;
   if (paired.error && !paired.data) {
     return (
-      <div className="mx-auto w-full max-w-7xl px-3 py-4">
+      <div className="p-4">
         <ErrorState
           title="Could not load analytics"
           detail={paired.error}
@@ -297,96 +361,136 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-3 py-4">
-      <header className="mb-3 flex flex-wrap items-end justify-between gap-2">
+    <div className="p-3 sm:p-4">
+      <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-sm text-[var(--muted)]">
-            {filteredIncidents.length} of {paired.data?.length ?? 0} incidents in view
+          <p className="eyebrow mb-1 text-[var(--teal)]">ResQNet · State Operations</p>
+          <h1 className="cmd text-[24px] leading-none">Emergency Intelligence Centre</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {incidents.length} of {paired.data?.length ?? 0} incidents ·{" "}
+            {scopedSituations.length} districts in view
           </p>
         </div>
         <DataModeBadge mode={paired.mode} note={paired.error} />
       </header>
 
-      {/* Filters — one row above the charts, all of them wired. */}
+      {/* KPIs */}
+      <div className="mb-3 grid gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <Kpi label="Active incidents" value={kpis.active} tone="var(--critical)" />
+        <Kpi label="Resolved" value={kpis.resolved} tone="var(--ok)" />
+        <Kpi
+          label="People affected"
+          value={kpis.affected.toLocaleString("en-IN")}
+          tone="var(--foreground)"
+        />
+        <Kpi
+          label="Avg response"
+          value={kpis.avgDispatch === null ? "—" : formatDuration(kpis.avgDispatch)}
+          tone="var(--info)"
+          note={kpis.avgDispatch === null ? "No dispatches in window" : "Report → dispatch"}
+        />
+        <Kpi label="Teams deployed" value={kpis.teams} tone="var(--info)" />
+        <Kpi
+          label="Shelter occupancy"
+          value={kpis.shelterPct === null ? "—" : `${kpis.shelterPct}%`}
+          tone={kpis.shelterPct !== null && kpis.shelterPct >= 85 ? "var(--high)" : "var(--ok)"}
+          note={`${kpis.occupancy.toLocaleString("en-IN")} of ${kpis.capacity.toLocaleString("en-IN")}`}
+        />
+        <Kpi
+          label="Highest district risk"
+          value={RISK_META[kpis.worstRisk].label}
+          tone={RISK_META[kpis.worstRisk].color}
+          note={
+            kpis.utilisation === null
+              ? undefined
+              : `Units committed: ${kpis.utilisation}%`
+          }
+        />
+      </div>
+
+      {/* Filters */}
       <Panel title="Filters" className="mb-3">
         <div className="space-y-2 px-3 py-2.5">
-          <FilterRow label="Window">
+          <FilterRow label="Period">
             {WINDOWS.map((w) => (
               <Chip
-                key={w.label}
+                key={w.id}
                 label={w.label}
-                active={windowHours === w.hours}
-                onClick={() => setWindowHours(w.hours)}
+                active={windowId === w.id}
+                onClick={() => setWindowId(w.id)}
               />
             ))}
+            {windowId === "custom" && (
+              <label className="flex items-center gap-1.5 text-xs">
+                <span className="sr-only">Custom period in days</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={customDays}
+                  onChange={(e) => setCustomDays(Math.max(1, Number(e.target.value) || 1))}
+                  className="h-8 w-16 border border-[var(--border-strong)] px-1.5 text-sm"
+                />
+                days
+              </label>
+            )}
           </FilterRow>
+
           <FilterRow label="District">
-            {DISTRICTS.map((d) => (
+            {GUJARAT_DISTRICTS.map((d) => (
               <Chip
-                key={d}
-                label={d}
-                active={filters.districts.includes(d)}
-                onClick={() => toggle("districts", d)}
+                key={d.id}
+                label={d.name}
+                active={districts.includes(d.name)}
+                onClick={() => toggle(districts, d.name, setDistricts)}
               />
             ))}
           </FilterRow>
-          <FilterRow label="Type">
-            {TYPES.map((t) => (
-              <Chip
-                key={t}
-                label={INCIDENT_TYPE_META[t].label}
-                active={filters.types.includes(t)}
-                onClick={() => toggle("types", t)}
-              />
-            ))}
+
+          <FilterRow label="Disaster">
+            {(Object.keys(DISASTER_META) as DisasterType[])
+              .filter((d) => d !== "heavy_rainfall" && d !== "missing_person")
+              .map((d) => (
+                <Chip
+                  key={d}
+                  label={DISASTER_META[d].label}
+                  active={disasters.includes(d)}
+                  onClick={() => toggle(disasters, d, setDisasters)}
+                />
+              ))}
           </FilterRow>
+
           <FilterRow label="Severity">
             {SEVERITIES.map((s) => (
               <Chip
                 key={s}
-                label={`SEV ${s}`}
-                active={filters.severities.includes(s)}
-                onClick={() => toggle("severities", s)}
+                label={`SEV ${s} · ${SEVERITY_LABEL[s]}`}
+                active={severities.includes(s)}
+                onClick={() => toggle(severities, s, setSeverities)}
               />
             ))}
           </FilterRow>
-          <FilterRow label="Verification">
-            {VERIFICATIONS.map((v) => (
-              <Chip
-                key={v}
-                label={VERIFICATION_META[v].label}
-                active={filters.verifications.includes(v)}
-                onClick={() => toggle("verifications", v)}
-              />
-            ))}
-          </FilterRow>
-          <FilterRow label="Source">
-            {SOURCES.map((s) => (
+
+          <FilterRow label="Status">
+            {STATUSES.map((s) => (
               <Chip
                 key={s}
-                label={SOURCE_META[s].label}
-                active={filters.sources.includes(s)}
-                onClick={() => toggle("sources", s)}
+                label={INCIDENT_STATUS_LABEL[s]}
+                active={statuses.includes(s)}
+                onClick={() => toggle(statuses, s, setStatuses)}
               />
             ))}
           </FilterRow>
-          <FilterRow label="Resource">
-            {KINDS.map((k) => (
-              <Chip
-                key={k}
-                label={RESOURCE_KIND_META[k].label}
-                active={filters.resourceKinds.includes(k)}
-                onClick={() => toggle("resourceKinds", k)}
-              />
-            ))}
-          </FilterRow>
+
           {filtersActive && (
             <button
               type="button"
               onClick={() => {
-                setFilters(EMPTY_FILTERS);
-                setWindowHours(null);
+                setDistricts([]);
+                setDisasters([]);
+                setSeverities([]);
+                setStatuses([]);
+                setWindowId("30d");
               }}
               className="min-h-9 border border-[var(--border-strong)] px-2.5 text-xs font-semibold"
             >
@@ -396,33 +500,33 @@ export default function AnalyticsPage() {
         </div>
       </Panel>
 
-      {/* Insights, derived from the filtered set. */}
+      {/* Observations */}
       <Panel
         title="Observations"
-        subtitle="Computed from the incidents currently in view."
+        subtitle="Computed from the rows currently in view."
         className="mb-3"
       >
         {insights.length === 0 ? (
           <EmptyState title="Nothing notable in this selection" />
         ) : (
           <ul className="divide-y divide-[var(--border)]">
-            {insights.map((insight) => (
-              <li key={insight.id} className="flex flex-wrap gap-x-3 gap-y-1 px-3 py-2">
+            {insights.map((i) => (
+              <li key={i.id} className="flex flex-wrap gap-x-3 gap-y-1 px-3 py-2">
                 <Badge
-                  label={insight.severity}
+                  label={i.severity}
                   color={
-                    insight.severity === "critical"
+                    i.severity === "critical"
                       ? "var(--critical)"
-                      : insight.severity === "warning"
+                      : i.severity === "warning"
                         ? "var(--high)"
                         : "var(--info)"
                   }
                   variant="tint"
                 />
                 <div className="min-w-56 flex-1">
-                  <p className="text-sm font-semibold">{insight.headline}</p>
-                  <p className="text-sm text-[var(--muted)]">{insight.detail}</p>
-                  <p className="mono mt-0.5 text-xs text-[var(--faint)]">{insight.evidence}</p>
+                  <p className="text-sm font-semibold">{i.headline}</p>
+                  <p className="text-sm text-[var(--muted)]">{i.detail}</p>
+                  <p className="mono mt-0.5 text-xs text-[var(--faint)]">{i.evidence}</p>
                 </div>
               </li>
             ))}
@@ -430,190 +534,118 @@ export default function AnalyticsPage() {
         )}
       </Panel>
 
+      {/* Charts */}
       <div className="grid gap-3 lg:grid-cols-2">
-        <Panel title="Incidents by type">
+        <Panel title="Incident trend" subtitle="Incidents and reports opened per bucket.">
+          <div className="px-2 py-2">
+            <IncidentTrend data={trend} />
+          </div>
+        </Panel>
+
+        <Panel title="Incident type" subtitle="Count of incidents by type.">
           <div className="px-2 py-2">
             <CategoryBars data={byType} valueLabel="Incidents" />
           </div>
         </Panel>
 
         <Panel
-          title="Severity mix"
-          subtitle="Severity on the axis; colour is a redundant cue, not the only one."
+          title="District risk"
+          subtitle="Active incidents per district; risk level printed beside each bar."
         >
           <div className="px-2 py-2">
-            <SeverityBars data={bySeverity} />
-          </div>
-        </Panel>
-
-        <Panel title="Incidents and reports over time">
-          <div className="px-2 py-2">
-            <TimelineChart data={timeline} />
+            <DistrictRisk data={riskSeries} />
           </div>
         </Panel>
 
         <Panel
-          title="Verification mix"
-          subtitle="How well corroborated the incidents in view are."
+          title="Response time"
+          subtitle="Report → dispatch and report → resolved, from incident timestamps."
         >
           <div className="px-2 py-2">
-            <CategoryBars data={byVerification} valueLabel="Incidents" height={160} />
-          </div>
-        </Panel>
-
-        <Panel title="Reports by source" subtitle="Counts reports, not unique reporters.">
-          <div className="px-2 py-2">
-            <CategoryBars data={bySource} valueLabel="Reports" height={160} />
-          </div>
-        </Panel>
-
-        <Panel
-          title="Response times by type"
-          subtitle="Report → dispatch and report → resolution, from incident timestamps."
-        >
-          <div className="px-2 py-2">
-            <GroupedBars
-              data={responseByType}
-              seriesA="Report → dispatch"
-              seriesB="Report → resolved"
-              asDuration
-            />
-          </div>
-        </Panel>
-
-        <Panel
-          title="Dispatch → on scene"
-          subtitle="From the backend analytics endpoint — not affected by the filters above."
-          actions={<DataModeBadge mode={responseTimes.mode} note={responseTimes.error} />}
-        >
-          <div className="px-2 py-2">
-            {responseTimes.loading && !responseTimes.data ? (
-              <LoadingState />
-            ) : (
-              <GroupedBars
-                data={(responseTimes.data?.by_type ?? []).map((r) => ({
-                  label: INCIDENT_TYPE_META[r.type].label,
-                  a: r.avg_dispatch_sec,
-                  b: r.avg_scene_sec,
-                }))}
-                seriesA="Avg dispatch"
-                seriesB="Avg on scene"
-                asDuration
-              />
-            )}
-            <p className="mt-2 text-xs text-[var(--muted)]">
-              Report → triage time is not shown: the incident contract has no `triaged_at`
-              timestamp, so it cannot be derived. Raised with BE1.
+            <ResponseTimeChart data={responseByType} />
+            <p className="px-1 pt-1 text-[11px] text-[var(--muted)]">
+              Report → triage is not shown: the incident contract has no `triaged_at`
+              timestamp, so it cannot be derived.
             </p>
           </div>
         </Panel>
 
+        <Panel title="Shelter capacity" subtitle="Places in use against total capacity.">
+          <div className="px-2 py-2">
+            <ShelterCapacity data={shelterSeries} />
+          </div>
+        </Panel>
+
+        <Panel title="Resource utilisation" subtitle="Units committed against available.">
+          <div className="px-2 py-2">
+            <ResourceUtilization data={utilisationSeries} />
+          </div>
+        </Panel>
+
         <Panel
-          title="Capability demand"
-          subtitle="Required counts each open incident's needed unit types against units available."
+          title="ResQ Pulse distribution"
+          subtitle="How many districts sit at each risk level."
         >
-          {shortages.length === 0 ? (
-            <EmptyState title="No open demand in this selection" />
-          ) : (
-            <ul className="divide-y divide-[var(--border)]">
-              {shortages.map((s) => (
-                <li key={s.kind} className="flex flex-wrap items-center gap-2 px-3 py-2">
-                  <span className="min-w-28 text-sm font-semibold">
-                    {RESOURCE_KIND_META[s.kind].label}
-                  </span>
-                  <span className="mono text-sm text-[var(--muted)]">
-                    Required {s.required} · Available {s.available}
-                  </span>
-                  {s.shortage > 0 ? (
-                    <Badge label={`SHORTAGE ${s.shortage}`} color="var(--critical)" />
-                  ) : (
-                    <Badge label="COVERED" color="var(--ok)" variant="tint" />
+          <div className="px-2 py-2">
+            <PulseDistribution data={pulseSeries} />
+          </div>
+        </Panel>
+
+        <Panel title="District comparison">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] border-collapse text-sm">
+              <caption className="sr-only">
+                Risk, incidents, shelters, teams and dispatch time per district
+              </caption>
+              <thead>
+                <tr className="border-b-2 border-[var(--border-strong)] text-left">
+                  {["District", "Risk", "Incidents", "Shelters", "Teams", "Affected", "Avg dispatch"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        scope="col"
+                        className="px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide"
+                      >
+                        {h}
+                      </th>
+                    ),
                   )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
-
-      {/* District comparison — a table, because it is four measures per row. */}
-      <Panel title="District comparison" className="mt-3">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] border-collapse text-sm">
-            <caption className="sr-only">Incident counts and dispatch times per district</caption>
-            <thead>
-              <tr className="border-b-2 border-[var(--border-strong)] text-left">
-                <th scope="col" className="px-2 py-1.5 text-xs font-semibold uppercase">District</th>
-                <th scope="col" className="px-2 py-1.5 text-xs font-semibold uppercase">Incidents</th>
-                <th scope="col" className="px-2 py-1.5 text-xs font-semibold uppercase">P1</th>
-                <th scope="col" className="px-2 py-1.5 text-xs font-semibold uppercase">Resolved</th>
-                <th scope="col" className="px-2 py-1.5 text-xs font-semibold uppercase">Avg dispatch</th>
-              </tr>
-            </thead>
-            <tbody>
-              {districtStats.map((d) => (
-                <tr key={d.district} className="border-b border-[var(--border)]">
-                  <td className="px-2 py-1.5">{d.district}</td>
-                  <td className="mono px-2 py-1.5">{d.incidents}</td>
-                  <td className="mono px-2 py-1.5">{d.p1}</td>
-                  <td className="mono px-2 py-1.5">{d.resolved}</td>
-                  <td className="mono px-2 py-1.5">{formatDuration(d.avgDispatch)}</td>
                 </tr>
-              ))}
-              {districtStats.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-2 py-4 text-center text-[var(--muted)]">
-                    No incidents in this selection.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <Panel
-          title="Reported incident hotspots"
-          subtitle="Where reports cluster — reporting density, not validated risk."
-          actions={<DataModeBadge mode={hotspots.mode} note={hotspots.error} />}
-        >
-          {hotspots.loading && !hotspots.data ? (
-            <LoadingState />
-          ) : (
-            <>
-              <CategoryBars
-                data={(hotspots.data ?? []).map((h) => ({
-                  label: `${h.lat.toFixed(3)}, ${h.lng.toFixed(3)}`,
-                  value: h.count,
-                }))}
-                valueLabel="Reports"
-              />
-              <p className="px-3 pb-3 text-xs text-[var(--muted)]">
-                A cluster means people reported from there. Areas with fewer reports are not
-                necessarily safer — they may simply report less.
-              </p>
-            </>
-          )}
-        </Panel>
-
-        <Panel
-          title="Classifier evaluation"
-          subtitle="From BE2's last eval run over the labelled set."
-          actions={<DataModeBadge mode={evalResult.mode} note={evalResult.error} />}
-        >
-          {evalResult.data ? (
-            <dl className="grid grid-cols-2 gap-px bg-[var(--border)]">
-              <Stat label="Type accuracy" value={pct(evalResult.data.type_accuracy)} />
-              <Stat label="Severity ±1" value={pct(evalResult.data.severity_within_1)} />
-              <Stat label="Dedup precision" value={pct(evalResult.data.dedup_precision)} />
-              <Stat label="Dedup recall" value={pct(evalResult.data.dedup_recall)} />
-              <Stat label="Avg latency" value={`${evalResult.data.avg_latency_ms} ms`} />
-              <Stat label="Examples" value={String(evalResult.data.n)} />
-            </dl>
-          ) : (
-            <EmptyState title="No eval results yet" hint="BE2 publishes these after a run." />
-          )}
+              </thead>
+              <tbody>
+                {districtTable.map((d) => (
+                  <tr key={d.district} className="border-b border-[var(--border)]">
+                    <td className="px-2 py-1.5 font-medium">{d.district}</td>
+                    <td className="px-2 py-1.5">
+                      <span
+                        className="px-1 text-[10px] font-bold uppercase"
+                        style={{
+                          background: `${RISK_META[d.risk].color}14`,
+                          color: RISK_META[d.risk].color,
+                        }}
+                      >
+                        {RISK_META[d.risk].label}
+                      </span>
+                    </td>
+                    <td className="mono px-2 py-1.5">{d.incidents}</td>
+                    <td className="mono px-2 py-1.5">{d.shelters}</td>
+                    <td className="mono px-2 py-1.5">{d.teams}</td>
+                    <td className="mono px-2 py-1.5">
+                      {d.affected.toLocaleString("en-IN")}
+                    </td>
+                    <td className="mono px-2 py-1.5">{formatDuration(d.avgDispatch)}</td>
+                  </tr>
+                ))}
+                {districtTable.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-2 py-4 text-center text-[var(--muted)]">
+                      No districts in this selection.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Panel>
       </div>
     </div>
@@ -621,76 +653,104 @@ export default function AnalyticsPage() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Insight derivation                                                  */
+/* Insights                                                            */
 /* ------------------------------------------------------------------ */
 
-/**
- * Concrete observations only. Each one names the numbers it came from so a
- * reader can check it — no generic commentary.
- */
+interface Insight {
+  id: string;
+  severity: "critical" | "warning" | "info";
+  headline: string;
+  detail: string;
+  evidence: string;
+}
+
 function deriveInsights(
   rows: { incident: Incident; trust: IncidentTrust }[],
-  shortages: { kind: ResourceKind; required: number; available: number; shortage: number }[],
-  districtOf: (incident: Incident) => string,
-): OperationalInsight[] {
-  const out: OperationalInsight[] = [];
-  const now = Math.max(...rows.map((r) => Date.parse(r.incident.updated_at)), Date.now());
+  situations: { district: string; risk: RiskLevel; sheltersOpen: number }[],
+  units: { kind: keyof typeof RESOURCE_KIND_META; status: string }[],
+  shelters: { name: string; occupancy: number; capacity: number; district: string }[],
+  now: number | null,
+): Insight[] {
+  const out: Insight[] = [];
+  const clock = now ?? 0;
 
-  // P1 incidents still undispatched.
   const undispatchedP1 = rows.filter(
     (r) => r.incident.priority === "P1" && r.incident.dispatched_at === null,
   );
-  if (undispatchedP1.length > 0) {
+  if (undispatchedP1.length > 0 && clock > 0) {
     const oldest = undispatchedP1.reduce((a, b) =>
       Date.parse(a.incident.created_at) < Date.parse(b.incident.created_at) ? a : b,
     );
-    const waited = Math.round((now - Date.parse(oldest.incident.created_at)) / 60000);
     out.push({
       id: "sla",
-      kind: "sla_breach",
       severity: "critical",
       headline: `${undispatchedP1.length} P1 incident${undispatchedP1.length === 1 ? "" : "s"} not yet dispatched`,
       detail: `${oldest.incident.code} has been waiting longest.`,
-      evidence: `${oldest.incident.code} · created ${waited} min ago · ${oldest.incident.address}`,
+      evidence: `${oldest.incident.code} · ${Math.round((clock - Date.parse(oldest.incident.created_at)) / 60000)} min · ${oldest.incident.address}`,
     });
   }
 
-  // Unmet capability demand.
-  for (const s of shortages.filter((s) => s.shortage > 0)) {
+  const shortages = computeShortages(
+    rows.map((r) => r.incident),
+    units as never,
+  ).filter((s) => s.shortage > 0);
+  for (const s of shortages) {
     out.push({
       id: `shortage-${s.kind}`,
-      kind: "shortage",
       severity: s.available === 0 ? "critical" : "warning",
       headline: `${RESOURCE_KIND_META[s.kind].label} shortage`,
       detail:
         s.available === 0
-          ? `No ${RESOURCE_KIND_META[s.kind].label.toLowerCase()} units are available anywhere in view.`
-          : `Open incidents need more units of this type than are free.`,
+          ? "No units of this type are available anywhere in view."
+          : "Open incidents need more units of this type than are free.",
       evidence: `Required ${s.required} · Available ${s.available} · Shortage ${s.shortage}`,
     });
   }
 
-  // Incidents whose sources disagree.
+  const critical = situations.filter((s) => s.risk === "critical");
+  if (critical.length > 0) {
+    out.push({
+      id: "critical-districts",
+      severity: "critical",
+      headline: `${critical.length} district${critical.length === 1 ? "" : "s"} at CRITICAL risk`,
+      detail: "These districts carry the highest combination of hazard and exposure.",
+      evidence: critical.map((s) => `${s.district} (${s.sheltersOpen} shelters open)`).join(", "),
+    });
+  }
+
+  const full = shelters.filter((s) => s.occupancy >= s.capacity);
+  const nearFull = shelters.filter(
+    (s) => s.occupancy < s.capacity && s.occupancy / s.capacity >= 0.85,
+  );
+  if (full.length + nearFull.length > 0) {
+    out.push({
+      id: "shelter-capacity",
+      severity: full.length > 0 ? "critical" : "warning",
+      headline: `${full.length} shelter${full.length === 1 ? "" : "s"} full, ${nearFull.length} near capacity`,
+      detail: "Arrivals should be redirected before these are overwhelmed.",
+      evidence: [...full, ...nearFull]
+        .map((s) => `${s.name} ${s.occupancy}/${s.capacity}`)
+        .join(", "),
+    });
+  }
+
   const conflicting = rows.filter((r) => r.trust.verification === "conflicting");
   if (conflicting.length > 0) {
     out.push({
       id: "conflicts",
-      kind: "conflict",
       severity: "warning",
       headline: `${conflicting.length} incident${conflicting.length === 1 ? "" : "s"} with conflicting reports`,
-      detail: "Sources disagree on scale or location. Field confirmation needed before scaling the response.",
+      detail: "Sources disagree on scale or location. Confirm before scaling the response.",
       evidence: conflicting.map((r) => r.incident.code).join(", "),
     });
   }
 
-  // Classifications a human should look at.
   const lowConfidence = rows.filter(
     (r) => confidenceBand(r.incident.confidence) === "manual_required",
   );
   if (lowConfidence.length > 0) {
     out.push({
       id: "low-confidence",
-      kind: "coverage",
       severity: "warning",
       headline: `${lowConfidence.length} report${lowConfidence.length === 1 ? "" : "s"} below the manual-verification threshold`,
       detail: "The classifier could not read these with confidence. A person should call back.",
@@ -700,38 +760,18 @@ function deriveInsights(
     });
   }
 
-  // Uncorroborated incidents at high severity.
   const unverifiedSevere = rows.filter(
     (r) => r.trust.verification === "unverified" && r.incident.severity >= 3,
   );
   if (unverifiedSevere.length > 0) {
     out.push({
       id: "unverified-severe",
-      kind: "coverage",
       severity: "info",
       headline: `${unverifiedSevere.length} severe incident${unverifiedSevere.length === 1 ? "" : "s"} resting on a single source`,
       detail: "Severity is high but nothing has corroborated the report yet.",
       evidence: unverifiedSevere
-        .map((r) => `${r.incident.code} SEV ${r.incident.severity} (${SEVERITY_LABEL[r.incident.severity]})`)
+        .map((r) => `${r.incident.code} SEV ${r.incident.severity}`)
         .join(", "),
-    });
-  }
-
-  // Concentration of one type in one district.
-  const floodByDistrict = new Map<string, number>();
-  for (const r of rows.filter((r) => r.incident.type === "flood")) {
-    const d = districtOf(r.incident);
-    floodByDistrict.set(d, (floodByDistrict.get(d) ?? 0) + r.incident.report_count);
-  }
-  const topFlood = [...floodByDistrict.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (topFlood && topFlood[1] >= 5) {
-    out.push({
-      id: "flood-trend",
-      kind: "trend",
-      severity: "warning",
-      headline: `Flood reporting concentrated in ${topFlood[0]}`,
-      detail: "The largest share of flood-related reports in view comes from this district.",
-      evidence: `${topFlood[1]} of ${[...floodByDistrict.values()].reduce((a, b) => a + b, 0)} flood reports, across ${floodByDistrict.size} district${floodByDistrict.size === 1 ? "" : "s"}`,
     });
   }
 
@@ -746,15 +786,37 @@ function avg(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
-function pct(value: number): string {
-  return `${Math.round(value * 100)}%`;
+function toggle<T>(list: T[], value: T, set: (next: T[]) => void) {
+  set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Kpi({
+  label,
+  value,
+  tone,
+  note,
+}: {
+  label: string;
+  value: number | string;
+  tone: string;
+  note?: string;
+}) {
   return (
-    <div className="bg-[var(--surface)] px-3 py-2">
-      <dt className="text-xs uppercase tracking-wide text-[var(--muted)]">{label}</dt>
-      <dd className="mono mt-0.5 text-lg font-semibold">{value}</dd>
+    /* Telemetry readout, not a KPI card: a top rule in the value's own
+       colour, the label in the command face, the figure in mono. Square,
+       flush against its neighbours, no shadow — it belongs to the strip. */
+    <div
+      className="border-t-2 bg-[var(--surface)] px-3 py-2.5"
+      style={{ borderColor: tone }}
+    >
+      <p className="eyebrow text-[var(--muted)]">{label}</p>
+      <p
+        className="mono mt-1 text-[26px] font-semibold leading-none"
+        style={{ color: tone }}
+      >
+        {value}
+      </p>
+      {note && <p className="telemetry mt-1.5">{note}</p>}
     </div>
   );
 }
@@ -762,7 +824,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="w-20 shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+      <span className="eyebrow w-16 shrink-0 text-[var(--muted)]">
         {label}
       </span>
       {children}
@@ -784,7 +846,7 @@ function Chip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`min-h-8 border px-2 text-xs font-semibold ${
+      className={`min-h-8 border px-2 text-[11px] font-semibold ${
         active
           ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--surface)]"
           : "border-[var(--border-strong)] hover:bg-[var(--surface-2)]"

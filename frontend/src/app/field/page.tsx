@@ -219,7 +219,7 @@ export default function FieldPage() {
               <PriorityBadge priority={inc.priority} />
               {trust.data && <VerificationBadge status={trust.data.verification} />}
             </div>
-            <h1 className="mt-2 text-lg font-bold leading-tight">{inc.title}</h1>
+            <h1 className="cmd mt-2 text-[20px] leading-tight">{inc.title}</h1>
             <p className="mt-1 text-sm text-[var(--muted)]">{inc.address}</p>
 
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">

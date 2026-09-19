@@ -1,86 +1,141 @@
 "use client";
 
 /**
- * The shared shell: identity, navigation, connection state, and a 112 action
- * that is reachable from every screen without scrolling.
+ * The portal frame.
+ *
+ *   ┌──────────────────────────────────────────────┐
+ *   │ institutional header (full width)            │
+ *   │ primary navigation                           │
+ *   │ hazard strip                                 │
+ *   │ 112 | 100 | 101 | 108 | 1098 | 181 | 1077 →  │
+ *   │ critical warning banner (only when one is live) │
+ *   ├────────┬─────────────────────────────────────┤
+ *   │  rail  │ workspace                           │
+ *   ├────────┴─────────────────────────────────────┤
+ *   │ SDMA | A Safer State Together | RESQNET         │
+ *   └──────────────────────────────────────────────┘
+ *
+ * Header, nav, hazard strip and ticker all span the full width so identity and
+ * the emergency numbers belong to the whole system; only the workspace is
+ * indented by the rail.
+ *
+ * Language lives here so the choice persists across routes, and is exposed
+ * through `useLang()` rather than threaded down as props. Flash-alert state
+ * lives here too, because a mass warning has to be able to reach a citizen on
+ * any page — see `FlashAlertProvider`.
  */
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { NAV_LINKS } from "@/lib/constants";
-import { Call112Button, EmergencyDirectory } from "./EmergencyContacts";
-import { ConnectionIndicator, useConnectionStatus } from "./ConnectionBar";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import type { Lang, WeatherAlert } from "@/types";
+import { getWeatherAlerts } from "@/lib/api";
+import { Sidebar } from "./Sidebar";
+import { GovHeader } from "./GovHeader";
+import { PrimaryNav } from "./PrimaryNav";
+import { DisasterStrip } from "./DisasterStrip";
+import { EmergencyUtilityBar } from "./EmergencyUtilityBar";
+import { CriticalAlertBanner } from "./CriticalAlertBanner";
+import { ConnectivityBanner, useConnectivity } from "./StatusIndicator";
+import { FlashAlertProvider } from "@/components/flash/FlashAlertProvider";
+import { SiteFooter } from "./SiteFooter";
+
+const LANG_KEY = "resqnet.lang";
+
+interface LangContextValue {
+  lang: Lang;
+  setLang: (lang: Lang) => void;
+}
+
+const LangContext = createContext<LangContextValue>({
+  lang: "en",
+  setLang: () => {},
+});
+
+/** Current interface language. Never applied to citizen-authored text. */
+export function useLang(): LangContextValue {
+  return useContext(LangContext);
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const connection = useConnectionStatus();
+  const [lang, setLangState] = useState<Lang>("en");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [alerts, setAlerts] = useState<WeatherAlert[]>([]);
+  const connectivity = useConnectivity();
+
+  // Restore the saved language after mount — reading storage during render
+  // would desync the server-rendered markup.
+  useEffect(() => {
+    // Deferred so the restore does not set state synchronously in the effect.
+    const timer = setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem(LANG_KEY);
+        if (saved === "en" || saved === "gu" || saved === "hi") setLangState(saved);
+      } catch {
+        /* storage blocked — English is a fine default */
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const env = await getWeatherAlerts();
+      if (!cancelled) setAlerts(env.data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const setLang = useCallback((next: Lang) => {
+    setLangState(next);
+    try {
+      window.localStorage.setItem(LANG_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   return (
-    <>
-      <a href="#main" className="skip-link">
-        Skip to main content
-      </a>
+    <LangContext.Provider value={{ lang, setLang }}>
+      <FlashAlertProvider lang={lang}>
+        <a href="#main" className="skip-link">
+          Skip to main content
+        </a>
 
-      <header className="border-b-2 border-[var(--border-strong)] bg-[var(--surface)]">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2">
-          <Link href="/" className="flex min-w-0 items-baseline gap-2 no-underline">
-            <span className="text-base font-bold tracking-tight text-[var(--critical)]">
-              RESQNET
-            </span>
-            <span className="hidden truncate text-xs uppercase tracking-wide text-[var(--muted)] sm:inline">
-              Gujarat Emergency Command Center
-            </span>
-          </Link>
+        <GovHeader
+          lang={lang}
+          onLangChange={setLang}
+          connectivity={connectivity}
+          alerts={alerts}
+          onMenu={() => setMenuOpen(true)}
+        />
+        <PrimaryNav lang={lang} />
+        <DisasterStrip />
+        <EmergencyUtilityBar />
+        {/* Full width and above the rail: a critical warning belongs to the
+            whole system, not to one panel on one route. */}
+        <CriticalAlertBanner alerts={alerts} />
 
-          <ConnectionIndicator state={connection} className="order-3 w-full sm:order-none sm:w-auto" />
+        <div className="flex flex-1">
+          <Sidebar lang={lang} open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-          <div className="ml-auto flex items-center gap-2">
-            <Call112Button />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <ConnectivityBanner info={connectivity} />
+            <main id="main" className="flex-1">
+              {children}
+            </main>
           </div>
         </div>
 
-        <nav aria-label="Primary" className="border-t border-[var(--border)]">
-          <ul className="flex overflow-x-auto">
-            {NAV_LINKS.map((link) => {
-              const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
-              return (
-                <li key={link.href} className="shrink-0">
-                  <Link
-                    href={link.href}
-                    aria-current={active ? "page" : undefined}
-                    className={`block border-b-2 px-3 py-2 text-[13px] font-semibold uppercase tracking-wide no-underline ${
-                      active
-                        ? "border-[var(--critical)] text-[var(--foreground)]"
-                        : "border-transparent text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]"
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-      </header>
-
-      <main id="main" className="flex-1">
-        {children}
-      </main>
-
-      <footer className="mt-auto border-t border-[var(--border)] bg-[var(--surface)] px-3 py-4">
-        <details>
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide">
-            All emergency numbers
-          </summary>
-          <div className="mt-3 max-w-3xl">
-            <EmergencyDirectory />
-          </div>
-        </details>
-        <p className="mt-3 text-xs text-[var(--muted)]">
-          ResQNet coordinates emergency response. It does not replace calling 112. AI output on
-          this system is advisory — operational decisions are made by people.
-        </p>
-      </footer>
-    </>
+        <SiteFooter lang={lang} />
+      </FlashAlertProvider>
+    </LangContext.Provider>
   );
 }
