@@ -256,6 +256,13 @@ def _provider(name: str) -> Provider | None:
     return None
 
 
+def _embed_models() -> list[str]:
+    """Embedding model of every provider in EMBED_PROVIDERS order, whether or not its key is set."""
+    st = get_settings()
+    models = {"openai": st.openai_embed_model, "gemini": st.gemini_embed_model}
+    return [models[n] for n in _split(st.embed_providers) if models.get(n)]
+
+
 def _providers(kind: str = "gen") -> list[Provider]:
     st = get_settings()
     order = st.llm_providers if kind == "gen" else st.embed_providers
@@ -595,11 +602,13 @@ def _cached(k: str) -> Any | None:
 
 def generate_json(prompt: str, schema: dict, system: str | None = None, temperature: float = 0.0) -> Any | None:
     """Return parsed JSON matching `schema`, or None."""
-    if not available():
+    if not get_settings().ai_enabled:
         return None
     k = _key("json", system, prompt, schema, temperature)
-    if (hit := _cached(k)) is not None:
+    if (hit := _cached(k)) is not None:  # before provider checks: seed/cache work with no key or network
         return hit
+    if not available():
+        return None
     _set_source(None)
     data = _parse_json(_generate(prompt, system, schema, temperature))
     if data is not None:
@@ -611,11 +620,13 @@ def generate_json_with_image(
     prompt: str, image: bytes, mime_type: str, schema: dict, system: str | None = None, temperature: float = 0.0
 ) -> Any | None:
     """Vision variant of generate_json. Returns parsed JSON or None."""
-    if not available() or not image:
+    if not get_settings().ai_enabled or not image:
         return None
     k = _key("img", system, prompt, hashlib.sha256(image).hexdigest(), schema, temperature)
     if (hit := _cached(k)) is not None:
         return hit
+    if not available():
+        return None
     _set_source(None)
     data = _parse_json(_generate(prompt, system, schema, temperature, image=(image, mime_type)))
     if data is not None:
@@ -624,11 +635,13 @@ def generate_json_with_image(
 
 
 def generate_text(prompt: str, system: str | None = None, temperature: float = 0.3) -> str | None:
-    if not available():
+    if not get_settings().ai_enabled:
         return None
     k = _key("text", system, prompt, temperature)
     if (hit := _cached(k)) is not None:
         return hit
+    if not available():
+        return None
     _set_source(None)
     text = (_generate(prompt, system, None, temperature) or "").strip()
     if not text:
@@ -663,10 +676,10 @@ def embed_with_model(texts: list[str]) -> tuple[str, list[list[float]]] | None:
     if not get_settings().ai_enabled:
         return None
     providers = _providers("emb")
-    for p in providers:  # fully cached → no network at all
-        cached = [_cache_get(_key("emb", p.embed_model, t)) for t in texts]
+    for model in _embed_models():  # fully cached → no network (and no key) needed
+        cached = [_cache_get(_key("emb", model, t)) for t in texts]
         if all(v is not None for v in cached):
-            return p.embed_model, cached  # type: ignore[return-value]
+            return model, cached  # type: ignore[return-value]
     for p in providers:
         if not _provider_ok(p, "emb"):
             continue
