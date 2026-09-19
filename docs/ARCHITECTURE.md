@@ -233,6 +233,15 @@ Vercel (Next.js)  ──HTTPS/WSS──►  Render (FastAPI, uvicorn)  ──TLS
 - CORS is restricted to the frontend origin. Photo URLs are fetched with an SSRF guard (public hosts only, no redirects).
 - `POST /api/simulator/reset` reseeds atomically: seed files are validated before anything is deleted.
 
+**Live deployment**
+| Piece | Where | Notes |
+|---|---|---|
+| API | Render web service `resqnet-api`, Singapore, free plan: `https://resqnet-api-0jmr.onrender.com` | One uvicorn worker (the pipeline lock, WebSocket clients and summary timers live in memory), `--proxy-headers` so URLs are https/wss. Auto-deploys the `deploy/render` branch, kept equal to `main`. Sleeps after 15 min idle (~50 s cold start). |
+| Database | Neon project `resqnet`, `aws-ap-southeast-1`, Postgres 17, pooled endpoint | `db.py` switches `postgresql://` to psycopg 3 with prepared statements off (PgBouncer) and pre-ping + 300 s recycle (Neon suspends idle computes). An empty DB is seeded on first start. |
+| Frontend | Vercel | `NEXT_PUBLIC_API_URL` = the Render URL, `NEXT_PUBLIC_USE_MOCK=false`. Allowed by `CORS_ORIGIN_REGEX` (`*resqnet*.vercel.app`). |
+
+**Concurrency** (BE1 hardening + BE2 `prepare()`): the slow AI step (classify, geocode, embeddings) runs *outside* the pipeline lock, and only dedup + the write are serialised, so parallel reports overlap but still merge correctly. Dispatch, status changes and assignments row-lock the incident first (one lock order: alert lock → incident → assignment → resource), so a unit can't be double-booked. `scripts/load_test.py` replays the scenario at 2× with racing dispatchers: 0 server errors, all invariants hold.
+
 ## 8. Team ownership
 
 | Area | Owner | Paths |
@@ -248,6 +257,7 @@ Vercel (Next.js)  ──HTTPS/WSS──►  Render (FastAPI, uvicorn)  ──TLS
 cd backend && pip install -r requirements.txt && python -m scripts.seed && uvicorn app.main:app --reload
 python -m scripts.eval                 # accuracy numbers (add --no-ai for rules only)
 python -m scripts.dry_run --no-ai      # full AI pipeline on the demo scenario, offline
-python scripts/warm_cache.py           # pre-load AI results for the demo
+python scripts/warm_cache.py           # pre-load AI results into the local disk cache
+python -m scripts.load_test --base-url http://127.0.0.1:8000 --reset   # 2x race/load test (WIPES the DB)
 cd frontend && npm ci && npm run dev
 ```
