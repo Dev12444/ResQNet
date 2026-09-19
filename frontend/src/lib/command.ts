@@ -19,6 +19,12 @@ export async function escalateIncident(incidentId: number, note = "Escalated fro
   return request(`/api/incidents/${incidentId}`, { method: "PATCH", body: JSON.stringify({ status: "escalated", note }) });
 }
 
+/** Close an incident: BE1 frees its units and completes open assignments. */
+export async function resolveIncident(incidentId: number, note = "Resolved from the command center") {
+  if (USE_MOCK) return null;
+  return request(`/api/incidents/${incidentId}`, { method: "PATCH", body: JSON.stringify({ status: "resolved", note }) });
+}
+
 export async function acknowledgeAlert(alertId: number) {
   if (USE_MOCK) return null;
   return request(`/api/alerts/${alertId}/ack`, { method: "POST", body: "{}" });
