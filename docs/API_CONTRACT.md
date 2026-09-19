@@ -315,7 +315,7 @@ How well supported an incident is (independent of severity) — matches FE2 `Inc
 - `duplicate_state`: `review_required` (type/situation conflict) · `possible_duplicate` (same reporter repeated) · `matched`
 
 #### `GET /api/ai/status`
-→ `{ "ai_enabled": true, "providers": ["openai", "gemini"], "generation_available": true, "embeddings_available": true, "models": { "openai:gpt-4.1-mini": { "calls_last_min": 3, "benched_for_sec": 0, "provider_cooling_sec": 0 } }, "embed_providers": ["gemini:gemini-embedding-001", "openai:text-embedding-3-small"], "openai_spent_usd": 0.05, "openai_budget_usd": 8.0, "openai_over_budget": false, "disk_cache": true }`
+→ `{ "ai_enabled": true, "providers": ["openai", "gemini"], "generation_available": true, "embeddings_available": true, "models": { "openai:gpt-4.1-mini": { "calls_last_min": 3, "benched_for_sec": 0, "provider_cooling_sec": 0 } }, "embed_providers": ["gemini:gemini-embedding-001", "openai:text-embedding-3-small"], "openai_spent_usd": 0.05, "openai_budget_usd": 8.0, "openai_over_budget": false, "disk_cache": true, "demo_seed_answers": 93 }`
 Debug/demo helper: if every model is benched, the system is running on rule-based fallback.
 
 #### `POST /api/ai/sitrep`
@@ -504,5 +504,6 @@ Rules:
 | 2026-09-19 | v1 | team |
 | 2026-09-19 | `photo_url` formats, `classification.photo`, geocoding note, `GET /api/ai/status`, `triage.py` internal API | BE2 |
 | 2026-09-19 | OpenAI primary provider: `source_model` values, `classification.model`, `/api/ai/status` shape | BE2 |
+| 2026-09-19 | `/api/ai/status.demo_seed_answers` (pre-computed demo AI answers shipped in git) | BE2 |
 | 2026-09-19 | `Recommendation.matched_capabilities`; recommender weighs unit capabilities + hospital specialties (cardiac, burns, trauma, pediatric) | BE2 |
 | 2026-09-19 | `GET /api/incidents/{id}/trust`, `GET /api/analytics/insights`; hotspot `top_type` never null; optional `incident_id` on `POST /api/reports` | BE2 |

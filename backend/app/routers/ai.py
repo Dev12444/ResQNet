@@ -78,4 +78,5 @@ def ai_status() -> dict:
         "rpm_per_model": next((p.rpm for p in llm._providers("gen")), None),
         **llm.spend_status(),
         "disk_cache": bool(st.llm_cache_path),
+        "demo_seed_answers": llm.demo_seed_size(),
     }

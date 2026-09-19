@@ -15,6 +15,7 @@ Protection built in:
 from __future__ import annotations
 
 import base64
+import gzip
 import copy
 import hashlib
 import json
@@ -82,12 +83,61 @@ def _disk_conn() -> sqlite3.Connection | None:
     return _disk
 
 
+# ============================================================ demo seed (read-only, shipped in git)
+# AI answers for the demo scenario, exported by scripts/export_demo_cache.py. Render's free tier has
+# no shell to run warm_cache.py and its disk is wiped on every deploy, so the seed makes a fresh
+# deploy answer the scenario instantly, for free, with exactly the outputs we tested. Keys include
+# CACHE_VERSION, so a prompt change silently invalidates the seed instead of serving stale answers.
+DEMO_SEED_PATH = Path(__file__).resolve().parent.parent / "data" / "demo_ai_cache.json.gz"
+_seed: dict[str, Any] | None = None
+_seed_lock = threading.Lock()
+# scripts/export_demo_cache.py sets this to a set() to record every cache key a run reads or writes.
+RECORD_KEYS: set[str] | None = None
+
+
+def _seed_get(k: str) -> Any:
+    global _seed
+    if _seed is None:
+        with _seed_lock:
+            if _seed is None:
+                try:
+                    with gzip.open(DEMO_SEED_PATH, "rt", encoding="utf-8") as f:
+                        _seed = json.load(f)
+                    log.info("Demo AI seed loaded: %d answers", len(_seed))
+                except FileNotFoundError:
+                    _seed = {}
+                except (OSError, ValueError) as e:
+                    log.warning("Demo AI seed unreadable, ignoring: %s", e)
+                    _seed = {}
+    return _seed.get(k)
+
+
+def demo_seed_size() -> int:
+    _seed_get("")  # load on first use
+    return len(_seed or {})
+
+
+def export_entries(keys: set[str]) -> dict[str, Any]:
+    """Current cached values for these keys (memory, then disk). Used to build the demo seed."""
+    out = {}
+    for k in sorted(keys):
+        v = _cache_get(k)
+        if v is not None:
+            out[k] = v
+    return out
+
+
 def _cache_get(k: str) -> Any:
     if BYPASS_CACHE:
         return None
+    if RECORD_KEYS is not None:
+        RECORD_KEYS.add(k)
     if k in _cache:
         _cache.move_to_end(k)
         return _cache[k]
+    if (v := _seed_get(k)) is not None:
+        _cache[k] = v
+        return v
     conn = _disk_conn()
     if conn is not None:
         try:
@@ -105,6 +155,8 @@ def _cache_get(k: str) -> Any:
 def _cache_put(k: str, v: Any) -> None:
     if BYPASS_CACHE:
         return
+    if RECORD_KEYS is not None:
+        RECORD_KEYS.add(k)
     _cache[k] = v
     _cache.move_to_end(k)
     while len(_cache) > _CACHE_MAX:
