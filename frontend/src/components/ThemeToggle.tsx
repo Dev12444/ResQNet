@@ -4,13 +4,24 @@ import { Moon, Sun } from 'lucide-react';
 
 type Theme = 'dark' | 'light';
 
+function savedTheme(): Theme {
+  try {
+    const saved = window.localStorage.getItem('resqnet-theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {
+    /* storage blocked: fall through */
+  }
+  return 'dark'; // control-room default
+}
+
+/** Dark/light switch for the command center. Renders "dark" on the server, then syncs after mount. */
 export function ThemeToggle(){
-  const [theme,setTheme]=useState<Theme>(()=>{
-    if(typeof window==='undefined') return 'dark';
-    const saved=window.localStorage.getItem('resqnet-theme') as Theme | null;
-    if(saved==='light'||saved==='dark') return saved;
-    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-  });
+  const [theme,setTheme]=useState<Theme>('dark');
+
+  useEffect(()=>{
+    const t=setTimeout(()=>setTheme(savedTheme()),0); // after hydration: no server/client mismatch
+    return()=>clearTimeout(t);
+  },[]);
 
   useEffect(()=>{
     document.documentElement.dataset.theme=theme;
@@ -19,8 +30,7 @@ export function ThemeToggle(){
   const toggle=()=>{
     const next=theme==='dark'?'light':'dark';
     setTheme(next);
-    document.documentElement.dataset.theme=next;
-    window.localStorage.setItem('resqnet-theme',next);
+    try{window.localStorage.setItem('resqnet-theme',next)}catch{/* ignore */}
   };
 
   return <button className="theme-toggle" onClick={toggle} aria-label={`Switch to ${theme==='dark'?'light':'dark'} mode`} title={`Switch to ${theme==='dark'?'light':'dark'} mode`}>
