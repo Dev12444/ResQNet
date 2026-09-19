@@ -93,3 +93,24 @@ def test_field_update_with_incident_hint_attaches_without_gps(db):
                          text="Severity now 2. Road partially blocked. Occupants rescued")  # no GPS, type may differ
     assert not new_b and b.id == a.id and not t.approximate
     assert (t.lat, t.lng) == (23.0588, 72.5620)
+
+
+def test_prepare_outside_lock_then_triage_does_no_ai(monkeypatch):
+    """prepare() does the slow AI work; triage(prepared=...) must not classify again."""
+    from app.services import triage as tr
+
+    calls = []
+    real = tr.classify
+    monkeypatch.setattr(tr, "classify", lambda *a, **k: calls.append(1) or real(*a, **k))
+    report = {"id": 1, "source": "citizen", "text": "Fire in a shop at Maninagar, smoke everywhere",
+              "lat": None, "lng": None, "created_at": None}
+    prep = tr.prepare(report)
+    assert len(calls) == 1 and prep.geocoded and prep.classification.type == "fire"
+
+    class NoDB:  # dedup finds no candidates without a real session
+        def scalars(self, *a, **k):
+            raise RuntimeError("no db")
+
+    t = tr.triage(NoDB(), report, prepared=prep)
+    assert len(calls) == 1  # no second classification
+    assert (t.lat, t.lng, t.classification) == (prep.lat, prep.lng, prep.classification)
