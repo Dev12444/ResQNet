@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db, init_db
 from app.pipeline import cancel_trailing_refreshes
-from app.routers import ai, alerts, analytics, incidents, reports, resources, ws
+from app.routers import ai, alerts, analytics, dispatch, incidents, reports, resources, ws
 from app.schemas import HealthOut
 from app.ws_manager import manager
 
@@ -81,6 +81,7 @@ app.include_router(incidents.router)
 app.include_router(reports.router)
 app.include_router(resources.router)
 app.include_router(alerts.router)
+app.include_router(dispatch.router)
 app.include_router(ws.router)
 # BE2 routers (contract §3 AI + Analytics).
 app.include_router(ai.router)
