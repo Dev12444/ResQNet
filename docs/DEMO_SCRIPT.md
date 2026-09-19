@@ -39,7 +39,7 @@
 
 | # | Action | What the audience sees | Say |
 |---|---|---|---|
-| A1 | 📱 On `/report`, type in **Gujarati**: `અખબારનગર અંડરપાસમાં ગાડી ફસાઈ છે, પાણી વધી રહ્યું છે` → Submit | Phone: "Report received · INC-0001" | "A citizen reports in Gujarati: a car is stuck in the Akhbarnagar underpass." |
+| A1 | 📱 On `/report`, type in **Gujarati**: `અખબારનગર અંડરપાસમાં ગાડી ફસાઈ છે, પાણી વધી રહ્યું છે` → Submit | Phone: "Report received · INC-0001" + **safety tips in Gujarati** ("move to higher ground…", helplines 112/108) | "A citizen reports in Gujarati: a car is stuck in the Akhbarnagar underpass. Instantly, in Gujarati, they are told what to do until help arrives." |
 | A2 | 🖱️ Dashboard | Red **pulsing P1 pin** at Akhbarnagar, toast "P1 flood: people trapped" · 📟 Telegram buzzes | "In about a second the AI classified it: flood, severity 4, people trapped, so P1. Priority follows a fixed rule, not a guess." |
 | A3 | 🖱️ Click the pin → incident drawer | English AI summary, reasoning, confidence, "answered by openai:gpt-4.1-mini" | "The dispatcher reads it in English, whatever language it came in, and sees *why* the AI decided." |
 | A4 | 🖱️ Recommendations panel | NDRF boat (chip **swift water**), NDRF team (**flood rescue**), ambulance (**trauma · ALS**), all pre-ticked, with ETAs + **SVP Hospital** | "It ranks every available unit by capability, ETA and load. Here it picked the swift-water boat, and a hospital with trauma beds." |
