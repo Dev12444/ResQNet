@@ -9,10 +9,10 @@ Read first: [PRD.md](PRD.md) (what we build) → this file (who builds what, whe
 
 | Role | Name | Owns (folders) | Mission |
 |---|---|---|---|
-| **BE1 — Core & Realtime** | _____ | `backend/app/{main,models,schemas,db,config,ws_manager}.py`, `routers/` (except analytics), `services/{geo,notifier,escalation}.py`, `scripts/seed.py`, `app/data/seed_*.json`, `app/data/scenario_*.json`, `docs/API_CONTRACT.md` | The data spine: every report stored, every change pushed live, alerts fire on time |
-| **BE2 — AI & Intelligence** | _____ | `services/{classifier,dedup,recommender,summarizer}.py`, `routers/analytics.py`, `scripts/eval.py`, `app/data/eval_incidents.json` | The brain: classify, merge duplicates, recommend resources, summarise, analytics, eval numbers |
-| **FE1 — Command Center** | _____ | `frontend/src/app/dashboard/`, `components/{map,incidents,dispatch,alerts}/`, `lib/ws.ts` | The screen judges stare at: live map, queue, incident drawer, dispatch, alerts |
-| **FE2 — Reporting & Insights** | _____ | `frontend/src/app/{page.tsx,report,field,analytics,resources}/`, `components/{report,charts,layout}/`, `lib/{api,mock,constants}.ts`, `types/index.ts`, `docs/DEMO_SCRIPT.md` | Everything else users touch + the pitch |
+| **BE1 — Core & Realtime** | __Rahi___ | `backend/app/{main,models,schemas,db,config,ws_manager}.py`, `routers/` (except analytics), `services/{geo,notifier,escalation}.py`, `scripts/seed.py`, `app/data/seed_*.json`, `app/data/scenario_*.json`, `docs/API_CONTRACT.md` | The data spine: every report stored, every change pushed live, alerts fire on time |
+| **BE2 — AI & Intelligence** | __Dev___ | `services/{classifier,dedup,recommender,summarizer}.py`, `routers/analytics.py`, `scripts/eval.py`, `app/data/eval_incidents.json` | The brain: classify, merge duplicates, recommend resources, summarise, analytics, eval numbers |
+| **FE1 — Command Center** | __Maansi___ | `frontend/src/app/dashboard/`, `components/{map,incidents,dispatch,alerts}/`, `lib/ws.ts` | The screen judges stare at: live map, queue, incident drawer, dispatch, alerts |
+| **FE2 — Reporting & Insights** | __Diya___ | `frontend/src/app/{page.tsx,report,field,analytics,resources}/`, `components/{report,charts,layout}/`, `lib/{api,mock,constants}.ts`, `types/index.ts`, `docs/DEMO_SCRIPT.md` | Everything else users touch + the pitch |
 
 **Rule:** only edit files you own. Need a change in someone else's file? Ask them in the group, or open a PR and tag them.
 **Shared files** (`schemas.py`, `types/index.ts`, `API_CONTRACT.md`): change only after telling the group; update all three together.
