@@ -33,14 +33,49 @@ deployment where nobody set the variable served invented incidents and said
 nothing about it. Forgetting it now produces a visible failure instead of a
 convincing false one.
 
-### Deploying
+## Deploying
 
 Set both variables on the host explicitly — do not rely on the default.
 
-The project name matters: the backend's `CORS_ORIGIN_REGEX` is
-`^https://resqnet(-[a-z0-9-]+)?\.vercel\.app$`, so a Vercel project whose name
-does not begin with `resqnet` will have every request and WebSocket rejected by
-CORS, with nothing in the UI to explain why.
+### The host is not the hard part. CORS is.
+
+Whatever you deploy to, **the backend must be told the new origin exists** or
+it will reject every request, and the site will show fixtures with no
+explanation of why. Verified against the live API:
+
+```
+Origin: http://localhost:3000            → 200   allowed
+Origin: http://localhost:52934           → 400   rejected
+Origin: https://resqnet-gj.onrender.com  → 400   rejected
+```
+
+Today the API allows `http://localhost:3000` and, by regex, Vercel projects
+matching `^https://resqnet(-[a-z0-9-]+)?\.vercel\.app$`. Anything else needs
+`CORS_ORIGINS` or `CORS_ORIGIN_REGEX` updated on the Render API service — a
+dashboard change on the backend, not something this repo can carry. Do it
+before the deploy, not after, or the first thing anyone sees is a demo running
+entirely on fixtures.
+
+### Any static host (no Vercel required)
+
+Nothing here runs on a server — no route handlers, no middleware, no server
+actions, no dynamic segments. So the whole app exports to plain files:
+
+```bash
+STATIC_EXPORT=true npm run build    # writes ./out
+```
+
+That produces 19 HTML pages plus assets (~9.5 MB) which any static host will
+serve: Render Static Sites, Netlify, Cloudflare Pages, GitHub Pages, or nginx.
+A static site also has no cold start, which matters on a free tier — a
+frontend that takes a minute to wake is worse than an API doing it, because the
+visitor does not even get a page explaining the wait.
+
+On Render, that is **New → Static Site**, root directory `frontend`, build
+command `STATIC_EXPORT=true npm run build`, publish directory `out`.
+
+Note `next start` cannot serve an exported build; it is for the normal
+(non-export) output. That is why the export is opt-in rather than the default.
 
 ## The honesty model
 
