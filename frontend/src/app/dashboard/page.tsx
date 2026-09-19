@@ -21,7 +21,7 @@ function mmss(sec:number){const m=Math.floor(sec/60),s=Math.round(sec%60);return
 export default function DashboardPage(){
  const cc=useCommandCenter();
  const selectedId=cc.selectedId, setSelectedId=cc.select;
- const [running,setRunning]=useState(false);
+ const running=cc.sim.running;
  const [busy,setBusy]=useState<string|null>(null);
  const [toast,setToast]=useState<string|null>(null);
  const [query,setQuery]=useState('');
@@ -49,8 +49,8 @@ export default function DashboardPage(){
  const online=USE_MOCK?false:cc.live||cc.mode==='live';
 
  const act=async(name:string,fn:()=>Promise<unknown>,ok?:string)=>{setBusy(name);try{await fn();if(ok)setToast(ok);await cc.refresh()}catch(e){setToast(`${name} failed: ${e instanceof Error?e.message:'error'}`)}finally{setBusy(null)}};
- const scenario=()=>act(running?'Stop scenario':'Run scenario',async()=>{await simulator(running?'stop':'start');setRunning(r=>!r)},running?'Scenario stopped':'Scenario started: reports will stream in');
- const reset=()=>act('Reset',async()=>{await simulator('reset');setRunning(false);setSelectedId(null)},'Demo data reset');
+ const scenario=()=>act(running?'Stop scenario':'Run scenario',async()=>{await simulator(running?'stop':'start');cc.setSim(s=>({...s,running:!running}))},running?'Scenario stopped':'Scenario started: reports will stream in');
+ const reset=()=>act('Reset',async()=>{await simulator('reset');cc.setSim({running:false,events_sent:0,events_total:0});cc.resetSelection()},'Demo data reset');
  const openSitrep=()=>act('SITREP',async()=>setSitrep(await generateSitrep()));
 
  return <main className="cc-root" style={{height:'100vh',display:'grid',gridTemplateRows:'64px 38px 52px 1fr',overflow:'hidden'}}>
@@ -61,7 +61,7 @@ export default function DashboardPage(){
    <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
     <span title={cc.error??undefined} style={{fontSize:11,color:online?'var(--accent)':'var(--amber)',display:'flex',gap:6,alignItems:'center'}}>{online?<Wifi size={13}/>:<WifiOff size={13}/>} {USE_MOCK?'DEMO DATA':online?'LIVE':'RECONNECTING'}</span>
     <button onClick={openSitrep} disabled={busy==='SITREP'} style={topButton('var(--button-bg)')}>{busy==='SITREP'?<Loader2 size={14} className="spin"/>:<FileText size={14}/>} SITREP</button>
-    <button onClick={scenario} disabled={!!busy} style={topButton(running?'#7f1d1d':'var(--run-bg)')}>{running?<Square size={14}/>:<Play size={14}/>} {running?'STOP SCENARIO':'RUN SCENARIO'}</button>
+    <button onClick={scenario} disabled={!!busy} style={topButton(running?'#7f1d1d':'var(--run-bg)')}>{running?<Square size={14}/>:<Play size={14}/>} {running?`STOP SCENARIO${cc.sim.events_total?` ${cc.sim.events_sent}/${cc.sim.events_total}`:''}`:'RUN SCENARIO'}</button>
     <button onClick={reset} disabled={!!busy} style={topButton('var(--button-bg)')}><RotateCcw size={14}/> RESET</button>
     <ThemeToggle/>
    </div>

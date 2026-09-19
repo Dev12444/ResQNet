@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAlerts, getFacilities, getIncident, getIncidents, getResources } from "@/lib/api";
+import { getSimulatorStatus, type SimulatorStatus } from "@/lib/command";
 import { createResQWebSocket } from "@/lib/ws";
 import type { Alert, DataMode, Facility, Incident, IncidentDetail, Resource } from "@/types";
 import { byUrgency } from "./view";
@@ -26,6 +27,7 @@ export function useCommandCenter() {
   const [loaded, setLoaded] = useState(false);
   const [version, setVersion] = useState(0); // bumps on every refresh so panels can refetch
   const [selectedId, setSelected] = useState<number | null>(null);
+  const [sim, setSim] = useState<SimulatorStatus>({ running: false, events_sent: 0, events_total: 0 });
   const selectedRef = useRef<number | null>(null);
   const userCleared = useRef(false);
 
@@ -43,6 +45,13 @@ export function useCommandCenter() {
     },
     [loadDetail],
   );
+
+  /** Forget the selection and let the next load auto-select the most urgent incident again. */
+  const resetSelection = useCallback(() => {
+    selectedRef.current = null;
+    userCleared.current = false;
+    setSelected(null);
+  }, []);
 
   const refresh = useCallback(async () => {
     const [inc, res, fac, al] = await Promise.all([getIncidents(), getResources(), getFacilities(), getAlerts()]);
@@ -63,11 +72,15 @@ export function useCommandCenter() {
   }, [loadDetail]);
 
   useEffect(() => {
-    const first = setTimeout(() => void refresh(), 0);
+    const first = setTimeout(() => {
+      void refresh();
+      void getSimulatorStatus().then((s) => s && setSim(s));
+    }, 0);
     const poll = setInterval(() => void refresh(), POLL_MS);
     let pending: ReturnType<typeof setTimeout> | null = null;
     const stop = createResQWebSocket(
-      () => {
+      (msg) => {
+        if (msg.event === "simulator.status") setSim(msg.data as SimulatorStatus);
         if (pending) clearTimeout(pending);
         pending = setTimeout(() => void refresh(), WS_DEBOUNCE_MS); // a merge storm = one reload
       },
@@ -83,7 +96,7 @@ export function useCommandCenter() {
 
   return {
     incidents, resources, facilities, alerts, mode, error, live, loaded, version, refresh,
-    selectedId, select,
+    selectedId, select, resetSelection, sim, setSim,
     detail: detail && detail.id === selectedId ? detail : null,
   };
 }
