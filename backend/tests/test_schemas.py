@@ -275,3 +275,27 @@ def test_unmerge_request():
     assert s.UnmergeRequest(report_id=44).report_id == 44
     with pytest.raises(ValidationError):
         s.UnmergeRequest(report_id=0)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        '{"source":"sensor","sensor":{"sensor_id":"a","metric":"water_level_m","value":NaN,"threshold":4.2}}',
+        '{"source":"sensor","sensor":{"sensor_id":"a","metric":"water_level_m","value":4.9,"threshold":Infinity}}',
+        '{"source":"sensor","sensor":{"sensor_id":"a","metric":"water_level_m","value":-Infinity,"threshold":4.2}}',
+        '{"source":"citizen","text":"x","lat":NaN,"lng":72.5}',
+    ],
+)
+def test_non_finite_numbers_rejected(body):
+    with pytest.raises(ValidationError):
+        s.ReportCreate.model_validate_json(body)
+
+
+def test_classification_out_never_rejects_out_of_range_ai_values():
+    """Serialised after commit: an odd AI value must not turn a saved report into a 500."""
+    cls = fallback_classify("flood at Paldi")
+    cls.confidence = 1.02
+    cls.photo = {"relevant": True, "type": "unknown", "severity_hint": 7, "hazards": [], "description": "",
+                 "confidence": -0.1}
+    out = s.ClassificationOut.model_validate(cls).model_dump(mode="json")
+    assert out["confidence"] == 1.02 and out["photo"]["severity_hint"] == 7

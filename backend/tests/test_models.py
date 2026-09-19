@@ -231,7 +231,11 @@ def test_deleting_incident_cascades_and_unlinks(db):
     db.add_all([inc, res])
     db.flush()
     rep = m.Report(source="citizen", text="flood", incident_id=inc.id)
-    db.add_all([rep, m.Assignment(incident_id=inc.id, resource_id=res.id), m.Alert(incident_id=inc.id, kind="critical", message="x")])
+    db.add_all([
+        rep,
+        m.Assignment(incident_id=inc.id, resource_id=res.id),
+        m.Alert(incident_id=inc.id, kind="critical", message="x"),
+    ])
     db.commit()
 
     db.delete(inc)
@@ -241,3 +245,18 @@ def test_deleting_incident_cascades_and_unlinks(db):
     assert db.scalar(select(m.Alert)) is None
     assert db.get(m.Report, rep.id).incident_id is None  # raw report kept, just unlinked
     assert db.get(m.Resource, res.id) is not None
+
+
+def test_ai_derived_text_columns_are_unbounded():
+    """title/address can come from the LLM; Postgres would reject an over-long VARCHAR and lose the report."""
+    from sqlalchemy import Text
+
+    for col in (m.Incident.__table__.c.title, m.Incident.__table__.c.address, m.Report.__table__.c.address):
+        assert isinstance(col.type, Text) and col.type.length is None, col
+
+
+def test_long_llm_location_is_stored(db):
+    inc = _incident(title="T" * 1000, address="A" * 5000)
+    db.add(inc)
+    db.commit()
+    assert len(db.get(m.Incident, inc.id).address) == 5000

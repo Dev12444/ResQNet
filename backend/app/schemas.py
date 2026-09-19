@@ -67,7 +67,9 @@ UTCDatetime = Annotated[datetime, PlainSerializer(to_utc_iso, return_type=str, w
 
 
 class RequestModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    # allow_inf_nan=False: Python's JSON parser accepts NaN/Infinity literals; they would
+    # corrupt sensor maths and are rejected by Postgres JSON / JSON responses (500).
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
 
 
 class ORMModel(BaseModel):
@@ -261,30 +263,38 @@ class UnmergeResponse(BaseModel):
 
 
 class PhotoAssessmentOut(BaseModel):
-    """Gemini Vision result for a report photo (contract §3 `classification.photo`)."""
+    """Gemini Vision result for a report photo (contract §3 `classification.photo`).
+
+    Output-only: no range checks here — this is serialised after the DB commit, so a
+    strict check would turn a saved report into a 500. BE2's vision service clamps values.
+    """
 
     relevant: bool
-    type: IncidentType | None
-    severity_hint: Severity | None
+    type: str | None
+    severity_hint: int | None
     hazards: list[str]
     description: str
-    confidence: float = Field(ge=0, le=1)
+    confidence: float
 
 
 class ClassificationOut(BaseModel):
-    """Mirror of services.classifier.ClassificationResult (contract §5)."""
+    """Mirror of services.classifier.ClassificationResult (contract §5).
+
+    Output-only (serialised after commit), so ranges are not re-validated; the values that
+    reach the DB are guarded by the Incident CHECK constraints instead.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
-    type: IncidentType
-    severity: Severity
-    priority: Priority
+    type: str
+    severity: int
+    priority: str
     title: str
     location_text: str | None
     people_affected_est: int | None
     hazards: list[str]
     reasoning: str
-    confidence: float = Field(ge=0, le=1)
+    confidence: float
     lang: str
     source_model: str  # "gemini" | "fallback" (rules on text) | "rules" (sensor)
     photo: PhotoAssessmentOut | None = None

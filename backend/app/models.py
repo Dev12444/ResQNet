@@ -105,10 +105,12 @@ class Incident(TimestampMixin, Base):
     severity: Mapped[int] = mapped_column(Integer, nullable=False)
     priority: Mapped[str] = mapped_column(String(2), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="new")
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Text, not VARCHAR(n): title/address can come from the LLM, and Postgres rejects
+    # over-long VARCHAR values — that would roll back (lose) the whole report.
+    title: Mapped[str] = mapped_column(Text, nullable=False)
     lat: Mapped[float | None] = mapped_column(Float)
     lng: Mapped[float | None] = mapped_column(Float)
-    address: Mapped[str | None] = mapped_column(String(300))
+    address: Mapped[str | None] = mapped_column(Text)
 
     ai_summary: Mapped[str | None] = mapped_column(Text)
     ai_reasoning: Mapped[str | None] = mapped_column(Text)
@@ -150,10 +152,10 @@ class Report(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     text: Mapped[str | None] = mapped_column(Text)
-    lang: Mapped[str | None] = mapped_column(String(8))
+    lang: Mapped[str | None] = mapped_column(String(16))
     lat: Mapped[float | None] = mapped_column(Float)
     lng: Mapped[float | None] = mapped_column(Float)
-    address: Mapped[str | None] = mapped_column(String(300))
+    address: Mapped[str | None] = mapped_column(Text)
     photo_url: Mapped[str | None] = mapped_column(Text)
     reporter: Mapped[str | None] = mapped_column(String(120))
     sensor: Mapped[dict[str, Any] | None] = mapped_column(JSONDict)
