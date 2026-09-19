@@ -33,9 +33,17 @@ class Thresholds:
     no_geo_sim: float  # one side has no coordinates → only near-identical text merges
 
 
-# Cosine scales differ per embedding model; calibrated on app/data/eval_incidents.json.
+# Cosine scales differ per embedding model; calibrated on app/data/eval_incidents.json (EN/GU/HI):
+#   gemini-embedding-001     same-event pairs min 0.86 / median 0.91; nearby different events max 0.83
+#   text-embedding-3-small   same-event min 0.09 / median 0.23 (EN↔GU pairs ~0.1); different events up to 0.70
+#   text-embedding-3-large   same-event min 0.23 / median 0.54; nearby different events up to 0.53
+# OpenAI embeddings can't separate cross-language duplicates, so with them text similarity never
+# vetoes a merge (geo + time + type decide, which scored P/R 1.0/1.0 alone); it's only used to allow
+# a merge when one side has no coordinates and the texts are near-identical.
 THRESHOLDS: dict[str, Thresholds] = {
     "gemini-embedding-001": Thresholds(0.80, 0.60, 0.90),
+    "text-embedding-3-small": Thresholds(0.0, 0.0, 0.85),
+    "text-embedding-3-large": Thresholds(0.0, 0.0, 0.85),
 }
 DEFAULT_THRESHOLDS = Thresholds(0.80, 0.60, 0.90)
 MAX_REPORTS_COMPARED = 5

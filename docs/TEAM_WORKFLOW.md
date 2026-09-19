@@ -46,7 +46,7 @@ npm run dev                 # http://localhost:3000
 > ⚠️ Frontend is **Next.js 16** — APIs differ from older versions. Tell your AI assistant: *"Read `frontend/AGENTS.md` and `node_modules/next/dist/docs/` before writing code."*
 > Optional UI kit: `npx shadcn@latest init` (FE2 does this once, first hour, then pushes).
 
-Each person gets their **own Gemini API key** (free tier limits are per key).
+AI keys: BE2's `.env` uses **OpenAI** (primary) + **Gemini** (backup/embeddings). Others only need a key if they run the AI pipeline locally — get your own free Gemini key (free tier is ~20 req/day on some models), never share or commit keys.
 
 ---
 

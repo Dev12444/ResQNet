@@ -33,13 +33,25 @@ from app.config import get_settings
 log = logging.getLogger("resqnet.llm")
 
 TIMEOUT_SEC = 12  # Gemini's API minimum is 10 s
-CACHE_VERSION = 2  # bump to invalidate every cached answer (e.g. after a big prompt change)
+CACHE_VERSION = 3  # bump to invalidate every cached answer (e.g. after a big prompt change)
 _CACHE_MAX = 2000
 COOLDOWN_SEC = 10
 RETRY_BACKOFF_SEC = 1.0
 DAILY_BENCH_SEC = 3600
 
 _cache: OrderedDict[str, Any] = OrderedDict()
+# eval.py --no-cache sets this: skip cache reads/writes but keep recording spend.
+BYPASS_CACHE = False
+# Which "provider:model" produced the last successful answer on this thread ("cache:<provider:model>" if cached).
+_last = threading.local()
+
+
+def last_source() -> str | None:
+    return getattr(_last, "source", None)
+
+
+def _set_source(src: str | None) -> None:
+    _last.source = src
 
 
 def _key(*parts: Any) -> str:
@@ -71,6 +83,8 @@ def _disk_conn() -> sqlite3.Connection | None:
 
 
 def _cache_get(k: str) -> Any:
+    if BYPASS_CACHE:
+        return None
     if k in _cache:
         _cache.move_to_end(k)
         return _cache[k]
@@ -89,6 +103,8 @@ def _cache_get(k: str) -> Any:
 
 
 def _cache_put(k: str, v: Any) -> None:
+    if BYPASS_CACHE:
+        return
     _cache[k] = v
     _cache.move_to_end(k)
     while len(_cache) > _CACHE_MAX:
@@ -271,17 +287,20 @@ def _take_slot(p: Provider, model: str) -> bool:
         return True
 
 
-def _bench(p: Provider, model: str, e: Exception) -> None:
+def _quota_secs(e: Exception) -> float:
+    """How long to stay away after a 429: daily quota / no credit → 1 h, else the API's retry hint."""
     msg = str(e)
     if "PerDay" in msg or _is_out_of_credit(e):
-        secs = DAILY_BENCH_SEC
-    elif m := _RETRY_DELAY.search(msg):
-        secs = float(m.group(1))
-    elif m := _TRY_AGAIN.search(msg):
-        secs = float(m.group(1)) / (1000 if m.group(2).lower() == "ms" else 1)
-    else:
-        secs = 60.0
-    secs = max(1.0, secs)
+        return DAILY_BENCH_SEC
+    if m := _RETRY_DELAY.search(msg):
+        return max(1.0, float(m.group(1)))
+    if m := _TRY_AGAIN.search(msg):
+        return max(1.0, float(m.group(1)) / (1000 if m.group(2).lower() == "ms" else 1))
+    return 60.0
+
+
+def _bench(p: Provider, model: str, e: Exception) -> None:
+    secs = _quota_secs(e)
     with _quota_lock:
         _benched_until[f"{p.name}:{model}"] = time.monotonic() + secs
     log.warning("%s model %s hit a quota/rate limit — skipping it for %ds", p.name, model, int(secs))
@@ -467,6 +486,7 @@ def _generate(prompt: str, system: str | None, schema: dict | None, temperature:
                 try:
                     text = _CALLERS[p.name](client, model, prompt, system, schema, temperature, image)
                     if text and text.strip():
+                        _set_source(f"{p.name}:{model}")
                         return text
                     break  # empty answer: try next model
                 except Exception as e:
@@ -509,16 +529,26 @@ def _parse_json(text: str | None) -> Any | None:
 
 # ============================================================ public API
 
+def _cached(k: str) -> Any | None:
+    """Cached generation result (and set last_source to 'cache:<who answered originally>')."""
+    hit = _cache_get(k)
+    if isinstance(hit, dict) and "v" in hit:
+        _set_source(f"cache:{hit.get('by') or '?'}")
+        return hit["v"]
+    return None
+
+
 def generate_json(prompt: str, schema: dict, system: str | None = None, temperature: float = 0.0) -> Any | None:
     """Return parsed JSON matching `schema`, or None."""
     if not available():
         return None
     k = _key("json", system, prompt, schema, temperature)
-    if (hit := _cache_get(k)) is not None:
+    if (hit := _cached(k)) is not None:
         return hit
+    _set_source(None)
     data = _parse_json(_generate(prompt, system, schema, temperature))
     if data is not None:
-        _cache_put(k, data)
+        _cache_put(k, {"v": data, "by": last_source()})
     return data
 
 
@@ -529,11 +559,12 @@ def generate_json_with_image(
     if not available() or not image:
         return None
     k = _key("img", system, prompt, hashlib.sha256(image).hexdigest(), schema, temperature)
-    if (hit := _cache_get(k)) is not None:
+    if (hit := _cached(k)) is not None:
         return hit
+    _set_source(None)
     data = _parse_json(_generate(prompt, system, schema, temperature, image=(image, mime_type)))
     if data is not None:
-        _cache_put(k, data)
+        _cache_put(k, {"v": data, "by": last_source()})
     return data
 
 
@@ -541,12 +572,13 @@ def generate_text(prompt: str, system: str | None = None, temperature: float = 0
     if not available():
         return None
     k = _key("text", system, prompt, temperature)
-    if (hit := _cache_get(k)) is not None:
+    if (hit := _cached(k)) is not None:
         return hit
+    _set_source(None)
     text = (_generate(prompt, system, None, temperature) or "").strip()
     if not text:
         return None
-    _cache_put(k, text)
+    _cache_put(k, {"v": text, "by": last_source()})
     return text
 
 
@@ -599,7 +631,12 @@ def embed_with_model(texts: list[str]) -> tuple[str, list[list[float]]] | None:
                         continue
                     raise
         except Exception as e:
-            _trip(p, "emb", e)
+            if _is_quota(e):
+                secs = _quota_secs(e)
+                _cooldown_until[(p.name, "emb")] = time.monotonic() + secs
+                log.warning("%s embeddings hit a quota — using the next provider for %ds", p.name, int(secs))
+            else:
+                _trip(p, "emb", e)
             continue
         for i, vec in zip(missing, vectors):
             out[i] = vec

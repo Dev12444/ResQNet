@@ -45,7 +45,7 @@ BadRequest.__name__ = "BadRequestError"
 def env(monkeypatch):
     st = get_settings()
     for k, v in {
-        "ai_enabled": True, "llm_providers": "openai,gemini", "embed_providers": "openai,gemini",
+        "ai_enabled": True, "llm_providers": "openai,gemini", "embed_providers": "openai,gemini",  # explicit order
         "openai_api_key": "sk-test", "openai_model": "gpt-4.1-mini", "openai_fallback_model": "gpt-4.1-nano",
         "openai_rpm": 100, "openai_budget_usd": 8.0,
         "gemini_api_key": "g-test", "gemini_model": "g1", "gemini_fallback_model": "g2", "gemini_rpm": 2,
@@ -203,3 +203,22 @@ def test_mismatched_vector_lengths_are_ignored():
     s = dedup.match_score(new_type="fire", new_lat=23.0, new_lng=72.5, new_at=now, new_text="new", cand=cand,
                           vectors={"new": [1.0, 0.0], "old": [1.0, 0.0, 0.0]}, embed_model="x")
     assert s is not None and s >= 0.5  # treated as "no similarity info" → geo/time/type only
+
+
+def test_embedding_quota_uses_retry_hint_and_next_provider(env):
+    class RateLimitError(Exception):
+        pass
+
+    fake = env.install(FakeOpenAI(embed_dim=5))
+    env.monkeypatch.setattr(env.st, "embed_providers", "gemini,openai")
+
+    def gemini_embed_fails(p, client, texts):
+        if p.name == "gemini":
+            raise RateLimitError("429 RESOURCE_EXHAUSTED 'retryDelay': '30s'")
+        return FakeOpenAI(embed_dim=5)._embed(p.embed_model, texts).data and [[1.0] * 5 for _ in texts]
+
+    env.monkeypatch.setattr(llm, "_embed_call", gemini_embed_fails)
+    model, vecs = llm.embed_with_model(["x"])
+    assert model == "text-embedding-3-small" and len(vecs[0]) == 5
+    wait = llm._cooldown_until[("gemini", "emb")] - llm.time.monotonic()
+    assert 25 < wait <= 30

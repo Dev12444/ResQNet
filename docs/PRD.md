@@ -83,7 +83,7 @@ Real 108/112 telephony integration, authentication/RBAC beyond a role switcher, 
 
 ### FR-2 Incident Classification (AI)
 - Output (strict JSON): `type ∈ {flood, fire, road_accident, industrial, medical, building_collapse, other}`, `severity 1-5`, `priority P1-P4`, `location_text`, `people_affected_est`, `hazards[]`, `reasoning`, `confidence 0-1`, `lang`
-- Model: Gemini (`gemini-3.5-flash-lite`, fallback `gemini-3.6-flash`) with JSON schema response; temperature 0
+- Model: OpenAI `gpt-4.1-mini` (fallback `gpt-4.1-nano`) with strict JSON-schema output, temperature 0; Gemini as backup provider; spend capped at $8
 - Fallback: keyword + rule classifier if API fails/rate-limited — the pipeline must never block
 - Sensor reports: rule-based (e.g. water level > danger mark → flood, severity by margin)
 - Priority rule: P1 = severity ≥ 4 **or** hazards include `trapped_people|gas_leak|fire_spread`; P2 = severity 3; P3 = 2; P4 = 1
@@ -93,7 +93,7 @@ A new report is merged into an existing **open** incident when **all** hold:
 - same `type` (or one is `other`)
 - distance ≤ **300 m** (haversine; 1 km for floods — they cover areas)
 - time gap ≤ **30 min** from incident's last report
-- text similarity: embedding cosine ≥ **0.80** (Gemini `gemini-embedding-001`) — or, if embeddings unavailable, the first three rules alone
+- text similarity: embedding cosine ≥ **0.80** (Gemini `gemini-embedding-001`, which handles Gujarati/Hindi↔English; OpenAI embeddings are the backup and only used for no-location matches) — or, if embeddings unavailable, the first three rules alone
 
 On merge: append report, bump `report_count`, recompute severity = max(existing, new), re-summarise, broadcast `incident.merged`. Dispatcher can **unmerge** (Should).
 
@@ -184,7 +184,7 @@ Status lifecycle: `new → triaged → dispatched → on_scene → resolved` (an
 ## 10. AI design summary
 | Task | Method | Fallback |
 |---|---|---|
-| Classify | Gemini JSON-schema output, few-shot incl. Gujarati/Hindi | keyword rules |
+| Classify | OpenAI (→ Gemini) JSON-schema output, few-shot incl. Gujarati/Hindi | keyword rules |
 | Severity/priority | Gemini + deterministic priority rule | rules |
 | Dedup | haversine + time window + embedding cosine | geo + time only |
 | Recommend | weighted score (deterministic) + LLM rationale | score only, template reason |

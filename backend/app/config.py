@@ -11,7 +11,8 @@ class Settings(BaseSettings):
 
     # BE2: AI providers, tried in this order (then rule-based fallback). Comma-separated: openai, gemini.
     llm_providers: str = "openai,gemini"
-    embed_providers: str = "openai,gemini"
+    # Gemini embeddings first: OpenAI's score EN↔Gujarati duplicates ~0.1 cosine (see dedup.THRESHOLDS).
+    embed_providers: str = "gemini,openai"
 
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
