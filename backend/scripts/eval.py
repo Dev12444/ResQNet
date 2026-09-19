@@ -37,7 +37,7 @@ def main() -> None:
 
     llm.BYPASS_CACHE = args.no_cache  # still records OpenAI spend
 
-    rows = json.loads(DATA.read_text())
+    rows = json.loads(DATA.read_text(encoding="utf-8"))
     t0 = datetime(2026, 9, 19, 8, 0, tzinfo=timezone.utc)
 
     # ---------- classification
@@ -116,7 +116,7 @@ def main() -> None:
         "run_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     if not args.no_save:
-        OUT.write_text(json.dumps(out, indent=2))
+        OUT.write_text(json.dumps(out, indent=2), encoding="utf-8")
 
     print(json.dumps(out, indent=2))
     if not args.quiet:

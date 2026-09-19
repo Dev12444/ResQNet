@@ -2,6 +2,8 @@
 
 Contract: docs/API_CONTRACT.md §3 (GET /recommendations) and §5 · PRD FR-4.
 Score = 0.5·capability_fit + 0.35·(1 − eta/eta_max) + 0.15·load_balance
+capability_fit = 0.6·(how important the kind is) + 0.4·(share of wanted unit capabilities it has),
+e.g. a fire with people trapped prefers the truck with an aerial ladder / rescue kit.
 Deterministic ranking; Gemini only writes the one-line reasons (template fallback).
 """
 from __future__ import annotations
@@ -34,6 +36,65 @@ W_CAP, W_ETA, W_LOAD = 0.5, 0.35, 0.15
 HOSPITAL_TYPES = {"fire", "road_accident", "industrial", "medical", "building_collapse"}
 HOSPITAL_HAZARDS = {"injuries", "trapped_people", "gas_leak", "chemical"}
 TRAUMA_TYPES = {"road_accident", "building_collapse", "industrial", "fire"}
+
+# Words in the incident title/summary that call for a specialised ambulance or hospital.
+_CARDIAC = ("heart", "cardiac", "chest pain", "collapsed", "unconscious", "stroke", "હાર્ટ", "हार्ट", "दिल")
+_CHILD = ("child", "children", "baby", "infant", "kid", "school", "બાળક", "बच्च")
+# How many extra km a matching specialty is worth when choosing a hospital (time-critical care counts more).
+SPECIALTY_KM = {"cardiac": 3.0, "burns": 2.0, "trauma": 1.5, "pediatric": 1.5}
+_BURNS = ("burn", "દાઝ", "जल गए", "झुलस")
+
+
+def _text(incident: Any) -> str:
+    return " ".join(str(_get(incident, k) or "") for k in ("title", "ai_summary", "ai_reasoning")).lower()
+
+
+def wanted_capabilities(incident: Any) -> dict[str, list[str]]:
+    """Unit capabilities (seed_resources.json vocabulary) that make a unit a better fit, per kind."""
+    type_ = _get(incident, "type", "other")
+    hz = set(_get(incident, "hazards") or [])
+    sev = _get(incident, "severity") or 3
+    text = _text(incident)
+    want: dict[str, list[str]] = {}
+
+    amb: list[str] = []
+    if any(w in text for w in _CARDIAC):
+        amb += ["cardiac", "als"]
+    if any(w in text for w in _CHILD):
+        amb.append("pediatric")
+    if type_ in TRAUMA_TYPES or hz & {"injuries", "trapped_people", "structural"}:
+        amb.append("trauma")
+    if sev >= 4 and "als" not in amb:
+        amb.append("als")
+    want["ambulance"] = amb
+
+    fire: list[str] = []
+    if "trapped_people" in hz or type_ == "building_collapse":
+        fire += ["rescue", "aerial_ladder"]
+    if "fire_spread" in hz or type_ in ("fire", "industrial"):
+        fire.append("water_tender")
+    want["fire_truck"] = fire
+
+    want["rescue_boat"] = ["swift_water"] if ("rising_water" in hz or sev >= 4) else []
+    ndrf = []
+    if type_ == "flood":
+        ndrf.append("flood_rescue")
+    if type_ == "building_collapse" or "structural" in hz:
+        ndrf.append("collapse_rescue")
+    want["ndrf_team"] = ndrf
+    hazmat = []
+    if "gas_leak" in hz:
+        hazmat.append("gas_leak")
+    if "chemical" in hz:
+        hazmat += ["chemical", "decontamination"]
+    want["hazmat"] = hazmat
+    police = []
+    if type_ == "road_accident" or "blocked_road" in hz:
+        police.append("traffic_control")
+    if (_get(incident, "people_affected_est") or 0) >= 20 or type_ == "flood" and sev >= 4:
+        police.append("crowd_control")
+    want["police"] = police
+    return {k: list(dict.fromkeys(v)) for k, v in want.items()}
 
 
 def _haversine_km(lat1, lng1, lat2, lng2) -> float:
@@ -74,6 +135,7 @@ def resource_dict(r: Any) -> dict:
         "callsign": _get(r, "callsign"),
         "kind": _get(r, "kind"),
         "status": _get(r, "status"),
+        "capabilities": list(_get(r, "capabilities") or []),
         "lat": _get(r, "lat"),
         "lng": _get(r, "lng"),
         "base": _get(r, "base"),
@@ -114,6 +176,7 @@ def rank_resources(incident: Any, resources: list[Any]) -> dict:
     available = [r for r in resources if _get(r, "status") == "available"]
     per_base = Counter((_get(r, "kind"), _get(r, "base")) for r in available)
     per_kind = Counter(_get(r, "kind") for r in available)
+    wanted = wanted_capabilities(incident)
 
     recs: dict[str, list[dict]] = {}
     shortages: list[str] = []
@@ -123,7 +186,8 @@ def rank_resources(incident: Any, resources: list[Any]) -> dict:
             shortages.append(kind)
             recs[kind] = []
             continue
-        cap_fit = max(0.6, 1.0 - 0.15 * rank)
+        kind_fit = max(0.6, 1.0 - 0.15 * rank)
+        want = wanted.get(kind, [])
         rows = []
         for r in pool:
             if None in (ilat, ilng, _get(r, "lat"), _get(r, "lng")):
@@ -136,6 +200,8 @@ def rank_resources(incident: Any, resources: list[Any]) -> dict:
         for r, dist, eta in rows:
             # Prefer taking a unit from a base that still has others of the same kind left.
             load = per_base[(kind, _get(r, "base"))] / per_kind[kind]
+            matched = [c for c in want if c in (_get(r, "capabilities") or [])]
+            cap_fit = 0.6 * kind_fit + 0.4 * (len(matched) / len(want) if want else 1.0)
             score = W_CAP * cap_fit + W_ETA * (1 - eta / eta_max) + W_LOAD * load
             out.append({
                 "resource": resource_dict(r),
@@ -143,12 +209,30 @@ def rank_resources(incident: Any, resources: list[Any]) -> dict:
                 "distance_km": round(dist, 2),
                 "eta_min": eta,
                 "score": round(score, 3),
+                "matched_capabilities": matched,
                 "reason": "",
             })
         out.sort(key=lambda x: (-x["score"], x["eta_min"]))
         recs[kind] = out[:TOP_N]
     suggested = [recs[k][0]["resource"]["id"] for k in kinds if recs.get(k)]
     return {"needed_kinds": kinds, "recommendations": recs, "suggested_resource_ids": suggested, "shortages": shortages}
+
+
+def wanted_specialties(incident: Any) -> list[str]:
+    """Hospital specialties (seed_facilities.json vocabulary) that suit this incident."""
+    type_ = _get(incident, "type", "other")
+    hz = set(_get(incident, "hazards") or [])
+    text = _text(incident)
+    specs: list[str] = []
+    if type_ in TRAUMA_TYPES or hz & {"injuries", "trapped_people", "structural"}:
+        specs.append("trauma")
+    if type_ in ("fire", "industrial") or any(w in text for w in _BURNS):
+        specs.append("burns")
+    if any(w in text for w in _CARDIAC):
+        specs.append("cardiac")
+    if any(w in text for w in _CHILD):
+        specs.append("pediatric")
+    return specs
 
 
 def pick_facility(incident: Any, facilities: list[Any]) -> dict | None:
@@ -168,16 +252,17 @@ def pick_facility(incident: Any, facilities: list[Any]) -> dict | None:
     if not pool or None in (ilat, ilng):
         return None
 
+    wanted_specs = wanted_specialties(incident) if want == "hospital" else []
+
     def rank(f):
         d = _haversine_km(ilat, ilng, _get(f, "lat"), _get(f, "lng"))
-        specialty_bonus = -1.0 if type_ in TRAUMA_TYPES and "trauma" in (_get(f, "specialties") or []) else 0.0
-        burns_bonus = -1.0 if type_ in ("fire", "industrial") and "burns" in (_get(f, "specialties") or []) else 0.0
-        return d + specialty_bonus + burns_bonus, d  # specialties worth ~1 km each
+        have = set(_get(f, "specialties") or [])
+        return d - sum(SPECIALTY_KM.get(s, 1.0) for s in wanted_specs if s in have), d
 
     best = min(pool, key=lambda f: rank(f)[0])
     dist = rank(best)[1]
     beds = _get(best, "beds_available")
-    specs = [s for s in (_get(best, "specialties") or []) if s in ("trauma", "burns")]
+    specs = [s for s in wanted_specs if s in (_get(best, "specialties") or [])]
     reason = f"Nearest {want}" + (f" with {'/'.join(specs)} care" if specs else "") + (
         f", {beds} beds available." if beds is not None else "."
     )
@@ -187,6 +272,8 @@ def pick_facility(incident: Any, facilities: list[Any]) -> dict | None:
 def _template_reason(rec: dict, best_eta: int) -> str:
     r = rec["resource"]
     parts = [f"{rec['distance_km']} km away, ETA {rec['eta_min']} min"]
+    if rec.get("matched_capabilities"):
+        parts.insert(0, "Has " + ", ".join(c.replace("_", " ") for c in rec["matched_capabilities"]))
     if rec["eta_min"] <= best_eta:
         parts.insert(0, f"Fastest available {r['kind'].replace('_', ' ')}")
     if r.get("base"):
@@ -197,7 +284,7 @@ def _template_reason(rec: dict, best_eta: int) -> str:
 REASON_SYSTEM = (
     "You are an emergency dispatch assistant in Ahmedabad. For each candidate unit write ONE short "
     "English reason (max 18 words) why it suits this incident, using only the facts given (distance, ETA, "
-    "base, kind). Be concrete; no fluff."
+    "base, kind, capabilities). Be concrete; no fluff."
 )
 REASON_SCHEMA = {
     "type": "object",
@@ -226,7 +313,9 @@ def _add_reasons(incident: Any, ranked: dict) -> None:
 
     lines = [
         f'- id={rec["resource"]["id"]} {rec["resource"]["callsign"]} ({rec["kind"]}), base {rec["resource"]["base"]}, '
-        f'{rec["distance_km"]} km, ETA {rec["eta_min"]} min, score {rec["score"]}'
+        f'{rec["distance_km"]} km, ETA {rec["eta_min"]} min, score {rec["score"]}, '
+        f'capabilities {", ".join(rec["resource"].get("capabilities") or []) or "standard"}'
+        + (f' (matches {", ".join(rec["matched_capabilities"])})' if rec.get("matched_capabilities") else "")
         for rec in all_recs
     ]
     prompt = (

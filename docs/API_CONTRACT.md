@@ -171,9 +171,11 @@ Capability map (which kinds an incident type needs — used by recommender):
   "distance_km": 2.4,
   "eta_min": 9,
   "score": 0.87,
+  "matched_capabilities": ["swift_water"],
   "reason": "Closest available boat; 9 min via river channel."
 }
 ```
+`matched_capabilities` = the unit's capabilities this incident calls for (e.g. `aerial_ladder` + `rescue` for people trapped in a fire, `cardiac` for chest pain). Show them as chips; they raise the unit's score, so a slightly farther but better-equipped unit can rank first.
 
 ### Alert
 ```json
@@ -502,4 +504,5 @@ Rules:
 | 2026-09-19 | v1 | team |
 | 2026-09-19 | `photo_url` formats, `classification.photo`, geocoding note, `GET /api/ai/status`, `triage.py` internal API | BE2 |
 | 2026-09-19 | OpenAI primary provider: `source_model` values, `classification.model`, `/api/ai/status` shape | BE2 |
+| 2026-09-19 | `Recommendation.matched_capabilities`; recommender weighs unit capabilities + hospital specialties (cardiac, burns, trauma, pediatric) | BE2 |
 | 2026-09-19 | `GET /api/incidents/{id}/trust`, `GET /api/analytics/insights`; hotspot `top_type` never null; optional `incident_id` on `POST /api/reports` | BE2 |

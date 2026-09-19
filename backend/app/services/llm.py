@@ -219,7 +219,10 @@ def _client_for(p: Provider):
             if p.name == "openai":
                 from openai import OpenAI
 
-                _clients[p.name] = OpenAI(api_key=p.api_key, timeout=TIMEOUT_SEC, max_retries=0)
+                # gzip only: newer SDKs decode brotli with whatever `Brotli` package is installed, and old
+                # ones (e.g. Anaconda's 1.0.9) crash with "process() takes no keyword arguments".
+                _clients[p.name] = OpenAI(api_key=p.api_key, timeout=TIMEOUT_SEC, max_retries=0,
+                                          default_headers={"Accept-Encoding": "gzip, deflate"})
             else:
                 from google import genai
                 from google.genai import types

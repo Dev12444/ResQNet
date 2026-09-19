@@ -241,6 +241,11 @@ SENSOR_TYPES = {
 }
 
 
+# Metrics that describe conditions (weather), not damage: they corroborate an incident but must not
+# escalate it on their own — heavy rain at 1.4x the threshold is not a severity-5 emergency.
+SENSOR_MAX_SEVERITY = {"rainfall_mm_hr": 3}
+
+
 def classify_sensor(sensor: dict) -> ClassificationResult:
     metric = str(sensor.get("metric", ""))
     type_ = SENSOR_TYPES.get(metric, "other")
@@ -259,6 +264,7 @@ def classify_sensor(sensor: dict) -> ClassificationResult:
         sev = 4
     else:
         sev = 5
+    sev = min(sev, SENSOR_MAX_SEVERITY.get(metric, 5))
     hazards = {"flood": ["rising_water"], "industrial": ["gas_leak", "chemical"], "fire": ["fire_spread"]}.get(type_, [])
     if ratio < 1.0:
         hazards = []

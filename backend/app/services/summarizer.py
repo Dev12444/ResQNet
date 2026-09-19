@@ -89,8 +89,9 @@ def _fallback_summary(incident: Any, reports: list[Any]) -> dict:
     hazards = _get(incident, "hazards") or []
     first = next((_get(r, "text") for r in reports if _get(r, "text")), None)
     sources = sorted({_get(r, "source") for r in reports if _get(r, "source")})
+    title = _get(incident, "title") or type_.replace("_", " ").title()
     parts = [
-        f"{(_get(incident, 'title') or type_.replace('_', ' ').title())} at {where} "
+        f"{title}{'' if where.lower() in title.lower() else f' at {where}'} "
         f"(severity {_get(incident, 'severity', '?')}, {_get(incident, 'priority', '?')}).",
         f"{n} report{'s' if n != 1 else ''} received" + (f" via {', '.join(sources)}" if sources else "") + ".",
     ]

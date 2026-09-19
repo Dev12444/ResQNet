@@ -273,4 +273,4 @@ def eval_results() -> dict:
     if not EVAL_RESULTS.exists():
         return {"n": 0, "type_accuracy": None, "severity_within_1": None, "dedup_precision": None,
                 "dedup_recall": None, "avg_latency_ms": None, "run_at": None}
-    return json.loads(EVAL_RESULTS.read_text())
+    return json.loads(EVAL_RESULTS.read_text(encoding="utf-8"))
