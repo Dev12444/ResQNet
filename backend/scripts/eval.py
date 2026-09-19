@@ -27,9 +27,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-ai", action="store_true", help="force rule-based fallback")
     ap.add_argument("--quiet", action="store_true", help="don't list misclassifications")
+    ap.add_argument("--no-cache", action="store_true", help="bypass the disk cache to measure real latency (uses quota)")
+    ap.add_argument("--no-save", action="store_true", help="print only; don't overwrite eval_results.json")
     args = ap.parse_args()
     if args.no_ai:
         os.environ["AI_ENABLED"] = "false"
+    if args.no_cache:
+        os.environ["LLM_CACHE_PATH"] = ""
 
     from app.config import get_settings
     from app.services import classifier, dedup, llm
@@ -88,6 +92,7 @@ def main() -> None:
     precision = tp / (tp + fp) if tp + fp else 1.0
     recall = tp / (tp + fn) if tp + fn else 1.0
 
+    from_cache = bool(models.get("gemini")) and sum(latencies) / n < 50
     out = {
         "n": n,
         "type_accuracy": round(sum(type_ok) / n, 3),
@@ -99,13 +104,16 @@ def main() -> None:
         "dedup_recall": round(recall, 3),
         "true_incidents": len({r["dup_group"] for r in rows}),
         "predicted_incidents": len(clusters),
-        "avg_latency_ms": round(sum(latencies) / n),
+        # Cached runs are ~0 ms and would mislead the pitch; report null and flag it instead.
+        "avg_latency_ms": None if from_cache else round(sum(latencies) / n),
+        "from_cache": from_cache,
         "models": models,
         "embeddings": use_emb,
         "llm_model": settings.gemini_model if models.get("gemini") else "rules",
         "run_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
-    OUT.write_text(json.dumps(out, indent=2))
+    if not args.no_save:
+        OUT.write_text(json.dumps(out, indent=2))
 
     print(json.dumps(out, indent=2))
     if not args.quiet:
@@ -116,7 +124,7 @@ def main() -> None:
             for r, c in bad:
                 print(f"  #{r['id']:>2} expected {r['expected_type']}/{r['expected_severity']} "
                       f"got {c.type}/{c.severity} [{c.source_model}] — {r['text'][:70]}")
-    print(f"\nSaved → {OUT.relative_to(ROOT)}")
+    print("\n(not saved)" if args.no_save else f"\nSaved → {OUT.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

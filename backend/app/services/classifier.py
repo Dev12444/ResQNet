@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 
 from app.services import llm
 from app.services.gazetteer import find_place
 
 log = logging.getLogger("resqnet.classifier")
+_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="classify")
 
 INCIDENT_TYPES = ["flood", "fire", "road_accident", "industrial", "medical", "building_collapse", "other"]
 HAZARDS = [
@@ -41,6 +43,7 @@ class ClassificationResult:
     confidence: float = 0.5
     lang: str = "en"
     source_model: str = "fallback"
+    photo: dict | None = None  # PhotoAssessment.to_dict() when a usable photo was analysed
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -359,19 +362,53 @@ def _gemini_classify(text: str, source: str, lang_hint: str | None) -> Classific
 
 # ---------------------------------------------------------------- public API
 
+PHOTO_MIN_CONFIDENCE = 0.5
+
+
+def _merge_photo(result: ClassificationResult, photo) -> ClassificationResult:
+    """Let a relevant photo raise severity by at most +1, add visible hazards, fill an unknown type."""
+    if photo is None:
+        return result
+    result.photo = photo.to_dict()
+    if not photo.relevant or photo.confidence < PHOTO_MIN_CONFIDENCE:
+        return result
+    if result.type == "other" and photo.type and photo.type != "other":
+        result.type = photo.type
+    if photo.severity_hint and photo.severity_hint > result.severity:
+        result.severity = min(photo.severity_hint, result.severity + 1)
+    result.hazards = list(dict.fromkeys(result.hazards + photo.hazards))
+    result.priority = priority_for(result.severity, result.hazards)
+    if photo.description:
+        result.reasoning = f"{result.reasoning} Photo: {photo.description}".strip()
+    return result
+
+
 def classify(
     text: str | None,
     source: str,
     sensor: dict | None = None,
     lang_hint: str | None = None,
+    photo_url: str | None = None,
 ) -> ClassificationResult:
-    """Classify one report. Never raises."""
+    """Classify one report (optionally with a photo). Never raises."""
     try:
         if source == "sensor" and sensor:
             return classify_sensor(sensor)
+        photo_future = None
+        if photo_url:
+            from app.services.vision import assess_photo
+
+            photo_future = _POOL.submit(assess_photo, photo_url)  # runs in parallel with text triage
         if not text or not text.strip():
-            return fallback_classify(text, lang_hint)
-        return _gemini_classify(text.strip(), source, lang_hint) or fallback_classify(text, lang_hint)
+            result = fallback_classify(text, lang_hint)
+        else:
+            result = _gemini_classify(text.strip(), source, lang_hint) or fallback_classify(text, lang_hint)
+        if photo_future is not None:
+            try:
+                result = _merge_photo(result, photo_future.result(timeout=15))
+            except Exception as e:  # photo is best-effort
+                log.info("Photo assessment skipped: %s", e)
+        return result
     except Exception as e:  # last-resort guard — the pipeline must never break
         log.exception("classify() failed: %s", e)
         return ClassificationResult(

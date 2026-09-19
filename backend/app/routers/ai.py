@@ -10,8 +10,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import get_db
-from app.services import recommender, summarizer
+from app.services import llm, recommender, summarizer
 
 router = APIRouter(prefix="/api", tags=["ai"])
 
@@ -52,4 +53,19 @@ def generate_sitrep(db: Session = Depends(get_db)) -> dict:
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "markdown": summarizer.sitrep(incidents),
         "active_count": len(incidents),
+    }
+
+
+@router.get("/ai/status")
+def ai_status() -> dict:
+    """Which Gemini models are usable right now (quota/pacing) — handy during the demo."""
+    st = get_settings()
+    return {
+        "ai_enabled": st.ai_available,
+        "generation_available": llm.available("gen"),
+        "embeddings_available": llm.available("emb"),
+        "models": llm.quota_status(),
+        "embed_model": st.gemini_embed_model,
+        "rpm_per_model": st.gemini_rpm,
+        "disk_cache": bool(st.llm_cache_path),
     }

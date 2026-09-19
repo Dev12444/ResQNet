@@ -8,8 +8,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
+import sqlite3
+import threading
 import time
 from collections import OrderedDict
+from pathlib import Path
 from typing import Any
 
 from app.config import get_settings
@@ -33,10 +37,43 @@ def _key(*parts: Any) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+# Persistent cache so AI results survive restarts (fast, offline-safe demo after `scripts/warm_cache.py`).
+# Set LLM_CACHE_PATH="" to disable. Path is relative to the backend/ working directory; gitignored (*.sqlite3).
+_disk: sqlite3.Connection | None = None
+_disk_lock = threading.Lock()
+_disk_failed = False
+
+
+def _disk_conn() -> sqlite3.Connection | None:
+    global _disk, _disk_failed
+    path = get_settings().llm_cache_path
+    if _disk is None and not _disk_failed and path:
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            _disk = sqlite3.connect(path, check_same_thread=False)
+            _disk.execute("CREATE TABLE IF NOT EXISTS cache (k TEXT PRIMARY KEY, v TEXT NOT NULL)")
+            _disk.commit()
+        except sqlite3.Error as e:
+            log.warning("Disk cache disabled: %s", e)
+            _disk_failed = True
+    return _disk
+
+
 def _cache_get(k: str) -> Any:
     if k in _cache:
         _cache.move_to_end(k)
         return _cache[k]
+    conn = _disk_conn()
+    if conn is not None:
+        try:
+            with _disk_lock:
+                row = conn.execute("SELECT v FROM cache WHERE k = ?", (k,)).fetchone()
+        except sqlite3.Error:
+            row = None
+        if row is not None:
+            v = json.loads(row[0])
+            _cache[k] = v
+            return v
     return None
 
 
@@ -45,6 +82,14 @@ def _cache_put(k: str, v: Any) -> None:
     _cache.move_to_end(k)
     while len(_cache) > _CACHE_MAX:
         _cache.popitem(last=False)
+    conn = _disk_conn()
+    if conn is not None:
+        try:
+            with _disk_lock:
+                conn.execute("INSERT OR REPLACE INTO cache (k, v) VALUES (?, ?)", (k, json.dumps(v, ensure_ascii=False)))
+                conn.commit()
+        except sqlite3.Error as e:
+            log.info("Disk cache write failed: %s", e)
 
 
 def available(kind: str = "gen") -> bool:
@@ -84,7 +129,66 @@ _no_thinking: set[str] = set()
 
 def _models() -> list[str]:
     st = get_settings()
-    return [m for m in dict.fromkeys([st.gemini_model, st.gemini_fallback_model]) if m]
+    names = [st.gemini_model, *st.gemini_fallback_model.split(",")]
+    return [m for m in dict.fromkeys(n.strip() for n in names) if m]
+
+
+# ---- quota handling: pace each model client-side and bench models that hit 429s
+_calls: dict[str, list[float]] = {}       # model -> monotonic timestamps of calls in the last 60 s
+_benched_until: dict[str, float] = {}     # model -> monotonic time it may be used again
+_quota_lock = threading.Lock()
+DAILY_BENCH_SEC = 3600                    # daily quota gone: skip the model for an hour (then re-probe)
+_RETRY_DELAY = re.compile(r"retryDelay['\"]?:\s*['\"]?(\d+(?:\.\d+)?)s")
+
+
+def _take_slot(model: str) -> bool:
+    """Reserve a request slot for `model` under the RPM budget. False = skip this model for now."""
+    now = time.monotonic()
+    with _quota_lock:
+        if _benched_until.get(model, 0) > now:
+            return False
+        recent = [t for t in _calls.get(model, []) if now - t < 60]
+        if len(recent) >= max(1, get_settings().gemini_rpm):
+            _calls[model] = recent
+            return False
+        recent.append(now)
+        _calls[model] = recent
+        return True
+
+
+def _bench(model: str, e: Exception) -> None:
+    msg = str(e)
+    if "PerDay" in msg:
+        secs = DAILY_BENCH_SEC
+    else:
+        m = _RETRY_DELAY.search(msg)
+        secs = float(m.group(1)) if m else 60.0
+    with _quota_lock:
+        _benched_until[model] = time.monotonic() + secs
+    log.warning("Gemini model %s hit its quota — skipping it for %ds", model, int(secs))
+
+
+def has_capacity() -> bool:
+    """True if at least one model could take a request right now (not benched, under its RPM)."""
+    now = time.monotonic()
+    rpm = max(1, get_settings().gemini_rpm)
+    with _quota_lock:
+        return any(
+            _benched_until.get(m, 0) <= now and len([t for t in _calls.get(m, []) if now - t < 60]) < rpm
+            for m in _models()
+        )
+
+
+def quota_status() -> dict:
+    """For debugging / the /health endpoint: which models are usable right now."""
+    now = time.monotonic()
+    return {
+        m: {
+            "calls_last_min": len([t for t in _calls.get(m, []) if now - t < 60]),
+            "benched_for_sec": max(0, int(_benched_until.get(m, 0) - now)),
+        }
+        for m in _models()
+    }
 
 
 def _gen_config(model: str, system: str | None, schema: dict | None, temperature: float):
@@ -102,13 +206,15 @@ def _gen_config(model: str, system: str | None, schema: dict | None, temperature
     return types.GenerateContentConfig(**kwargs)
 
 
-def _generate(prompt: str, system: str | None, schema: dict | None, temperature: float) -> str | None:
-    """Try each configured model in order. Returns raw response text or None."""
+def _generate(prompt: Any, system: str | None, schema: dict | None, temperature: float) -> str | None:
+    """Try each configured model in order. `prompt` is a string or a list of Parts. Returns text or None."""
     client = _get_client()
     if client is None:
         return None
     last_err: Exception | None = None
     for model in _models():
+        if not _take_slot(model):
+            continue
         retried = False
         for _attempt in range(3):
             try:
@@ -121,13 +227,17 @@ def _generate(prompt: str, system: str | None, schema: dict | None, temperature:
                 if "thinking" in str(e).lower() and model not in _no_thinking:
                     _no_thinking.add(model)  # retry without thinking_config
                     continue
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    _bench(model, e)  # quota: move straight to the next model
+                    break
                 if _transient(e) and not retried:
                     retried = True
                     time.sleep(RETRY_BACKOFF_SEC)
                     continue
                 log.info("Gemini model %s failed (%s), trying next", model, type(e).__name__)
                 break
-    if last_err is not None:
+    # Only cool down the whole API on real outages; quota/pacing skips are handled per model.
+    if last_err is not None and not ("429" in str(last_err) or "RESOURCE_EXHAUSTED" in str(last_err)):
         _trip(last_err, "gen")
     return None
 
@@ -146,6 +256,30 @@ def generate_json(prompt: str, schema: dict, system: str | None = None, temperat
         data = json.loads(text)
     except (TypeError, ValueError) as e:
         log.warning("Gemini returned invalid JSON: %s", e)
+        return None
+    _cache_put(k, data)
+    return data
+
+
+def generate_json_with_image(
+    prompt: str, image: bytes, mime_type: str, schema: dict, system: str | None = None, temperature: float = 0.0
+) -> Any | None:
+    """Multimodal variant of generate_json (Gemini Vision). Returns parsed JSON or None."""
+    if not available() or not image:
+        return None
+    k = _key("img", _models(), system, prompt, hashlib.sha256(image).hexdigest(), schema, temperature)
+    if (hit := _cache_get(k)) is not None:
+        return hit
+    from google.genai import types
+
+    parts = [types.Part.from_bytes(data=image, mime_type=mime_type), prompt]
+    text = _generate(parts, system, schema, temperature)
+    if text is None:
+        return None
+    try:
+        data = json.loads(text)
+    except (TypeError, ValueError) as e:
+        log.warning("Gemini vision returned invalid JSON: %s", e)
         return None
     _cache_put(k, data)
     return data
