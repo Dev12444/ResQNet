@@ -1,9 +1,8 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { ChevronDown, Filter, Radio, Search, Waves, Flame, HeartPulse, Car, Factory, Building2 } from 'lucide-react';
+import { ChevronDown, Filter, Radio, Waves, Flame, HeartPulse, Car, Factory, Building2 } from 'lucide-react';
 import type { Incident, IncidentType } from '@/components/command/view';
 const icon=(t:IncidentType)=>t==='flood'?<Waves size={15}/>:t==='fire'?<Flame size={15}/>:t==='medical'?<HeartPulse size={15}/>:t==='road_accident'?<Car size={15}/>:t==='industrial'?<Factory size={15}/>:<Building2 size={15}/>;
-const labels:Record<IncidentType,string>={flood:'Flood',fire:'Fire',road_accident:'Road accident',industrial:'Industrial',medical:'Medical',building_collapse:'Collapse',other:'Other'};
 export function IncidentQueue({incidents,selectedId,onSelect}:{incidents:Incident[];selectedId:string|null;onSelect:(i:Incident)=>void}){
  const [type,setType]=useState('all'); const [status,setStatus]=useState('all'); const [sev,setSev]=useState('all');
  const types=useMemo(()=>Array.from(new Set(incidents.map(i=>i.type))),[incidents]);

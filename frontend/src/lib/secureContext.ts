@@ -24,12 +24,3 @@ export function isSecureContext(): boolean {
   if (typeof window.isSecureContext === "boolean") return window.isSecureContext;
   return window.location.protocol === "https:";
 }
-
-/**
- * True when the page is served over plain HTTP from somewhere other than this
- * device — the case that breaks a phone on the LAN and nothing else.
- */
-export function isInsecureRemoteOrigin(): boolean {
-  if (typeof window === "undefined") return false;
-  return !isSecureContext();
-}

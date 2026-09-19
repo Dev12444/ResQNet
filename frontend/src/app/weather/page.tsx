@@ -33,6 +33,7 @@ import {
   LoadingState,
 } from "@/components/layout/primitives";
 import { DataModeBadge } from "@/components/layout/ConnectionBar";
+import { FlashAlertHistory } from "@/components/flash/FlashAlertHistory";
 import {
   HUE_PRIMARY,
   SERIES_PAIR,
@@ -263,6 +264,18 @@ export default function WeatherPage() {
             </div>
           </section>
         </div>
+      </div>
+
+      {/* Warnings this platform raised, as opposed to the meteorological
+          warnings above that it received. Same page because a citizen looking
+          for "what am I being warned about" should not have to know which
+          system produced the warning. The audit trail is public on purpose: a
+          mass-warning capability nobody can inspect afterwards is not a
+          governable one. This is also the only entry point to the composer —
+          without it the flash alert system could display a warning but nothing
+          could raise one. */}
+      <div className="mt-3">
+        <FlashAlertHistory />
       </div>
 
       <p className="mt-3 text-[11px] text-[var(--faint)]">
