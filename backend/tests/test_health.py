@@ -38,7 +38,11 @@ def client():
 def test_health_ok(client):
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "ai": get_settings().ai_available, "db": True}
+    # Compare with the settings object the app itself uses: get_settings() may be a fresh copy
+    # rebuilt after another test changed the environment (e.g. BE2 tests set AI_ENABLED=false).
+    from app import main as app_main
+
+    assert r.json() == {"status": "ok", "ai": app_main.settings.ai_available, "db": True}
 
 
 def test_health_reports_db_down_with_503(client):
