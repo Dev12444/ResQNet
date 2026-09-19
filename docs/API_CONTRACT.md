@@ -407,8 +407,8 @@ Data-derived observations, most urgent first — matches FE2 `OperationalInsight
 ```
 `kind`: `sla_breach` · `shortage` (primary need of undispatched incidents > available units) · `coverage` (nearest suitable unit ETA > 20 min; 35 for boats/NDRF) · `conflict` · `trend` (≥ 3 reports and ≥ 2× the previous 10 min).
 
-#### `GET /api/analytics/eval`
-Returns the last `scripts/eval.py` result (saved to `app/data/eval_results.json`):
+#### `GET /api/analytics/eval?set=main|stress`
+Returns the last `scripts/eval.py` result. `set=main` (default): 50 clean EN/GU/HI reports (`eval_results.json`). `set=stress`: 32 messy reports (Romanized Gujarati/Hindi, typos, pranks, no GPS; `stress_results.json`). Same shape:
 ```json
 { "n": 50, "type_accuracy": 0.94, "severity_within_1": 0.9, "dedup_precision": 0.9, "dedup_recall": 0.86, "avg_latency_ms": 1180, "run_at": "..." }
 ```
@@ -504,6 +504,7 @@ Rules:
 | 2026-09-19 | v1 | team |
 | 2026-09-19 | `photo_url` formats, `classification.photo`, geocoding note, `GET /api/ai/status`, `triage.py` internal API | BE2 |
 | 2026-09-19 | OpenAI primary provider: `source_model` values, `classification.model`, `/api/ai/status` shape | BE2 |
+| 2026-09-19 | `GET /api/analytics/eval?set=stress` (robustness set) | BE2 |
 | 2026-09-19 | `/api/ai/status.demo_seed_answers` (pre-computed demo AI answers shipped in git) | BE2 |
 | 2026-09-19 | `Recommendation.matched_capabilities`; recommender weighs unit capabilities + hospital specialties (cardiac, burns, trauma, pediatric) | BE2 |
 | 2026-09-19 | `GET /api/incidents/{id}/trust`, `GET /api/analytics/insights`; hotspot `top_type` never null; optional `incident_id` on `POST /api/reports` | BE2 |
