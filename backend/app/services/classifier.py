@@ -59,8 +59,29 @@ def detect_lang(text: str | None) -> str:
     gu = len(re.findall(r"[઀-૿]", text))
     hi = len(re.findall(r"[ऀ-ॿ]", text))
     if gu == 0 and hi == 0:
-        return "en"
+        return _roman_lang(text)
     return "gu" if gu >= hi else "hi"
+
+
+# Function words that give away Romanized Gujarati vs Hindi ("pani bharayu che" / "aag lagi hai").
+_GU_MARKERS = re.compile(r"\b(?:che|chhe|nathi|ma|thayo|thai|thayu|gayu|gayo|gai\s+che|pase|ane|loko|koi\s+nathi|jaldi\s+aavo|madad)\b")
+_HI_MARKERS = re.compile(r"\b(?:hai|hain|nahi|nahin|raha|rahi|rahe|mein|me|ko|ki|ka|aur|log|chahiye|kya|bahut)\b")
+
+
+def _resolve_lang(text: str | None, llm_lang: str | None, lang_hint: str | None) -> str:
+    """LLM's language, except for Romanized text where clear function words decide (the LLM often calls
+    Romanized Gujarati "hi" or "en")."""
+    if text and not re.search(r"[઀-૿ऀ-ॿ]", text) and (roman := _roman_lang(text)) != "en":
+        return roman
+    return llm_lang if llm_lang in ("en", "gu", "hi") else (lang_hint or detect_lang(text))
+
+
+def _roman_lang(text: str) -> str:
+    t = text.lower()
+    gu, hi = len(_GU_MARKERS.findall(t)), len(_HI_MARKERS.findall(t))
+    if max(gu, hi) < 2:
+        return "en"
+    return "gu" if gu > hi else "hi"
 
 
 def priority_for(severity: int, hazards: list[str]) -> str:
@@ -102,6 +123,7 @@ TYPE_KEYWORDS: dict[str, list[str]] = {
         "collapse", "collapsed", "wall fell", "wall fall", "building fell", "roof fell", "debris", "under rubble",
         "cracks in", "big cracks", "tilting", "દરાર", "તિરાડ", "दरार",
         "ધરાશાયી", "દીવાલ પડી", "મકાન પડ્યું", "ઇમારત", "ढह", "दीवार गिर", "इमारत गिर", "मलबा",
+        "छत गिर", "मकान गिर",
     ],
     "fire": [
         "fire", "smoke", "burning", "flames", "blaze", "short circuit", "cylinder blast", "cylinder",
@@ -118,6 +140,7 @@ TYPE_KEYWORDS: dict[str, list[str]] = {
         "accident", "collision", "collided", "crash", "hit by", "hit a", "overturned", "truck", "bike", "car hit",
         "pile-up", "highway", "pedestrian", "બાઈક", "બાઇક", "સ્લિપ", "ટ્રક", "बाइक", "ट्रक",
         "અકસ્માત", "ટક્કર", "એક્સિડન્ટ", "दुर्घटना", "हादसा", "टक्कर", "एक्सीडेंट",
+        "पलट", "उलट", "બસ પલટી", "પલટી",
     ],
     "medical": [
         "heart attack", "unconscious", "breathing", "chest pain", "pregnant", "labour", "labor pain", "ambulance",
@@ -125,6 +148,37 @@ TYPE_KEYWORDS: dict[str, list[str]] = {
         "બેભાન", "હાર્ટ એટેક", "દર્દી", "શ્વાસ", "બીમાર", "बेहोश", "दिल का दौरा", "मरीज", "सांस", "बीमार",
     ],
 }
+# Romanized Gujarati / Hindi / SMS English ("pani bharayu che", "aag lagi hai", "accdnt"). Matched on word
+# boundaries (unlike the script keywords above) so short words like "aag" or "pani" don't fire inside
+# unrelated English words ("company"). Each entry is a regex fragment.
+ROMAN_TYPE_KEYWORDS: dict[str, list[str]] = {
+    "industrial": [r"gas\s*(?:leak|lik|nikl\w*)", r"boiler", r"factory\s*(?:ma|me|mein)?\s*blast", r"kemikal",
+                   r"zeri", r"jeh?rili", r"ammonia", r"gidc"],
+    "building_collapse": [r"d[ie]+va+l\s*(?:padi|pad\w*|tut\w*)", r"de+wa+r\s*gir\w*", r"makan\s*(?:padi|padyu|gir\w*)",
+                          r"building\s*(?:padi|padyu|gir\w*)", r"chhat\s*(?:padi|gir\w*)", r"malba", r"kaatmal", r"dhas\w*"],
+    "fire": [r"aa?gh?", r"dhumad\w*", r"dhu+a+n?", r"dhuvan", r"jal\s*ra(?:ha|hi)", r"bal(?:i|iya|ya)\b", r"sal?ga\w*"],
+    "flood": [r"pa+ni", r"bhar(?:ayu|ayun|elu|ai|a|aya|aa)\w*", r"bhar\s*gay\w*", r"beh?\s*gay\w*", r"vahi\s*gay\w*",
+              r"ghut(?:an|na|no)", r"kamar\s*sudhi", r"varsad", r"b[aā]a?rish", r"nala", r"gatar", r"barrage"],
+    "road_accident": [r"accid[ae]nt", r"accdnt", r"akasmat", r"takk?ar", r"pal(?:at|ti|ati)\w*", r"ulta?i?\s*gai",
+                      r"ultai", r"truk", r"gadi\s*thok\w*"],
+    "medical": [r"heart\s*attack", r"bhan\s*(?:nathi|nahi|nai)", r"behosh", r"bebhan", r"saa?ns", r"shwas",
+                r"chakk?ar", r"tabiy[ae]t", r"bimar", r"dardi", r"mari[zj]", r"ambul[ae]n?ce", r"prasuti", r"dub(?:i|yo)\s*gay\w*"],
+}
+ROMAN_HAZARD_KEYWORDS: dict[str, list[str]] = {
+    "trapped_people": [r"fas(?:ai|ayu|aya|ayo|ayela|ayel)\w*", r"fa+n?s(?:a|e|i)\b", r"phas\w*", r"daba(?:yela|ya|ye)\w*",
+                       r"dabe", r"(?:log|loko|lok)\s*andar", r"andar\s*\d+\s*(?:log|loko)", r"bahar\s*kadh\w*"],
+    "injuries": [r"vag(?:yu|i|yo)\b", r"lohi", r"khoon", r"ghayal", r"ijj?a", r"dajh\w*", r"[jz]akhmi", r"fracture"],
+    "electrical": [r"current", r"karant", r"taar", r"thambh\w*", r"vij", r"bijli"],
+    "rising_water": [r"vadh(?:i|e|tu|ī)\w*", r"badh\s*ra(?:ha|hi)"],
+    "gas_leak": [r"gas\s*(?:leak|lik|nikl\w*)"],
+    "blocked_road": [r"traffic", r"jam", r"rast[oa]\s*bandh"],
+    "chemical": [r"kemikal", r"zeri", r"jeh?rili", r"ammonia"],
+}
+_ROMAN_TYPE_RE = {ty: re.compile(r"\b(?:" + "|".join(kws) + r")\b") for ty, kws in ROMAN_TYPE_KEYWORDS.items()}
+_ROMAN_HAZARD_RE = {hz: re.compile(r"\b(?:" + "|".join(kws) + r")\b") for hz, kws in ROMAN_HAZARD_KEYWORDS.items()}
+_ANIMAL = re.compile(r"\b(?:cat|dog|puppy|kitten|cow|bird|billi|kutro|kutta|gaay|pakshi)\b")
+_HUMAN = re.compile(r"\b(?:people|person|man|woman|child|children|kid|baby|family|log|loko|manas|jan|balak|chokr\w*|bach\w*)\b")
+
 # Order matters when several match: the more specific / dangerous type wins.
 TYPE_ORDER = ["industrial", "building_collapse", "fire", "road_accident", "medical", "flood"]
 
@@ -152,7 +206,8 @@ BASE_SEVERITY = {
 }
 
 _NUM_PEOPLE = re.compile(
-    r"(\d{1,4})\s*(?:\+\s*)?(?:people|persons|person|residents|families|kids|children|workers|passengers|લોકો|માણસ|लोग|व्यक्ति)",
+    r"(\d{1,4})\s*(?:\+\s*)?(?:people|persons|person|residents|families|kids|children|workers|passengers|લોકો|માણસ|लोग|व्यक्ति"
+    r"|loko|log|majur|manas|jan)\b",
     re.I,
 )
 _WORD_NUM = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "ten": 10, "dozen": 12, "many": 10, "several": 5}
@@ -161,28 +216,41 @@ _WORD_NUM = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "ten": 10, "d
 def _people_estimate(t: str) -> int | None:
     if m := _NUM_PEOPLE.search(t):
         return int(m.group(1))
+    if re.search(r"\b(?:ghana|bahu|bahut|ghani)\s+(?:loko|log|lok|majur)", t):
+        return 10
     for w, n in _WORD_NUM.items():
         if re.search(rf"\b{w}\b\s+(people|persons|families|workers|children|kids)", t):
             return n
     return None
 
 
-_EXPLOSION = ("explosion", "exploded", "blast", "ફાટ્યું", "ફાટ્યો", "વિસ્ફોટ", "फटा", "विस्फोट", "धमाका")
+_EXPLOSION = ("explosion", "exploded", "blast", "ફાટ્યું", "ફાટ્યો", "વિસ્ફોટ", "फटा", "विस्फोट", "धमाका",
+              "dhadako", "dhamaka", "fatyo", "phata")
+# Life-threatening medical signs: a medical report with any of these is at least severity 4 (so P1).
+_CRITICAL_MEDICAL = re.compile(
+    r"heart attack|cardiac arrest|not breathing|stopped breathing|no pulse|unconscious|drown"
+    r"|\bsaa?ns\s*(?:nahi|nathi|nai)|\bbhan\s*(?:nathi|nahi|nai)|\bbehosh|\bbebhan|\bdub(?:i|yo)\s*gay"
+    r"|બેભાન|હાર્ટ એટેક|શ્વાસ (?:નથી|બંધ)|ડૂબ|बेहोश|दिल का दौरा|सांस नहीं|डूब"
+)
 _MINOR = ("minor", "small scratch", "scratches", "slightly", "નાની ઈજા", "નાની ઇજા", "મામૂલી", "मामूली", "हल्की चोट")
-_CONTAINED = ("already put out", "put out", "extinguished", "under control", "કાબૂમાં", "बुझ गई", "काबू में")
+_CONTAINED = ("already put out", "put out", "extinguished", "under control", "કાબૂમાં", "बुझ गई", "काबू में",
+              "all fine now", "everyone is fine", "bujhai", "bujh gai", "kabu ma", "kabu me", "olvai")
 
 # Negated mentions ("nobody hurt", "કોઈ ઘાયલ નથી", "कोई घायल नहीं") must not count as hazards.
 _NEGATED = re.compile(
     r"\b(?:no|nobody|no one|not|none|without|zero)\b[^.,;!?]{0,20}?"
     r"(?:hurt|injured|injury|injuries|trapped|stuck|casualt\w*|bleeding)"
     r"|(?:ઘાયલ|ઈજા|ઇજા|ફસાયેલ)[^.,;!?]{0,10}?નથી"
-    r"|(?:घायल|चोट|फंसा|फँसा)[^.,;!?]{0,10}?नहीं",
+    r"|(?:घायल|चोट|फंसा|फँसा)[^.,;!?]{0,10}?नहीं"
+    # Romanized: "koi fasayu nathi", "koi andar nathi", "kisi ko chot nahi"
+    r"|\b(?:koi|kisi)\b[^.,;!?]{0,25}?\b(?:nathi|nahi|nahin|nai)\b",
 )
 
 
 def fallback_classify(text: str | None, lang_hint: str | None = None) -> ClassificationResult:
     t = _NEGATED.sub(" ", (text or "").lower())
-    scores = {ty: sum(1 for kw in kws if kw in t) for ty, kws in TYPE_KEYWORDS.items()}
+    scores = {ty: sum(1 for kw in kws if kw in t) + len(_ROMAN_TYPE_RE[ty].findall(t)) if ty in _ROMAN_TYPE_RE
+              else sum(1 for kw in kws if kw in t) for ty, kws in TYPE_KEYWORDS.items()}
     best = max(scores.values()) if scores else 0
     if best == 0:
         type_ = "other"
@@ -190,7 +258,10 @@ def fallback_classify(text: str | None, lang_hint: str | None = None) -> Classif
         # highest score; ties broken by TYPE_ORDER (more dangerous first)
         type_ = min((ty for ty, s in scores.items() if s == best), key=TYPE_ORDER.index)
 
-    hazards = [hz for hz, kws in HAZARD_KEYWORDS.items() if any(kw in t for kw in kws)]
+    hazards = [hz for hz, kws in HAZARD_KEYWORDS.items()
+               if any(kw in t for kw in kws) or (hz in _ROMAN_HAZARD_RE and _ROMAN_HAZARD_RE[hz].search(t))]
+    if "trapped_people" in hazards and _ANIMAL.search(t) and not _HUMAN.search(t):
+        hazards.remove("trapped_people")  # "cat stuck on a tree" is not people trapped
     if type_ == "industrial" and "chemical" not in hazards and any(k in t for k in ("chemical", "toxic", "કેમિકલ", "केमिकल")):
         hazards.append("chemical")
     if type_ != "flood" and "rising_water" in hazards:
@@ -207,6 +278,8 @@ def fallback_classify(text: str | None, lang_hint: str | None = None) -> Classif
         sev -= 2
     elif any(k in t for k in _MINOR):
         sev -= 2
+    if type_ == "medical" and _CRITICAL_MEDICAL.search(t):
+        sev = max(sev, 4)
     if "rising_water" in hazards and type_ == "flood" and sev < 4:
         sev += 1
     people = _people_estimate(t)
@@ -369,7 +442,7 @@ def _llm_classify(text: str, source: str, lang_hint: str | None) -> Classificati
             hazards=hazards,
             reasoning=str(data.get("reasoning") or ""),
             confidence=round(max(0.0, min(1.0, float(data.get("confidence", 0.7)))), 2),
-            lang=data.get("lang") if data.get("lang") in ("en", "gu", "hi") else (lang_hint or detect_lang(text)),
+            lang=_resolve_lang(text, data.get("lang"), lang_hint),
             source_model=_provider_of(llm.last_source()),
             model=llm.last_source(),
         )
