@@ -1,6 +1,6 @@
 """Incident classification: type, severity, priority, hazards, location. Owner: BE2.
 
-Contract: docs/API_CONTRACT.md §5. `classify()` never raises — Gemini first,
+Contract: docs/API_CONTRACT.md §5. `classify()` never raises — LLM first (OpenAI, then Gemini),
 keyword/rule fallback on any failure. Sensor readings are always rule-based.
 """
 from __future__ import annotations
@@ -42,7 +42,8 @@ class ClassificationResult:
     reasoning: str = ""
     confidence: float = 0.5
     lang: str = "en"
-    source_model: str = "fallback"
+    source_model: str = "fallback"  # "openai" | "gemini" | "fallback" (rules) | "rules" (sensor)
+    model: str | None = None        # e.g. "openai:gpt-4.1-mini" or "cache:openai:gpt-4.1-mini"
     photo: dict | None = None  # PhotoAssessment.to_dict() when a usable photo was analysed
 
     def to_dict(self) -> dict:
@@ -280,7 +281,7 @@ def classify_sensor(sensor: dict) -> ClassificationResult:
     )
 
 
-# ---------------------------------------------------------------- Gemini
+# ---------------------------------------------------------------- LLM (OpenAI / Gemini via llm.py)
 
 SYSTEM_PROMPT = """You are the triage engine of an emergency control room in Ahmedabad, Gujarat, India.
 You receive ONE raw emergency report (citizen message, 108/112 call transcript, or field-team update).
@@ -288,7 +289,9 @@ Reports may be in English, Gujarati (ગુજરાતી), Hindi (हिंद
 
 Rules:
 - type: flood | fire | road_accident | industrial | medical | building_collapse | other
-  (industrial = gas leak / chemical / factory accident; flood includes waterlogging and people stuck in water)
+  industrial = gas/chemical leak, toxic fumes, or boiler/reactor explosion at a factory, plant or GIDC.
+  fire = any fire without a gas/chemical release — including fires in shops, homes, textile units and
+  warehouses, and household LPG cylinder blasts. flood includes waterlogging and people stuck in water.
 - severity 1-5: 1 minor/no danger, 2 limited property risk, 3 risk to people or several affected,
   4 life-threatening / people trapped / spreading, 5 mass-casualty or city-scale threat.
 - hazards: choose only from the allowed list; include trapped_people whenever anyone is stuck/stranded/under debris.
@@ -331,7 +334,15 @@ RESPONSE_SCHEMA = {
 }
 
 
-def _gemini_classify(text: str, source: str, lang_hint: str | None) -> ClassificationResult | None:
+def _provider_of(src: str | None) -> str:
+    """'cache:openai:gpt-4.1-mini' / 'openai:gpt-4.1-mini' -> 'openai'."""
+    if not src:
+        return "llm"
+    parts = src.split(":")
+    return parts[1] if parts[0] == "cache" and len(parts) > 1 else parts[0]
+
+
+def _llm_classify(text: str, source: str, lang_hint: str | None) -> ClassificationResult | None:
     prompt = f'{FEW_SHOT}\n\nNow classify this report ({source}):\n"{text}"'
     data = llm.generate_json(prompt, RESPONSE_SCHEMA, system=SYSTEM_PROMPT)
     if not isinstance(data, dict):
@@ -353,10 +364,11 @@ def _gemini_classify(text: str, source: str, lang_hint: str | None) -> Classific
             reasoning=str(data.get("reasoning") or ""),
             confidence=round(max(0.0, min(1.0, float(data.get("confidence", 0.7)))), 2),
             lang=data.get("lang") if data.get("lang") in ("en", "gu", "hi") else (lang_hint or detect_lang(text)),
-            source_model="gemini",
+            source_model=_provider_of(llm.last_source()),
+            model=llm.last_source(),
         )
     except Exception as e:  # malformed model output
-        log.warning("Bad Gemini classification payload %r: %s", data, e)
+        log.warning("Bad LLM classification payload %r: %s", data, e)
         return None
 
 
@@ -402,7 +414,7 @@ def classify(
         if not text or not text.strip():
             result = fallback_classify(text, lang_hint)
         else:
-            result = _gemini_classify(text.strip(), source, lang_hint) or fallback_classify(text, lang_hint)
+            result = _llm_classify(text.strip(), source, lang_hint) or fallback_classify(text, lang_hint)
         if photo_future is not None:
             try:
                 result = _merge_photo(result, photo_future.result(timeout=15))

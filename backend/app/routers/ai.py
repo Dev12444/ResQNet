@@ -58,14 +58,15 @@ def generate_sitrep(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/ai/status")
 def ai_status() -> dict:
-    """Which Gemini models are usable right now (quota/pacing) — handy during the demo."""
+    """Which AI providers/models are usable right now (quota, pacing, OpenAI spend) — handy during the demo."""
     st = get_settings()
     return {
         "ai_enabled": st.ai_available,
+        "providers": [p.name for p in llm._providers("gen")],
         "generation_available": llm.available("gen"),
         "embeddings_available": llm.available("emb"),
         "models": llm.quota_status(),
-        "embed_model": st.gemini_embed_model,
-        "rpm_per_model": st.gemini_rpm,
+        "embed_providers": [f"{p.name}:{p.embed_model}" for p in llm._providers("emb")],
+        **llm.spend_status(),
         "disk_cache": bool(st.llm_cache_path),
     }

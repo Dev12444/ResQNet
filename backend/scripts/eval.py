@@ -27,28 +27,29 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-ai", action="store_true", help="force rule-based fallback")
     ap.add_argument("--quiet", action="store_true", help="don't list misclassifications")
-    ap.add_argument("--no-cache", action="store_true", help="bypass the disk cache to measure real latency (uses quota)")
+    ap.add_argument("--no-cache", action="store_true", help="bypass the cache to measure real latency (costs API calls)")
     ap.add_argument("--no-save", action="store_true", help="print only; don't overwrite eval_results.json")
     args = ap.parse_args()
     if args.no_ai:
         os.environ["AI_ENABLED"] = "false"
-    if args.no_cache:
-        os.environ["LLM_CACHE_PATH"] = ""
 
-    from app.config import get_settings
     from app.services import classifier, dedup, llm
 
-    settings = get_settings()
+    llm.BYPASS_CACHE = args.no_cache  # still records OpenAI spend
+
     rows = json.loads(DATA.read_text())
     t0 = datetime(2026, 9, 19, 8, 0, tzinfo=timezone.utc)
 
     # ---------- classification
-    results, latencies, models = [], [], {}
+    results, latencies, models, answered_by = [], [], {}, {}
+    spend_before = llm.spent_usd()
     for r in rows:
         start = time.perf_counter()
         c = classifier.classify(r["text"], r["source"])
         latencies.append((time.perf_counter() - start) * 1000)
         models[c.source_model] = models.get(c.source_model, 0) + 1
+        by = (c.model or c.source_model).removeprefix("cache:")
+        answered_by[by] = answered_by.get(by, 0) + 1
         results.append(c)
 
     n = len(rows)
@@ -92,7 +93,7 @@ def main() -> None:
     precision = tp / (tp + fp) if tp + fp else 1.0
     recall = tp / (tp + fn) if tp + fn else 1.0
 
-    from_cache = bool(models.get("gemini")) and sum(latencies) / n < 50
+    from_cache = sum(1 for c in results if (c.model or "").startswith("cache:")) > n // 2
     out = {
         "n": n,
         "type_accuracy": round(sum(type_ok) / n, 3),
@@ -108,8 +109,10 @@ def main() -> None:
         "avg_latency_ms": None if from_cache else round(sum(latencies) / n),
         "from_cache": from_cache,
         "models": models,
+        "answered_by": answered_by,
         "embeddings": use_emb,
-        "llm_model": settings.gemini_model if models.get("gemini") else "rules",
+        "llm_model": max(answered_by, key=answered_by.get) if answered_by else "rules",
+        "openai_cost_usd": round(llm.spent_usd() - spend_before, 4),
         "run_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     if not args.no_save:

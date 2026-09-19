@@ -234,7 +234,7 @@ Response `201`:
   }
 }
 ```
-`source_model` is `"gemini"`, `"fallback"` (rules) or `"rules"` (sensor).
+`source_model` is `"openai"`, `"gemini"`, `"fallback"` (keyword rules) or `"rules"` (sensor); `classification.model` is e.g. `"openai:gpt-4.1-mini"` (prefixed `cache:` when served from the AI cache).
 `classification.photo` is `null` or `{ "relevant": bool, "type": ..., "severity_hint": 1-5, "hazards": [...], "description": "...", "confidence": 0-1 }`.
 Reports without GPS are geocoded from the text (Ahmedabad gazetteer); if that fails the incident is placed at the city centre with `confidence <= 0.4` — FE should show "location unverified".
 
@@ -292,7 +292,7 @@ Setting `status: "escalated"` creates an `escalation` alert and sends Telegram.
 Forces a re-summary → `{ "ai_summary": "...", "ai_actions": ["..."] }`
 
 #### `GET /api/ai/status`
-→ `{ "ai_enabled": true, "generation_available": true, "embeddings_available": true, "models": { "gemini-3.5-flash-lite": { "calls_last_min": 3, "benched_for_sec": 0 } }, "embed_model": "gemini-embedding-001", "rpm_per_model": 12, "disk_cache": true }`
+→ `{ "ai_enabled": true, "providers": ["openai", "gemini"], "generation_available": true, "embeddings_available": true, "models": { "openai:gpt-4.1-mini": { "calls_last_min": 3, "benched_for_sec": 0, "provider_cooling_sec": 0 } }, "embed_providers": ["gemini:gemini-embedding-001", "openai:text-embedding-3-small"], "openai_spent_usd": 0.05, "openai_budget_usd": 8.0, "openai_over_budget": false, "disk_cache": true }`
 Debug/demo helper: if every model is benched, the system is running on rule-based fallback.
 
 #### `POST /api/ai/sitrep`
@@ -461,7 +461,7 @@ def eta_minutes(distance_km: float, kind: str) -> int: ...
 Rules:
 - Services **never raise** to the pipeline — on any error return a fallback result.
 - Services **don't commit** the DB session and don't broadcast; BE1's router does.
-- Any Gemini call has a 12 s timeout (API minimum is 10 s), one retry, then the fallback model, then rules.
+- Any LLM call has a 12 s timeout, one retry on 5xx, then the next model, then the next provider (OpenAI → Gemini), then rules.
 
 ---
 
@@ -470,3 +470,4 @@ Rules:
 |---|---|---|
 | 2026-09-19 | v1 | team |
 | 2026-09-19 | `photo_url` formats, `classification.photo`, geocoding note, `GET /api/ai/status`, `triage.py` internal API | BE2 |
+| 2026-09-19 | OpenAI primary provider: `source_model` values, `classification.model`, `/api/ai/status` shape | BE2 |
