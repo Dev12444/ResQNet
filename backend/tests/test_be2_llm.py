@@ -294,3 +294,13 @@ def test_seeded_answer_served_without_any_api_key(env, tmp_path):
     assert llm.generate_text("never seen") is None  # uncached + no provider -> caller falls back to rules
     env.monkeypatch.setattr(env.st, "ai_enabled", False)
     assert llm.generate_text("demo prompt") is None  # AI_ENABLED=false always means rules only
+
+
+def test_api_keys_are_stripped(env):
+    """A key pasted with a trailing newline breaks the auth header ("Connection error")."""
+    env.monkeypatch.setattr(env.st, "openai_api_key", "sk-test\n")
+    env.monkeypatch.setattr(env.st, "gemini_api_key", "  AQ.test \n")
+    assert llm._provider("openai").api_key == "sk-test"
+    assert llm._provider("gemini").api_key == "AQ.test"
+    env.monkeypatch.setattr(env.st, "openai_api_key", " \n")
+    assert llm._provider("openai") is None

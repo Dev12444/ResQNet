@@ -254,11 +254,14 @@ def _split(csv: str) -> list[str]:
 
 def _provider(name: str) -> Provider | None:
     st = get_settings()
-    if name == "openai" and st.openai_api_key:
-        return Provider("openai", st.openai_api_key, tuple(_split(f"{st.openai_model},{st.openai_fallback_model}")),
+    # Keys pasted into a dashboard often carry a trailing newline/space; httpx then rejects the
+    # Authorization header (LocalProtocolError), which the SDK reports as "Connection error".
+    openai_key, gemini_key = st.openai_api_key.strip(), st.gemini_api_key.strip()
+    if name == "openai" and openai_key:
+        return Provider("openai", openai_key, tuple(_split(f"{st.openai_model},{st.openai_fallback_model}")),
                         st.openai_embed_model, st.openai_rpm)
-    if name == "gemini" and st.gemini_api_key:
-        return Provider("gemini", st.gemini_api_key, tuple(_split(f"{st.gemini_model},{st.gemini_fallback_model}")),
+    if name == "gemini" and gemini_key:
+        return Provider("gemini", gemini_key, tuple(_split(f"{st.gemini_model},{st.gemini_fallback_model}")),
                         st.gemini_embed_model, st.gemini_rpm)
     return None
 
@@ -322,7 +325,8 @@ def available(kind: str = "gen") -> bool:
 
 def _trip(p: Provider, kind: str, e: Exception) -> None:
     _cooldown_until[(p.name, kind)] = time.monotonic() + COOLDOWN_SEC
-    log.warning("%s %s failed (%s: %s) — skipping it for %ss", p.name, kind, type(e).__name__, str(e)[:200], COOLDOWN_SEC)
+    cause = f" <- {type(e.__cause__).__name__}: {str(e.__cause__)[:120]}" if e.__cause__ else ""
+    log.warning("%s %s failed (%s: %s%s) — skipping it for %ss", p.name, kind, type(e).__name__, str(e)[:200], cause, COOLDOWN_SEC)
 
 
 def _is_quota(e: Exception) -> bool:
