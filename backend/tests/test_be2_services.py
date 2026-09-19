@@ -127,6 +127,33 @@ def test_plain_flood_goes_to_shelter():
     assert recommender.pick_facility(inc, FACILITIES)["facility"]["kind"] == "shelter"
 
 
+def test_capabilities_break_ties_between_same_kind_units():
+    trucks = [
+        {"id": 10, "callsign": "FT-PLAIN", "kind": "fire_truck", "status": "available", "lat": 23.030, "lng": 72.560,
+         "base": "A", "capabilities": ["water_tender"]},
+        {"id": 11, "callsign": "FT-LADDER", "kind": "fire_truck", "status": "available", "lat": 23.045, "lng": 72.560,
+         "base": "B", "capabilities": ["aerial_ladder", "rescue", "water_tender"]},
+    ]
+    fire = {"id": 1, "type": "fire", "severity": 4, "hazards": ["trapped_people"], "lat": 23.029, "lng": 72.560,
+            "title": "People trapped on 4th floor"}
+    out = recommender.build_recommendation(fire, trucks, [], with_llm=False)
+    best = out["recommendations"]["fire_truck"][0]
+    assert best["resource"]["callsign"] == "FT-LADDER"  # ~2 km farther but has the ladder
+    assert set(best["matched_capabilities"]) == {"aerial_ladder", "rescue", "water_tender"}
+    assert "aerial ladder" in best["reason"]
+    # Without trapped people the nearer truck wins.
+    out = recommender.build_recommendation(dict(fire, hazards=[]), trucks, [], with_llm=False)
+    assert out["recommendations"]["fire_truck"][0]["resource"]["callsign"] == "FT-PLAIN"
+
+
+def test_wanted_capabilities_from_hazards_and_text():
+    w = recommender.wanted_capabilities({"type": "industrial", "severity": 5, "hazards": ["gas_leak", "chemical"]})
+    assert w["hazmat"] == ["gas_leak", "chemical", "decontamination"]
+    w = recommender.wanted_capabilities({"type": "medical", "severity": 3, "hazards": [], "title": "Child with chest pain"})
+    assert w["ambulance"] == ["cardiac", "als", "pediatric"]
+    assert recommender.wanted_specialties({"type": "fire", "hazards": ["injuries"]}) == ["trauma", "burns"]
+
+
 def test_gas_leak_needs_hazmat():
     assert recommender.needed_kinds("fire", ["gas_leak"])[0] == "hazmat"
 
