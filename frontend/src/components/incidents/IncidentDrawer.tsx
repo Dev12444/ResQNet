@@ -11,7 +11,7 @@ const TRUST_STYLE: Record<string, [string, string]> = {
  conflicting: ['var(--danger-soft)', 'var(--danger-text)'], unverified: ['var(--soft-bg)', 'var(--muted)'],
 };
 
-export function IncidentDrawer({incident,alerts,version,onEscalate,onDispatched,onClose}:{incident:Incident|null;alerts:Alert[];version:number;onEscalate:()=>void;onDispatched:()=>void;onClose:()=>void}){
+export function IncidentDrawer({incident,alerts,version,onEscalate,onResolve,onDispatched,onClose}:{incident:Incident|null;alerts:Alert[];version:number;onEscalate:()=>void;onResolve:()=>void;onDispatched:()=>void;onClose:()=>void}){
  const [tab,setTab]=useState<'overview'|'reports'>('overview');
  const [trust,setTrust]=useState<IncidentTrust|null>(null);
  const id=incident?Number(incident.id):null;
@@ -25,7 +25,7 @@ export function IncidentDrawer({incident,alerts,version,onEscalate,onDispatched,
    <section style={section}><SectionTitle icon={<CheckCircle2 size={14}/>} title="RECOMMENDED ACTIONS"/><div>{incident.actions.map((x,i)=><div key={x} style={{display:'flex',gap:9,alignItems:'center',padding:'7px 0',borderBottom:i<incident.actions.length-1?'1px solid var(--line)':'none',fontSize:10,color:'var(--body-text)'}}><span style={{width:17,height:17,borderRadius:4,border:'1px solid var(--line-strong)',display:'grid',placeItems:'center',fontSize:8,color:'var(--accent)'}}>{i+1}</span>{x}</div>)}</div></section>
    <section style={section}><SectionTitle icon={<Navigation size={14}/>} title="DISPATCH RECOMMENDATIONS"/><RecommendationPanel key={incident.id} incidentId={Number(incident.id)} version={version} dispatched={['dispatched','on_scene','resolved'].includes(incident.status)} onDispatched={onDispatched}/></section>
    <section style={section}><SectionTitle icon={<MessageSquare size={14}/>} title="ACTIVITY TIMELINE"/><Timeline incident={incident}/></section>
-   <section style={{...section,borderBottom:0}}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7}}><button style={actionBtn('var(--action-bg)','var(--accent)')}><ArrowUpRight size={13}/> CHANGE STATUS</button><button onClick={onEscalate} disabled={incident.status==='escalated'} style={{...actionBtn('#4a1d1d','#b91c1c'),opacity:incident.status==='escalated'?.5:1}}><Siren size={13}/> {incident.status==='escalated'?'ESCALATED':'ESCALATE'}</button></div></section>
+   <section style={{...section,borderBottom:0}}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7}}><button onClick={onResolve} disabled={incident.status==='resolved'} style={{...actionBtn('var(--action-bg)','var(--accent)'),opacity:incident.status==='resolved'?.5:1}}><CheckCircle2 size={13}/> {incident.status==='resolved'?'RESOLVED':'RESOLVE'}</button><button onClick={onEscalate} disabled={incident.status==='escalated'} style={{...actionBtn('#4a1d1d','#b91c1c'),opacity:incident.status==='escalated'?.5:1}}><Siren size={13}/> {incident.status==='escalated'?'ESCALATED':'ESCALATE'}</button></div></section>
   </>}
  </div>
 }

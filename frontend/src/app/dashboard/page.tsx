@@ -12,7 +12,7 @@ import { useCommandCenter } from '@/components/command/useCommandCenter';
 import { byUrgency, toViewAlert, toViewFacility, toViewIncident, toViewResource } from '@/components/command/view';
 import type { Incident as ViewIncident } from '@/components/command/view';
 import { submitReport, USE_MOCK } from '@/lib/api';
-import { acknowledgeAlert, escalateIncident, generateSitrep, simulator } from '@/lib/command';
+import { acknowledgeAlert, escalateIncident, generateSitrep, resolveIncident, simulator } from '@/lib/command';
 
 const IncidentMap = dynamic(()=>import('@/components/map/IncidentMap'),{ssr:false,loading:()=> <div style={{height:'100%',display:'grid',placeItems:'center',background:'var(--map-loading)',color:'var(--muted)'}}>Loading live map…</div>});
 
@@ -21,7 +21,7 @@ function mmss(sec:number){const m=Math.floor(sec/60),s=Math.round(sec%60);return
 export default function DashboardPage(){
  const cc=useCommandCenter();
  const selectedId=cc.selectedId, setSelectedId=cc.select;
- const [running,setRunning]=useState(false);
+ const running=cc.sim.running;
  const [busy,setBusy]=useState<string|null>(null);
  const [toast,setToast]=useState<string|null>(null);
  const [query,setQuery]=useState('');
@@ -49,8 +49,8 @@ export default function DashboardPage(){
  const online=USE_MOCK?false:cc.live||cc.mode==='live';
 
  const act=async(name:string,fn:()=>Promise<unknown>,ok?:string)=>{setBusy(name);try{await fn();if(ok)setToast(ok);await cc.refresh()}catch(e){setToast(`${name} failed: ${e instanceof Error?e.message:'error'}`)}finally{setBusy(null)}};
- const scenario=()=>act(running?'Stop scenario':'Run scenario',async()=>{await simulator(running?'stop':'start');setRunning(r=>!r)},running?'Scenario stopped':'Scenario started: reports will stream in');
- const reset=()=>act('Reset',async()=>{await simulator('reset');setRunning(false);setSelectedId(null)},'Demo data reset');
+ const scenario=()=>act(running?'Stop scenario':'Run scenario',async()=>{await simulator(running?'stop':'start');cc.setSim(s=>({...s,running:!running}))},running?'Scenario stopped':'Scenario started: reports will stream in');
+ const reset=()=>act('Reset',async()=>{await simulator('reset');cc.setSim({running:false,events_sent:0,events_total:0});cc.resetSelection()},'Demo data reset');
  const openSitrep=()=>act('SITREP',async()=>setSitrep(await generateSitrep()));
 
  return <main className="cc-root" style={{height:'100vh',display:'grid',gridTemplateRows:'64px 38px 52px 1fr',overflow:'hidden'}}>
@@ -61,7 +61,7 @@ export default function DashboardPage(){
    <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
     <span title={cc.error??undefined} style={{fontSize:11,color:online?'var(--accent)':'var(--amber)',display:'flex',gap:6,alignItems:'center'}}>{online?<Wifi size={13}/>:<WifiOff size={13}/>} {USE_MOCK?'DEMO DATA':online?'LIVE':'RECONNECTING'}</span>
     <button onClick={openSitrep} disabled={busy==='SITREP'} style={topButton('var(--button-bg)')}>{busy==='SITREP'?<Loader2 size={14} className="spin"/>:<FileText size={14}/>} SITREP</button>
-    <button onClick={scenario} disabled={!!busy} style={topButton(running?'#7f1d1d':'var(--run-bg)')}>{running?<Square size={14}/>:<Play size={14}/>} {running?'STOP SCENARIO':'RUN SCENARIO'}</button>
+    <button onClick={scenario} disabled={!!busy} style={topButton(running?'#7f1d1d':'var(--run-bg)')}>{running?<Square size={14}/>:<Play size={14}/>} {running?`STOP SCENARIO${cc.sim.events_total?` ${cc.sim.events_sent}/${cc.sim.events_total}`:''}`:'RUN SCENARIO'}</button>
     <button onClick={reset} disabled={!!busy} style={topButton('var(--button-bg)')}><RotateCcw size={14}/> RESET</button>
     <ThemeToggle/>
    </div>
@@ -71,7 +71,7 @@ export default function DashboardPage(){
   <section style={{minHeight:0,display:'grid',gridTemplateColumns:'330px minmax(0,1fr) 420px',background:'var(--bg)'}}>
    <aside style={{minHeight:0,borderRight:'1px solid var(--line)',background:'var(--panel)'}}>{!cc.loaded?<div style={{padding:20,fontSize:11,color:'var(--muted)',display:'flex',gap:8,alignItems:'center'}}><Loader2 size={14} className="spin"/> Connecting to control room…</div>:<IncidentQueue incidents={filtered} selectedId={selected?.id??null} onSelect={select}/>}</aside>
    <div style={{position:'relative',minWidth:0}}><IncidentMap incidents={incidents} resources={resources} facilities={facilities} selectedId={selected?.id??null} onSelect={select}/>{showLayers&&<div style={{position:'absolute',top:14,right:14,width:210,padding:14,background:'var(--panel-glass)',border:'1px solid var(--line-strong)',borderRadius:8,boxShadow:'0 15px 35px #0008'}}><div style={{fontWeight:800,fontSize:12,marginBottom:12}}>MAP LAYERS</div>{['Incidents','Response units','Hospitals & shelters'].map(x=><label key={x} style={{display:'flex',gap:8,alignItems:'center',fontSize:11,color:'var(--body-text)',margin:'10px 0'}}><input type="checkbox" defaultChecked/>{x}</label>)}</div>}<div style={{position:'absolute',left:16,bottom:16,padding:'8px 10px',borderRadius:6,background:'var(--panel-glass)',border:'1px solid var(--line-strong)',fontSize:10,color:'var(--muted)'}}>OSM · {incidents.length} incidents · {resources.length} units · {facilities.length} facilities</div></div>
-   <aside style={{minHeight:0,borderLeft:'1px solid var(--line)',background:'var(--panel)',overflow:'hidden'}}><IncidentDrawer incident={selected} alerts={alerts} version={cc.version} onClose={()=>setSelectedId(null)} onDispatched={()=>{setToast(`${selected?.code} dispatched`);void cc.refresh()}} onEscalate={()=>selected&&act('Escalate',()=>escalateIncident(Number(selected.id)),`${selected.code} escalated`)}/></aside>
+   <aside style={{minHeight:0,borderLeft:'1px solid var(--line)',background:'var(--panel)',overflow:'hidden'}}><IncidentDrawer incident={selected} alerts={alerts} version={cc.version} onClose={()=>setSelectedId(null)} onDispatched={()=>{setToast(`${selected?.code} dispatched`);void cc.refresh()}} onEscalate={()=>selected&&act('Escalate',()=>escalateIncident(Number(selected.id)),`${selected.code} escalated`)} onResolve={()=>selected&&act('Resolve',async()=>{await resolveIncident(Number(selected.id));cc.resetSelection()},`${selected.code} resolved: units released`)}/></aside>
   </section>
   <AlertStack alerts={alerts} onAck={id=>act('Acknowledge',()=>acknowledgeAlert(Number(id)))}/>
   {toast&&<div role="status" style={{position:'fixed',left:'50%',bottom:22,transform:'translateX(-50%)',zIndex:30,padding:'10px 14px',borderRadius:8,background:'var(--panel-glass)',border:'1px solid var(--line-strong)',fontSize:11,boxShadow:'0 14px 35px #0009'}}>{toast}</div>}

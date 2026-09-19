@@ -19,6 +19,12 @@ export async function escalateIncident(incidentId: number, note = "Escalated fro
   return request(`/api/incidents/${incidentId}`, { method: "PATCH", body: JSON.stringify({ status: "escalated", note }) });
 }
 
+/** Close an incident: BE1 frees its units and completes open assignments. */
+export async function resolveIncident(incidentId: number, note = "Resolved from the command center") {
+  if (USE_MOCK) return null;
+  return request(`/api/incidents/${incidentId}`, { method: "PATCH", body: JSON.stringify({ status: "resolved", note }) });
+}
+
 export async function acknowledgeAlert(alertId: number) {
   if (USE_MOCK) return null;
   return request(`/api/alerts/${alertId}/ack`, { method: "POST", body: "{}" });
@@ -30,10 +36,26 @@ export async function generateSitrep(): Promise<string> {
   return r.markdown;
 }
 
-/** Scenario control. Throws ApiError (e.g. 404/405 while BE1's simulator is not deployed). */
+/** Replay speed for "Run scenario": the Ahmedabad flood script is ~3 min at 1x, ~90 s at 2x. */
+const SIM_SPEED = Number(process.env.NEXT_PUBLIC_SIM_SPEED ?? "2") || 2;
+
+export interface SimulatorStatus { running: boolean; events_sent: number; events_total: number }
+
+/** Scenario control. Throws ApiError (409 = already running). */
 export async function simulator(action: "start" | "stop" | "reset") {
   if (USE_MOCK) return null;
-  return request(`/api/simulator/${action}`, { method: "POST", body: "{}" });
+  const body = action === "start" ? JSON.stringify({ scenario: "ahmedabad_flood", speed: SIM_SPEED }) : "{}";
+  return request(`/api/simulator/${action}`, { method: "POST", body });
+}
+
+/** Current simulator run (null in mock mode or on error). */
+export async function getSimulatorStatus(): Promise<SimulatorStatus | null> {
+  if (USE_MOCK) return null;
+  try {
+    return await request<SimulatorStatus>("/api/simulator/status");
+  } catch {
+    return null;
+  }
 }
 
 /** Server-side trust (real conflicts between reports); null in mock mode or on error. */
