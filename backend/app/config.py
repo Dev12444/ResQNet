@@ -10,8 +10,12 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./resqnet.db"
 
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
-    gemini_embed_model: str = "text-embedding-004"
+    gemini_model: str = "gemini-3.5-flash-lite"  # fastest; eval: 100% type acc on 50-report set
+    # Tried when the primary model is overloaded (503/429) or unavailable.
+    gemini_fallback_model: str = "gemini-3.6-flash"
+    # "minimal" | "low" | "" (model default). Lower = faster; ignored by models that don't support it.
+    gemini_thinking_level: str = "minimal"
+    gemini_embed_model: str = "gemini-embedding-001"
     ai_enabled: bool = True
 
     telegram_bot_token: str = ""

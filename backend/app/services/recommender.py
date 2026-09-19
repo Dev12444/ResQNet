@@ -1,1 +1,281 @@
-"""Service: recommender. Owner: BE2."""
+"""Resource recommendation: which units + which facility for an incident. Owner: BE2.
+
+Contract: docs/API_CONTRACT.md §3 (GET /recommendations) and §5 · PRD FR-4.
+Score = 0.5·capability_fit + 0.35·(1 − eta/eta_max) + 0.15·load_balance
+Deterministic ranking; Gemini only writes the one-line reasons (template fallback).
+"""
+from __future__ import annotations
+
+import logging
+import math
+from collections import Counter
+from typing import Any
+
+from app.services import llm
+
+log = logging.getLogger("resqnet.recommender")
+
+# Incident type -> needed resource kinds, most important first (contract §1).
+NEEDED_KINDS: dict[str, list[str]] = {
+    "flood": ["rescue_boat", "ndrf_team", "ambulance"],
+    "fire": ["fire_truck", "ambulance"],
+    "road_accident": ["ambulance", "police"],
+    "industrial": ["hazmat", "fire_truck", "ambulance"],
+    "medical": ["ambulance"],
+    "building_collapse": ["ndrf_team", "fire_truck", "ambulance"],
+    "other": ["police"],
+}
+# Average urban speeds (km/h) incl. monsoon traffic; used when BE1's geo.eta_minutes is missing.
+SPEED_KMH = {"ambulance": 35, "fire_truck": 30, "police": 40, "rescue_boat": 10, "ndrf_team": 25, "hazmat": 30}
+ROAD_FACTOR = 1.35  # straight line -> road distance
+TOP_N = 3
+W_CAP, W_ETA, W_LOAD = 0.5, 0.35, 0.15
+
+HOSPITAL_TYPES = {"fire", "road_accident", "industrial", "medical", "building_collapse"}
+HOSPITAL_HAZARDS = {"injuries", "trapped_people", "gas_leak", "chemical"}
+TRAUMA_TYPES = {"road_accident", "building_collapse", "industrial", "fire"}
+
+
+def _haversine_km(lat1, lng1, lat2, lng2) -> float:
+    try:
+        from app.services.geo import haversine_km
+
+        return haversine_km(lat1, lng1, lat2, lng2)
+    except ImportError:
+        pass
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = p2 - p1, math.radians(lng2 - lng1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def _eta_min(distance_km: float, kind: str) -> int:
+    try:
+        from app.services.geo import eta_minutes
+
+        return int(eta_minutes(distance_km, kind))
+    except ImportError:
+        pass
+    speed = SPEED_KMH.get(kind, 30)
+    road_km = distance_km * (1.0 if kind == "rescue_boat" else ROAD_FACTOR)
+    return max(2, math.ceil(road_km / speed * 60) + 2)  # +2 min turnout time
+
+
+def _get(obj: Any, name: str, default: Any = None) -> Any:
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
+
+
+def resource_dict(r: Any) -> dict:
+    return {
+        "id": _get(r, "id"),
+        "callsign": _get(r, "callsign"),
+        "kind": _get(r, "kind"),
+        "status": _get(r, "status"),
+        "lat": _get(r, "lat"),
+        "lng": _get(r, "lng"),
+        "base": _get(r, "base"),
+        "phone": _get(r, "phone"),
+        "current_incident_id": _get(r, "current_incident_id"),
+    }
+
+
+def facility_dict(f: Any) -> dict:
+    return {
+        "id": _get(f, "id"),
+        "name": _get(f, "name"),
+        "kind": _get(f, "kind"),
+        "lat": _get(f, "lat"),
+        "lng": _get(f, "lng"),
+        "beds_total": _get(f, "beds_total"),
+        "beds_available": _get(f, "beds_available"),
+        "specialties": list(_get(f, "specialties") or []),
+    }
+
+
+def needed_kinds(incident_type: str, hazards: list[str] | None = None) -> list[str]:
+    kinds = list(NEEDED_KINDS.get(incident_type, NEEDED_KINDS["other"]))
+    hz = set(hazards or [])
+    if "injuries" in hz and "ambulance" not in kinds:
+        kinds.append("ambulance")
+    if {"gas_leak", "chemical"} & hz and "hazmat" not in kinds:
+        kinds.insert(0, "hazmat")
+    if "blocked_road" in hz and "police" not in kinds:
+        kinds.append("police")
+    return kinds
+
+
+def rank_resources(incident: Any, resources: list[Any]) -> dict:
+    """Pure ranking (no DB, no LLM). Returns per-kind top-N recommendations + shortages."""
+    kinds = needed_kinds(_get(incident, "type", "other"), _get(incident, "hazards"))
+    ilat, ilng = _get(incident, "lat"), _get(incident, "lng")
+    available = [r for r in resources if _get(r, "status") == "available"]
+    per_base = Counter((_get(r, "kind"), _get(r, "base")) for r in available)
+    per_kind = Counter(_get(r, "kind") for r in available)
+
+    recs: dict[str, list[dict]] = {}
+    shortages: list[str] = []
+    for rank, kind in enumerate(kinds):
+        pool = [r for r in available if _get(r, "kind") == kind]
+        if not pool:
+            shortages.append(kind)
+            recs[kind] = []
+            continue
+        cap_fit = max(0.6, 1.0 - 0.15 * rank)
+        rows = []
+        for r in pool:
+            if None in (ilat, ilng, _get(r, "lat"), _get(r, "lng")):
+                dist = 5.0  # unknown location: assume mid-city distance
+            else:
+                dist = _haversine_km(ilat, ilng, _get(r, "lat"), _get(r, "lng"))
+            rows.append((r, dist, _eta_min(dist, kind)))
+        eta_max = max(max(e for _, _, e in rows), 30)
+        out = []
+        for r, dist, eta in rows:
+            # Prefer taking a unit from a base that still has others of the same kind left.
+            load = per_base[(kind, _get(r, "base"))] / per_kind[kind]
+            score = W_CAP * cap_fit + W_ETA * (1 - eta / eta_max) + W_LOAD * load
+            out.append({
+                "resource": resource_dict(r),
+                "kind": kind,
+                "distance_km": round(dist, 2),
+                "eta_min": eta,
+                "score": round(score, 3),
+                "reason": "",
+            })
+        out.sort(key=lambda x: (-x["score"], x["eta_min"]))
+        recs[kind] = out[:TOP_N]
+    suggested = [recs[k][0]["resource"]["id"] for k in kinds if recs.get(k)]
+    return {"needed_kinds": kinds, "recommendations": recs, "suggested_resource_ids": suggested, "shortages": shortages}
+
+
+def pick_facility(incident: Any, facilities: list[Any]) -> dict | None:
+    type_ = _get(incident, "type", "other")
+    hazards = set(_get(incident, "hazards") or [])
+    needs_hospital = type_ in HOSPITAL_TYPES or bool(hazards & HOSPITAL_HAZARDS)
+    want = "hospital" if needs_hospital else ("shelter" if type_ == "flood" else "hospital")
+    ilat, ilng = _get(incident, "lat"), _get(incident, "lng")
+
+    def usable(f):
+        if _get(f, "kind") != want:
+            return False
+        beds = _get(f, "beds_available")
+        return beds is None or beds > 0
+
+    pool = [f for f in facilities if usable(f)] or [f for f in facilities if _get(f, "kind") == "hospital"]
+    if not pool or None in (ilat, ilng):
+        return None
+
+    def rank(f):
+        d = _haversine_km(ilat, ilng, _get(f, "lat"), _get(f, "lng"))
+        specialty_bonus = -1.0 if type_ in TRAUMA_TYPES and "trauma" in (_get(f, "specialties") or []) else 0.0
+        burns_bonus = -1.0 if type_ in ("fire", "industrial") and "burns" in (_get(f, "specialties") or []) else 0.0
+        return d + specialty_bonus + burns_bonus, d  # specialties worth ~1 km each
+
+    best = min(pool, key=lambda f: rank(f)[0])
+    dist = rank(best)[1]
+    beds = _get(best, "beds_available")
+    specs = [s for s in (_get(best, "specialties") or []) if s in ("trauma", "burns")]
+    reason = f"Nearest {want}" + (f" with {'/'.join(specs)} care" if specs else "") + (
+        f", {beds} beds available." if beds is not None else "."
+    )
+    return {"facility": facility_dict(best), "distance_km": round(dist, 2), "reason": reason}
+
+
+def _template_reason(rec: dict, best_eta: int) -> str:
+    r = rec["resource"]
+    parts = [f"{rec['distance_km']} km away, ETA {rec['eta_min']} min"]
+    if rec["eta_min"] <= best_eta:
+        parts.insert(0, f"Fastest available {r['kind'].replace('_', ' ')}")
+    if r.get("base"):
+        parts.append(f"from {r['base']}")
+    return "; ".join(parts) + "."
+
+
+REASON_SYSTEM = (
+    "You are an emergency dispatch assistant in Ahmedabad. For each candidate unit write ONE short "
+    "English reason (max 18 words) why it suits this incident, using only the facts given (distance, ETA, "
+    "base, kind). Be concrete; no fluff."
+)
+REASON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "reasons": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"id": {"type": "integer"}, "reason": {"type": "string"}},
+                "required": ["id", "reason"],
+            },
+        }
+    },
+    "required": ["reasons"],
+}
+
+
+def _add_reasons(incident: Any, ranked: dict) -> None:
+    all_recs = [rec for recs in ranked["recommendations"].values() for rec in recs]
+    if not all_recs:
+        return
+    for kind, recs in ranked["recommendations"].items():
+        best_eta = min((x["eta_min"] for x in recs), default=0)
+        for rec in recs:
+            rec["reason"] = _template_reason(rec, best_eta)
+
+    lines = [
+        f'- id={rec["resource"]["id"]} {rec["resource"]["callsign"]} ({rec["kind"]}), base {rec["resource"]["base"]}, '
+        f'{rec["distance_km"]} km, ETA {rec["eta_min"]} min, score {rec["score"]}'
+        for rec in all_recs
+    ]
+    prompt = (
+        f"Incident: {_get(incident, 'title') or _get(incident, 'type')} "
+        f"(type {_get(incident, 'type')}, severity {_get(incident, 'severity')}, "
+        f"hazards {', '.join(_get(incident, 'hazards') or []) or 'none'}, at {_get(incident, 'address') or 'unknown'}).\n"
+        "Candidates:\n" + "\n".join(lines)
+    )
+    data = llm.generate_json(prompt, REASON_SCHEMA, system=REASON_SYSTEM, temperature=0.2)
+    if not isinstance(data, dict):
+        return
+    by_id = {x.get("id"): x.get("reason") for x in data.get("reasons", []) if isinstance(x, dict)}
+    for rec in all_recs:
+        reason = by_id.get(rec["resource"]["id"])
+        if isinstance(reason, str) and reason.strip():
+            rec["reason"] = reason.strip()[:160]
+
+
+def build_recommendation(incident: Any, resources: list[Any], facilities: list[Any], with_llm: bool = True) -> dict:
+    ranked = rank_resources(incident, resources)
+    if with_llm:
+        _add_reasons(incident, ranked)
+    else:
+        for recs in ranked["recommendations"].values():
+            best_eta = min((x["eta_min"] for x in recs), default=0)
+            for rec in recs:
+                rec["reason"] = _template_reason(rec, best_eta)
+    return {
+        "incident_id": _get(incident, "id"),
+        **ranked,
+        "facility": pick_facility(incident, facilities),
+    }
+
+
+def recommend(db, incident: Any) -> dict:
+    """Contract §5 entry point: shape = GET /api/incidents/{id}/recommendations. Never raises."""
+    try:
+        from app.models import Facility, Resource  # BE1's models
+
+        resources = db.query(Resource).all()
+        facilities = db.query(Facility).all()
+        return build_recommendation(incident, resources, facilities)
+    except Exception as e:
+        log.exception("recommend failed: %s", e)
+        return {
+            "incident_id": _get(incident, "id"),
+            "needed_kinds": needed_kinds(_get(incident, "type", "other")),
+            "recommendations": {},
+            "suggested_resource_ids": [],
+            "facility": None,
+            "shortages": [],
+        }

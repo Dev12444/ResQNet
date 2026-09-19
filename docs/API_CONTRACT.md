@@ -449,7 +449,7 @@ def eta_minutes(distance_km: float, kind: str) -> int: ...
 Rules:
 - Services **never raise** to the pipeline — on any error return a fallback result.
 - Services **don't commit** the DB session and don't broadcast; BE1's router does.
-- Any Gemini call has a 5–8 s timeout.
+- Any Gemini call has a 12 s timeout (API minimum is 10 s), one retry, then the fallback model, then rules.
 
 ---
 
