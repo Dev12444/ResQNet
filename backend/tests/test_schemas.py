@@ -32,7 +32,7 @@ ASSIGNMENT_KEYS = {"id", "incident_id", "resource_id", "resource", "status", "et
                    "created_at", "updated_at"}
 ALERT_KEYS = {"id", "incident_id", "incident_code", "kind", "message", "acknowledged", "created_at"}
 CLASSIFICATION_KEYS = {"type", "severity", "priority", "title", "location_text", "people_affected_est",
-                       "hazards", "reasoning", "confidence", "lang", "source_model"}
+                       "hazards", "reasoning", "confidence", "lang", "source_model", "photo"}
 
 
 @pytest.fixture()
@@ -139,7 +139,49 @@ def test_classification_out_from_be2_result():
     cls = fallback_classify("Car stuck in Akhbarnagar underpass, water rising, people trapped")
     out = s.ClassificationOut.model_validate(cls).model_dump(mode="json")
     assert set(out) == CLASSIFICATION_KEYS
-    assert out["source_model"] == "fallback" and out["type"] == "flood"
+    assert out["source_model"] == "fallback" and out["type"] == "flood" and out["photo"] is None
+
+
+def test_classification_out_with_photo():
+    cls = fallback_classify("Fire at C.G. Road complex")
+    cls.photo = {"relevant": True, "type": "fire", "severity_hint": 4, "hazards": ["fire_spread"],
+                 "description": "Smoke from 3rd floor", "confidence": 0.8}
+    out = s.ClassificationOut.model_validate(cls).model_dump(mode="json")
+    assert out["photo"]["severity_hint"] == 4 and out["photo"]["relevant"] is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["data:image/jpeg;base64,/9j/4AAQ", "data:image/png;base64,iVBOR", "data:image/webp;base64,UklGR",
+     "https://example.org/flood.jpg"],
+)
+def test_photo_url_accepted(url):
+    assert s.ReportCreate(source="citizen", text="flood", photo_url=url).photo_url == url
+
+
+def test_photo_url_empty_becomes_null():
+    assert s.ReportCreate(source="citizen", text="flood", photo_url="").photo_url is None
+
+
+def test_photo_url_six_mb_image_fits():
+    six_mb_b64 = "A" * ((s.MAX_PHOTO_BYTES + 2) // 3 * 4)
+    r = s.ReportCreate(source="citizen", text="flood", photo_url="data:image/jpeg;base64," + six_mb_b64)
+    assert r.photo_url is not None
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://example.org/a.jpg", "file:///etc/passwd", "data:text/html;base64,PGh0bWw+", "javascript:alert(1)",
+     "flood.jpg"],
+)
+def test_photo_url_rejected(url):
+    with pytest.raises(ValidationError):
+        s.ReportCreate(source="citizen", text="flood", photo_url=url)
+
+
+def test_photo_url_too_large_rejected():
+    with pytest.raises(ValidationError):
+        s.ReportCreate(source="citizen", text="flood", photo_url="data:image/jpeg;base64," + "A" * s.MAX_PHOTO_URL_LEN)
 
 
 def test_datetime_serialisation():

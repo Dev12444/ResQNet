@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
 # ---------------------------------------------------------------- enums (contract §1)
 # Kept as explicit Literals for type checkers / OpenAPI; tests assert they match app.models.
@@ -38,8 +38,22 @@ Latitude = Annotated[float, Field(ge=-90, le=90)]
 Longitude = Annotated[float, Field(ge=-180, le=180)]
 
 MAX_TEXT_LEN = 5_000
-# Photos may arrive as base64 data URLs from /report (demo); cap at ~2 MB of text.
-MAX_PHOTO_URL_LEN = 2_000_000
+# Contract §3: photo_url is a base64 data URL of an image <= 6 MB, or a public https:// URL.
+# 6 MB of bytes is ~8.4 M base64 characters, plus the "data:image/...;base64," prefix.
+MAX_PHOTO_BYTES = 6 * 1024 * 1024
+MAX_PHOTO_URL_LEN = (MAX_PHOTO_BYTES + 2) // 3 * 4 + 64
+PHOTO_DATA_URL_PREFIXES = tuple(f"data:image/{t};base64," for t in ("jpeg", "jpg", "png", "webp"))
+
+
+def _check_photo_url(value: str | None) -> str | None:
+    if value is None or value == "":
+        return None
+    if value.startswith(PHOTO_DATA_URL_PREFIXES) or value.startswith("https://"):
+        return value
+    raise ValueError("photo_url must be a data:image/jpeg|png|webp;base64 URL or an https:// URL")
+
+
+PhotoUrl = Annotated[str, Field(max_length=MAX_PHOTO_URL_LEN), AfterValidator(_check_photo_url)]
 
 
 def to_utc_iso(value: datetime) -> str:
@@ -78,7 +92,7 @@ class ReportCreate(RequestModel):
     lat: Latitude | None = None
     lng: Longitude | None = None
     address: str | None = Field(default=None, max_length=300)
-    photo_url: str | None = Field(default=None, max_length=MAX_PHOTO_URL_LEN)
+    photo_url: PhotoUrl | None = None
     reporter: str | None = Field(default=None, max_length=120)
     sensor: SensorReading | None = None
 
@@ -246,6 +260,17 @@ class UnmergeResponse(BaseModel):
 # ---------------------------------------------------------------- pipeline response
 
 
+class PhotoAssessmentOut(BaseModel):
+    """Gemini Vision result for a report photo (contract §3 `classification.photo`)."""
+
+    relevant: bool
+    type: IncidentType | None
+    severity_hint: Severity | None
+    hazards: list[str]
+    description: str
+    confidence: float = Field(ge=0, le=1)
+
+
 class ClassificationOut(BaseModel):
     """Mirror of services.classifier.ClassificationResult (contract §5)."""
 
@@ -261,7 +286,8 @@ class ClassificationOut(BaseModel):
     reasoning: str
     confidence: float = Field(ge=0, le=1)
     lang: str
-    source_model: str  # "gemini" | "fallback"
+    source_model: str  # "gemini" | "fallback" (rules on text) | "rules" (sensor)
+    photo: PhotoAssessmentOut | None = None
 
 
 class ReportCreatedResponse(BaseModel):
