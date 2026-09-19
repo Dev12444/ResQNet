@@ -29,7 +29,7 @@ export function Call112Button({
   return (
     <a
       href={`tel:${PRIMARY_EMERGENCY_NUMBER}`}
-      className={`inline-flex items-center justify-center gap-2 border-2 border-[#7f1d1d] bg-[var(--critical)] font-bold uppercase tracking-wide text-white hover:bg-[#b91c1c] ${sizing} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 border-2 border-[#8f2417] bg-[var(--critical)] font-bold uppercase tracking-wide text-white hover:bg-[#b91c1c] ${sizing} ${className}`}
     >
       <PhoneGlyph />
       {label}
@@ -68,7 +68,7 @@ export function EmergencyDirectory({ compact = false }: { compact?: boolean }) {
     <div>
       <a
         href={`tel:${primary.number}`}
-        className="flex items-center justify-between gap-3 border-2 border-[#7f1d1d] bg-[var(--critical)] px-3 py-2.5 text-white hover:bg-[#b91c1c]"
+        className="flex items-center justify-between gap-3 border-2 border-[#8f2417] bg-[var(--critical)] px-3 py-2.5 text-white hover:bg-[#b91c1c]"
       >
         <span>
           <span className="mono block text-2xl font-bold leading-none">{primary.number}</span>

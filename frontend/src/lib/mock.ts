@@ -1355,3 +1355,842 @@ export const MOCK_DISTRICT_STATS = [
   { district: "Rajkot", incidents: 1, p1: 0, avg_dispatch_sec: 120, resolved: 1 },
   { district: "Gandhinagar", incidents: 1, p1: 0, avg_dispatch_sec: null, resolved: 0 },
 ];
+
+/* ================================================================== */
+/* Gujarat State Emergency Response Platform — demo data               */
+/* ------------------------------------------------------------------ */
+/* Same rules as above: everything pinned to DEMO_NOW, no randomness.  */
+/* The Kutch cyclone scenario is the spine of the demo.                */
+/* ================================================================== */
+
+import type {
+  DispatchLogEntry,
+  DistrictSituation,
+  ForecastDay,
+  GroundTruthReport,
+  MissingPerson,
+  ReliefRequest,
+  ReportDoc,
+  ResQPulse,
+  RiskLevel,
+  SafeRoute,
+  Shelter,
+  WeatherAlert,
+} from "@/types";
+import { GUJARAT_DISTRICTS } from "./constants";
+
+/* ------------------------------------------------------------------ */
+/* District situation                                                  */
+/* ------------------------------------------------------------------ */
+
+type SituationSeed = [
+  districtId: string,
+  risk: RiskLevel,
+  incidents: number,
+  shelters: number,
+  teams: number,
+  affected: number,
+  headline: string,
+];
+
+const SITUATION_SEED: SituationSeed[] = [
+  ["kutch", "critical", 14, 5, 8, 4200, "Cyclone landfall expected within 12 hours. Heavy winds and coastal surge."],
+  ["jamnagar", "high", 7, 3, 4, 1600, "Cyclone outer bands. Coastal villages advised to move inland."],
+  ["banaskantha", "watch", 2, 1, 2, 180, "Isolated heavy showers. No major incidents reported."],
+  ["patan", "normal", 1, 0, 1, 40, "Normal conditions."],
+  ["mehsana", "normal", 1, 0, 1, 25, "Normal conditions."],
+  ["gandhinagar", "watch", 2, 1, 2, 90, "Localised waterlogging near sector roads."],
+  ["ahmedabad", "high", 11, 4, 9, 2300, "Underpass flooding across the western city. Sabarmati above caution level."],
+  ["rajkot", "watch", 3, 1, 2, 210, "Intermittent rain. Two road blockages cleared."],
+  ["junagadh", "moderate", 4, 2, 3, 520, "Hill run-off affecting approach roads."],
+  ["amreli", "watch", 2, 1, 1, 130, "Scattered rainfall."],
+  ["bhavnagar", "moderate", 5, 2, 3, 700, "Coastal wind advisory. Fishing suspended."],
+  ["vadodara", "moderate", 6, 2, 4, 880, "Vishwamitri rising. Low-lying wards on alert."],
+  ["bharuch", "high", 8, 3, 5, 1900, "Narmada discharge raised. Riverside settlements evacuating."],
+  ["narmada", "critical", 9, 4, 6, 2600, "Dam discharge at high rate. Downstream villages under flood warning."],
+  ["surat", "high", 12, 5, 8, 3100, "Heavy rainfall. Udhna and Adajan waterlogged, four roads blocked."],
+  ["navsari", "moderate", 4, 2, 3, 460, "Purna river above warning level."],
+  ["valsad", "moderate", 3, 1, 2, 300, "Auranga river rising slowly."],
+];
+
+export const MOCK_DISTRICT_SITUATIONS: DistrictSituation[] = SITUATION_SEED.map(
+  ([id, risk, incidents, shelters, teams, affected, headline], i) => {
+    const info = GUJARAT_DISTRICTS.find((d) => d.id === id)!;
+    return {
+      district: info.name,
+      risk,
+      headline,
+      activeIncidents: incidents,
+      sheltersOpen: shelters,
+      responseTeams: teams,
+      peopleAffected: affected,
+      lat: info.lat,
+      lng: info.lng,
+      updatedAt: ago(60 + i * 17),
+    };
+  },
+);
+
+export function situationFor(districtName: string): DistrictSituation | undefined {
+  return MOCK_DISTRICT_SITUATIONS.find((s) => s.district === districtName);
+}
+
+/* ------------------------------------------------------------------ */
+/* ResQ Pulse                                                          */
+/* ------------------------------------------------------------------ */
+
+export const MOCK_PULSE: ResQPulse[] = [
+  {
+    district: "Kutch",
+    level: "critical",
+    headline: "Cyclone landfall expected",
+    reports: 38,
+    blockedRoads: 6,
+    sheltersActive: 5,
+    responseTeams: 8,
+    priorityArea: "Jakhau Coast",
+    updatedAt: ago(75),
+  },
+  {
+    district: "Surat",
+    level: "high",
+    headline: "Heavy rainfall",
+    reports: 23,
+    blockedRoads: 4,
+    sheltersActive: 3,
+    responseTeams: 8,
+    priorityArea: "Adajan",
+    updatedAt: ago(95),
+  },
+  {
+    district: "Narmada",
+    level: "critical",
+    headline: "Dam discharge raised",
+    reports: 19,
+    blockedRoads: 3,
+    sheltersActive: 4,
+    responseTeams: 6,
+    priorityArea: "Garudeshwar",
+    updatedAt: ago(140),
+  },
+  {
+    district: "Ahmedabad",
+    level: "high",
+    headline: "Underpass flooding",
+    reports: 27,
+    blockedRoads: 5,
+    sheltersActive: 4,
+    responseTeams: 9,
+    priorityArea: "Akhbarnagar",
+    updatedAt: ago(110),
+  },
+  {
+    district: "Bharuch",
+    level: "high",
+    headline: "Riverside evacuation",
+    reports: 14,
+    blockedRoads: 2,
+    sheltersActive: 3,
+    responseTeams: 5,
+    priorityArea: "Zadeshwar",
+    updatedAt: ago(200),
+  },
+  {
+    district: "Vadodara",
+    level: "moderate",
+    headline: "Vishwamitri rising",
+    reports: 9,
+    blockedRoads: 1,
+    sheltersActive: 2,
+    responseTeams: 4,
+    priorityArea: "Kalaghoda",
+    updatedAt: ago(260),
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* Shelters                                                            */
+/* ------------------------------------------------------------------ */
+
+type ShelterSeed = [
+  id: string,
+  name: string,
+  districtId: string,
+  address: string,
+  lat: number,
+  lng: number,
+  occupancy: number,
+  capacity: number,
+  food: boolean,
+  water: boolean,
+  medical: boolean,
+  accessible: boolean,
+  contact: string,
+  agoSec: number,
+];
+
+const SHELTER_SEED: ShelterSeed[] = [
+  ["SH-KUT-01", "Bhuj Public Shelter", "kutch", "Hospital Road, Bhuj", 23.2419, 69.6669, 184, 250, true, true, true, true, "02832 250 100", 240],
+  ["SH-KUT-02", "Jakhau Coastal Shelter", "kutch", "Port Road, Jakhau", 23.2201, 68.7189, 96, 150, true, true, false, true, "02831 244 010", 420],
+  ["SH-KUT-03", "Mandvi Town Hall", "kutch", "Station Road, Mandvi", 22.8332, 69.3554, 148, 160, true, true, true, false, "02834 223 400", 180],
+  ["SH-SRT-01", "Surat Community Hall", "surat", "Adajan Gam, Surat", 21.1959, 72.7933, 90, 200, true, true, true, true, "0261 246 1100", 300],
+  ["SH-SRT-02", "Udhna Municipal School", "surat", "Udhna Darwaja, Surat", 21.1702, 72.8311, 172, 180, true, true, false, false, "0261 227 8800", 900],
+  ["SH-AMD-01", "Naranpura Municipal Shelter", "ahmedabad", "Naranpura, Ahmedabad", 23.0489, 72.5595, 146, 200, true, true, true, true, "079 2755 0000", 360],
+  ["SH-AMD-02", "Behrampura Relief Centre", "ahmedabad", "Behrampura, Ahmedabad", 22.9942, 72.5836, 200, 200, true, true, true, false, "079 2532 4000", 150],
+  ["SH-NRM-01", "Garudeshwar Flood Shelter", "narmada", "Garudeshwar, Narmada", 21.9, 73.6667, 210, 300, true, true, true, true, "02640 222 300", 210],
+  ["SH-BRC-01", "Zadeshwar Relief Camp", "bharuch", "Zadeshwar, Bharuch", 21.7333, 72.9833, 118, 250, true, true, false, true, "02642 244 500", 480],
+  ["SH-VAD-01", "Kalaghoda Community Centre", "vadodara", "Kalaghoda, Vadodara", 22.2994, 73.2081, 64, 180, true, true, false, true, "0265 242 6000", 1500],
+  ["SH-JAM-01", "Jamnagar District Shelter", "jamnagar", "Pandit Nehru Marg, Jamnagar", 22.4707, 70.0577, 132, 220, true, true, true, true, "0288 255 0000", 330],
+  ["SH-BHV-01", "Bhavnagar Coastal Shelter", "bhavnagar", "Ghogha Road, Bhavnagar", 21.7645, 72.1519, 54, 200, true, true, false, false, "0278 242 8000", 600],
+];
+
+export const MOCK_SHELTERS: Shelter[] = SHELTER_SEED.map(
+  ([id, name, districtId, address, lat, lng, occupancy, capacity, food, water, medical, accessible, contact, agoSec]) => {
+    const info = GUJARAT_DISTRICTS.find((d) => d.id === districtId)!;
+    const ratio = occupancy / capacity;
+    return {
+      id,
+      name,
+      district: info.name,
+      address,
+      lat,
+      lng,
+      status: ratio >= 1 ? "full" : ratio >= 0.85 ? "near_capacity" : "open",
+      occupancy,
+      capacity,
+      amenities: { food, water, medical, accessible },
+      contact,
+      updatedAt: ago(agoSec),
+    };
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Citizen ground truth                                                */
+/* ------------------------------------------------------------------ */
+
+export const MOCK_GROUND_TRUTH: GroundTruthReport[] = [
+  {
+    id: "GT-0001",
+    disaster: "flood",
+    district: "Ahmedabad",
+    location: "Akhbarnagar Underpass, Naranpura",
+    lat: 23.0496,
+    lng: 72.5621,
+    text: "અખબારનગર અંડરપાસમાં ગાડી ફસાઈ છે, પાણી ઝડપથી વધી રહ્યું છે. અંદર ત્રણ લોકો છે.",
+    lang: "gu",
+    media: ["text", "photo"],
+    level: "authority_verified",
+    confirmations: 5,
+    submittedAt: ago(2100),
+    chain: [
+      { status: "unverified", at: ago(2100), actor: "Citizen app", note: "First report received." },
+      { status: "community_confirmed", at: ago(1980), actor: "4 nearby reports", note: "Same location described by others." },
+      { status: "authority_verified", at: ago(1800), actor: "VASNA-WL-01 + 112 Control Room", note: "Sensor above danger mark; call centre confirmed." },
+      { status: "assigned", at: ago(1860), actor: "State Control Room", note: "NDRF-BOAT-02 assigned." },
+      { status: "response_en_route", at: ago(1800), actor: "NDRF-BOAT-02", note: null },
+      { status: "resolved", at: ago(240), actor: "NDRF-BOAT-02", note: "Three occupants recovered." },
+    ],
+  },
+  {
+    id: "GT-0002",
+    disaster: "cyclone",
+    district: "Kutch",
+    location: "Jakhau Port Road",
+    lat: 23.2167,
+    lng: 68.7167,
+    text: "જખૌ પોર્ટ રોડ પર દરિયાનું પાણી ચઢી ગયું છે, ગામ સુધી પહોંચાતું નથી",
+    lang: "gu",
+    media: ["text", "photo", "voice"],
+    level: "authority_verified",
+    confirmations: 7,
+    submittedAt: ago(660),
+    chain: [
+      { status: "unverified", at: ago(660), actor: "Citizen app", note: null },
+      { status: "community_confirmed", at: ago(540), actor: "6 nearby reports", note: "Consistent accounts from the hamlet." },
+      { status: "authority_verified", at: ago(420), actor: "Kutch District Emergency", note: "Confirmed by district officer." },
+      { status: "assigned", at: ago(360), actor: "State Control Room", note: "NDRF team and boat tasked." },
+      { status: "response_en_route", at: ago(300), actor: "NDRF-TEAM-03", note: null },
+    ],
+  },
+  {
+    id: "GT-0003",
+    disaster: "heavy_rainfall",
+    district: "Surat",
+    location: "Adajan Gam",
+    lat: 21.1959,
+    lng: 72.7933,
+    text: "अडाजण में घुटनों तक पानी भर गया है, दुकानें बंद हो गई हैं",
+    lang: "hi",
+    media: ["text", "photo"],
+    level: "community_confirmed",
+    confirmations: 3,
+    submittedAt: ago(1080),
+    chain: [
+      { status: "unverified", at: ago(1080), actor: "Citizen app", note: null },
+      { status: "community_confirmed", at: ago(900), actor: "3 nearby reports", note: "Waterlogging depth consistent." },
+    ],
+  },
+  {
+    id: "GT-0004",
+    disaster: "road_block",
+    district: "Surat",
+    location: "Udhna Darwaja junction",
+    lat: 21.1702,
+    lng: 72.8311,
+    text: "Tree down across both lanes at Udhna Darwaja, traffic completely stopped.",
+    lang: "en",
+    media: ["text", "photo"],
+    level: "authority_verified",
+    confirmations: 4,
+    submittedAt: ago(1500),
+    chain: [
+      { status: "unverified", at: ago(1500), actor: "Citizen app", note: null },
+      { status: "community_confirmed", at: ago(1400), actor: "3 nearby reports", note: null },
+      { status: "authority_verified", at: ago(1200), actor: "Surat Traffic Control", note: "Confirmed; clearance team sent." },
+      { status: "assigned", at: ago(1100), actor: "Surat Municipal", note: null },
+    ],
+  },
+  {
+    id: "GT-0005",
+    disaster: "infrastructure",
+    district: "Narmada",
+    location: "Garudeshwar approach bridge",
+    lat: 21.9,
+    lng: 73.6667,
+    text: "Approach bridge railing washed away, water flowing over the deck.",
+    lang: "en",
+    media: ["text", "video"],
+    level: "community_confirmed",
+    confirmations: 2,
+    submittedAt: ago(780),
+    chain: [
+      { status: "unverified", at: ago(780), actor: "Citizen app", note: null },
+      { status: "community_confirmed", at: ago(600), actor: "2 nearby reports", note: null },
+    ],
+  },
+  {
+    id: "GT-0006",
+    disaster: "fire",
+    district: "Bharuch",
+    location: "Ankleshwar GIDC Estate",
+    lat: 21.6279,
+    lng: 73.0143,
+    text: "Thick black smoke from the solvent shed, spreading towards the next godown.",
+    lang: "en",
+    media: ["text", "photo"],
+    level: "authority_verified",
+    confirmations: 3,
+    submittedAt: ago(1500),
+    chain: [
+      { status: "unverified", at: ago(1500), actor: "Citizen app", note: null },
+      { status: "authority_verified", at: ago(1320), actor: "Ankleshwar Fire Station", note: "Units on scene." },
+      { status: "response_en_route", at: ago(1260), actor: "FIRE-BRC-01", note: null },
+    ],
+  },
+  {
+    id: "GT-0007",
+    disaster: "medical",
+    district: "Kutch",
+    location: "Mandvi relief queue",
+    lat: 22.8332,
+    lng: 69.3554,
+    text: "Elderly man collapsed in the shelter queue, needs medical help.",
+    lang: "en",
+    media: ["text"],
+    level: "unverified",
+    confirmations: 0,
+    submittedAt: ago(180),
+    chain: [{ status: "unverified", at: ago(180), actor: "Citizen app", note: "Awaiting confirmation." }],
+  },
+  {
+    id: "GT-0008",
+    disaster: "flood",
+    district: "Vadodara",
+    location: "Kalaghoda bridge",
+    lat: 22.2994,
+    lng: 73.2081,
+    text: "વિશ્વામિત્રીનું પાણી પુલની નજીક આવી ગયું છે",
+    lang: "gu",
+    media: ["text", "photo"],
+    level: "unverified",
+    confirmations: 1,
+    submittedAt: ago(420),
+    chain: [{ status: "unverified", at: ago(420), actor: "Citizen app", note: null }],
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* Missing persons                                                     */
+/* ------------------------------------------------------------------ */
+
+export const MOCK_MISSING: MissingPerson[] = [
+  {
+    id: "MP-0001",
+    name: "Ramesh Patel",
+    ageBand: "60-70",
+    district: "Kutch",
+    lastSeenLocation: "Jakhau fishing hamlet",
+    lastSeenAt: ago(5400),
+    status: "missing",
+    description: "Wearing a blue shirt. Was helping move boats before the surge.",
+    hasPhoto: true,
+    reportedAt: ago(4800),
+    caseOfficer: "Kutch District Emergency",
+  },
+  {
+    id: "MP-0002",
+    name: "Kiran Solanki",
+    ageBand: "8-12",
+    district: "Surat",
+    lastSeenLocation: "Udhna Darwaja market",
+    lastSeenAt: ago(3600),
+    status: "potential_match",
+    description: "Separated from family during evacuation.",
+    hasPhoto: true,
+    reportedAt: ago(3300),
+    caseOfficer: "Surat City Police",
+  },
+  {
+    id: "MP-0003",
+    name: "Meena Rathod",
+    ageBand: "30-40",
+    district: "Narmada",
+    lastSeenLocation: "Garudeshwar riverside",
+    lastSeenAt: ago(7200),
+    status: "located",
+    description: "Found at Garudeshwar Flood Shelter, safe.",
+    hasPhoto: false,
+    reportedAt: ago(6600),
+    caseOfficer: "Narmada District Emergency",
+  },
+  {
+    id: "MP-0004",
+    name: "Arjun Desai",
+    ageBand: "20-30",
+    district: "Ahmedabad",
+    lastSeenLocation: "Akhbarnagar underpass",
+    lastSeenAt: ago(2400),
+    status: "reunited",
+    description: "Reunited with family at Naranpura shelter.",
+    hasPhoto: false,
+    reportedAt: ago(2100),
+    caseOfficer: "Ahmedabad City Police",
+  },
+  {
+    id: "MP-0005",
+    name: "Savita Chauhan",
+    ageBand: "70-80",
+    district: "Bharuch",
+    lastSeenLocation: "Zadeshwar riverside lane",
+    lastSeenAt: ago(9000),
+    status: "missing",
+    description: "Uses a walking stick. Last seen before the evacuation notice.",
+    hasPhoto: false,
+    reportedAt: ago(8400),
+    caseOfficer: "Bharuch District Emergency",
+  },
+  {
+    id: "MP-0006",
+    name: "Imran Shaikh",
+    ageBand: "12-18",
+    district: "Kutch",
+    lastSeenLocation: "Mandvi beach road",
+    lastSeenAt: ago(4200),
+    status: "potential_match",
+    description: "Possible sighting reported at Mandvi Town Hall shelter.",
+    hasPhoto: true,
+    reportedAt: ago(3900),
+    caseOfficer: "Kutch District Emergency",
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* Relief requests                                                     */
+/* ------------------------------------------------------------------ */
+
+export const MOCK_RELIEF: ReliefRequest[] = [
+  { id: "RR-0001", kind: "water", quantity: 4000, unit: "litres", priority: "P1", district: "Kutch", location: "Jakhau Coastal Shelter", status: "open", claimedBy: null, requestedAt: ago(1800), updatedAt: ago(1800) },
+  { id: "RR-0002", kind: "food", quantity: 600, unit: "meals", priority: "P1", district: "Kutch", location: "Bhuj Public Shelter", status: "in_transit", claimedBy: "Kutch Seva Trust", requestedAt: ago(3600), updatedAt: ago(900) },
+  { id: "RR-0003", kind: "medical", quantity: 12, unit: "first-aid kits", priority: "P2", district: "Surat", location: "Udhna Municipal School", status: "claimed", claimedBy: "Surat Red Cross", requestedAt: ago(2700), updatedAt: ago(1200) },
+  { id: "RR-0004", kind: "rescue", quantity: 2, unit: "boat crews", priority: "P1", district: "Narmada", location: "Garudeshwar", status: "open", claimedBy: null, requestedAt: ago(1200), updatedAt: ago(1200) },
+  { id: "RR-0005", kind: "transport", quantity: 3, unit: "buses", priority: "P2", district: "Bharuch", location: "Zadeshwar Relief Camp", status: "in_transit", claimedBy: "GSRTC Bharuch", requestedAt: ago(4500), updatedAt: ago(600) },
+  { id: "RR-0006", kind: "food", quantity: 350, unit: "meals", priority: "P3", district: "Vadodara", location: "Kalaghoda Community Centre", status: "delivered", claimedBy: "Baroda Citizens Forum", requestedAt: ago(7200), updatedAt: ago(3600) },
+  { id: "RR-0007", kind: "water", quantity: 1500, unit: "litres", priority: "P2", district: "Ahmedabad", location: "Behrampura Relief Centre", status: "claimed", claimedBy: "AMC Relief Cell", requestedAt: ago(2100), updatedAt: ago(1500) },
+  { id: "RR-0008", kind: "medical", quantity: 4, unit: "paramedics", priority: "P1", district: "Kutch", location: "Mandvi Town Hall", status: "open", claimedBy: null, requestedAt: ago(600), updatedAt: ago(600) },
+];
+
+/* ------------------------------------------------------------------ */
+/* Weather                                                             */
+/* ------------------------------------------------------------------ */
+
+export const MOCK_WEATHER_ALERTS: WeatherAlert[] = [
+  {
+    id: "WA-0001",
+    disaster: "cyclone",
+    severity: "critical",
+    district: "Kutch",
+    headline: "Cyclone Alert — Kutch Coast",
+    detail: "Heavy winds expected in the next 12 hours. Landfall anticipated near Jakhau. Coastal evacuation in progress.",
+    issuedAt: ago(7200),
+    source: "IMD Ahmedabad",
+  },
+  {
+    id: "WA-0002",
+    disaster: "heavy_rainfall",
+    severity: "high",
+    district: "Surat",
+    headline: "Heavy Rainfall — Southern Districts",
+    detail: "200mm+ in 24 hours forecast across Surat, Navsari and Valsad.",
+    issuedAt: ago(14400),
+    source: "IMD Ahmedabad",
+  },
+  {
+    id: "WA-0003",
+    disaster: "flood",
+    severity: "critical",
+    district: "Narmada",
+    headline: "Flood Warning — Narmada District",
+    detail: "Dam discharge raised to 4.2 lakh cusecs. Downstream villages advised to move to shelters.",
+    issuedAt: ago(21600),
+    source: "Narmada Control Room",
+  },
+  {
+    id: "WA-0004",
+    disaster: "flood",
+    severity: "high",
+    district: "Bharuch",
+    headline: "River Warning — Bharuch",
+    detail: "Narmada at Golden Bridge above warning level and rising.",
+    issuedAt: ago(10800),
+    source: "Bharuch District Emergency",
+  },
+  {
+    id: "WA-0005",
+    disaster: "heavy_rainfall",
+    severity: "moderate",
+    district: "Ahmedabad",
+    headline: "Rainfall Advisory — Ahmedabad",
+    detail: "Intense spells likely in the western city. Avoid underpasses.",
+    issuedAt: ago(5400),
+    source: "IMD Ahmedabad",
+  },
+];
+
+export const MOCK_FORECAST: ForecastDay[] = [
+  { day: "Sun", rainfallMm: 62, maxTempC: 29, windKph: 74 },
+  { day: "Mon", rainfallMm: 88, maxTempC: 28, windKph: 96 },
+  { day: "Tue", rainfallMm: 41, maxTempC: 30, windKph: 58 },
+  { day: "Wed", rainfallMm: 24, maxTempC: 32, windKph: 36 },
+  { day: "Thu", rainfallMm: 55, maxTempC: 31, windKph: 44 },
+  { day: "Fri", rainfallMm: 30, maxTempC: 33, windKph: 28 },
+  { day: "Sat", rainfallMm: 12, maxTempC: 34, windKph: 22 },
+];
+
+/* ------------------------------------------------------------------ */
+/* Dispatch log                                                        */
+/* ------------------------------------------------------------------ */
+
+type LogSeed = [
+  agoSec: number,
+  kind: DispatchLogEntry["kind"],
+  severity: DispatchLogEntry["severity"],
+  district: string | null,
+  unit: string | null,
+  message: string,
+];
+
+const LOG_SEED: LogSeed[] = [
+  [45, "weather", "critical", "Kutch", null, "Cyclone warning updated — landfall window narrowed to 12 hours"],
+  [95, "unit", "info", "Kutch", "GJ-KUT-08", "Unit dispatched to Jakhau Port Road"],
+  [140, "shelter", "info", "Kutch", null, "Bhuj Public Shelter capacity updated to 184/250"],
+  [190, "verification", "info", "Surat", null, "Citizen report GT-0004 verified by Traffic Control"],
+  [240, "incident", "critical", "Ahmedabad", null, "INC-0001 escalated — three occupants confirmed on vehicle roof"],
+  [300, "unit", "info", "Narmada", "GJ-NRM-02", "Boat crew en route to Garudeshwar"],
+  [360, "resource", "warning", "Kutch", null, "Water shortage flagged at Jakhau Coastal Shelter"],
+  [420, "verification", "info", "Kutch", null, "Citizen report GT-0002 verified by district officer"],
+  [480, "shelter", "warning", "Ahmedabad", null, "Behrampura Relief Centre reached full capacity"],
+  [540, "incident", "warning", "Kutch", null, "Coastal surge flooding reported at Jakhau approach road"],
+  [600, "unit", "info", "Bharuch", "GJ-BRC-03", "Transport tasked to Zadeshwar Relief Camp"],
+  [720, "weather", "warning", "Surat", null, "Rainfall intensity increased over Adajan"],
+  [840, "resource", "info", "Surat", null, "12 first-aid kits claimed by Surat Red Cross"],
+  [960, "incident", "info", "Vadodara", null, "Vishwamitri level update — below danger mark"],
+  [1080, "unit", "info", "Ahmedabad", "GJ-AMD-05", "Unit status updated to on scene"],
+  [1260, "incident", "critical", "Bharuch", null, "Ankleshwar GIDC fire — second unit requested"],
+  [1500, "shelter", "info", "Narmada", null, "Garudeshwar Flood Shelter opened, capacity 300"],
+  [1800, "verification", "info", "Ahmedabad", null, "Sensor VASNA-WL-01 corroborated INC-0001"],
+  [2100, "incident", "warning", "Ahmedabad", null, "First citizen report received for Akhbarnagar underpass"],
+  [2700, "weather", "info", "Kutch", null, "IMD bulletin ingested — cyclone track updated"],
+];
+
+export const MOCK_DISPATCH_LOG: DispatchLogEntry[] = LOG_SEED.map(
+  ([agoSec, kind, severity, district, unit, message], i) => ({
+    id: `LOG-${String(i + 1).padStart(4, "0")}`,
+    at: ago(agoSec),
+    kind,
+    severity,
+    district,
+    unit,
+    message,
+  }),
+);
+
+/* ------------------------------------------------------------------ */
+/* SafeRoute                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Demo routing. `live` is false because no routing engine is wired up — the
+ * UI must label this as an illustrative path, not a checked road route.
+ */
+export const MOCK_SAFE_ROUTES: SafeRoute[] = [
+  {
+    fromLabel: "Adajan Gam, Surat",
+    toLabel: "Surat Community Hall",
+    toKind: "shelter",
+    distanceKm: 2.1,
+    etaMin: 9,
+    steps: [
+      { instruction: "Head north on Adajan Gam Road, away from the waterlogged stretch", distanceKm: 0.6 },
+      { instruction: "Turn right at Pal RTO circle (Udhna Darwaja route is blocked)", distanceKm: 0.9 },
+      { instruction: "Continue to Surat Community Hall on the left", distanceKm: 0.6 },
+    ],
+    hazardsAvoided: ["Waterlogging at Adajan Gam", "Tree down at Udhna Darwaja"],
+    live: false,
+  },
+  {
+    fromLabel: "Jakhau Port Road, Kutch",
+    toLabel: "Bhuj Public Shelter",
+    toKind: "shelter",
+    distanceKm: 78.4,
+    etaMin: 105,
+    steps: [
+      { instruction: "Move inland on the Naliya road, away from the surge zone", distanceKm: 22 },
+      { instruction: "Continue via Naliya towards Bhuj", distanceKm: 48.4 },
+      { instruction: "Arrive at Bhuj Public Shelter, Hospital Road", distanceKm: 8 },
+    ],
+    hazardsAvoided: ["Coastal surge on Jakhau Port Road"],
+    live: false,
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* Reports suite                                                       */
+/* ------------------------------------------------------------------ */
+
+export const MOCK_REPORT_DOCS: ReportDoc[] = [
+  {
+    id: "SITREP-2026-0919-02",
+    kind: "situation",
+    title: "State Situation Report — Cyclone and Monsoon Response",
+    district: null,
+    periodStart: ago(43200),
+    periodEnd: ago(0),
+    generatedAt: ago(600),
+    author: "State Control Room",
+    status: "published",
+    summary:
+      "Cyclone landfall is expected on the Kutch coast within 12 hours while the southern districts continue to receive heavy rainfall. 94 incidents are active across 17 districts, with 4,200 people affected in Kutch alone.",
+    sections: [
+      {
+        heading: "1. Overall situation",
+        body: "Two concurrent events are in progress. A cyclonic system is approaching the Kutch coast with landfall anticipated near Jakhau, and a monsoon surge is affecting the southern districts and the Narmada basin. Kutch and Narmada are at CRITICAL risk; Ahmedabad, Surat, Bharuch and Jamnagar are at HIGH.",
+      },
+      {
+        heading: "2. District risk posture",
+        body: "Risk levels as assessed at the time of generation.",
+        table: {
+          columns: ["District", "Risk", "Active incidents", "Shelters open", "Teams"],
+          rows: [
+            ["Kutch", "CRITICAL", "14", "5", "8"],
+            ["Narmada", "CRITICAL", "9", "4", "6"],
+            ["Surat", "HIGH", "12", "5", "8"],
+            ["Ahmedabad", "HIGH", "11", "4", "9"],
+            ["Bharuch", "HIGH", "8", "3", "5"],
+            ["Jamnagar", "HIGH", "7", "3", "4"],
+          ],
+        },
+      },
+      {
+        heading: "3. Shelter status",
+        body: "12 shelters are active with a combined capacity of 2,530 and current occupancy of 1,614 (64%). Behrampura Relief Centre and Udhna Municipal School are at or near capacity and should not receive further arrivals without expansion.",
+      },
+      {
+        heading: "4. Resource position",
+        body: "Rescue boats and rescue teams are the binding constraint. No hazmat unit is available in Ahmedabad. Water supply to Jakhau Coastal Shelter is outstanding.",
+      },
+      {
+        heading: "5. Immediate priorities",
+        body: "Complete coastal evacuation in Kutch before the landfall window. Move two additional boat crews to Narmada. Resolve the water request at Jakhau. Expand capacity at Behrampura or redirect arrivals to Naranpura.",
+      },
+    ],
+  },
+  {
+    id: "INCREP-INC-0001",
+    kind: "incident",
+    title: "Incident Report — Akhbarnagar Underpass Flooding",
+    district: "Ahmedabad",
+    periodStart: ago(2100),
+    periodEnd: ago(240),
+    generatedAt: ago(180),
+    author: "Ahmedabad District Emergency",
+    status: "published",
+    summary:
+      "A vehicle with three occupants became trapped in the Akhbarnagar underpass as water rose. Seven reports from five independent sources established the picture within 12 minutes. All three occupants were recovered.",
+    sections: [
+      {
+        heading: "1. Sequence of events",
+        body: "First citizen report at T+0 in Gujarati. A 112 call one minute later described the same vehicle. The Vasna water-level sensor exceeded its danger mark at T+5. A rescue boat was assigned at T+4 and was on scene at T+13. Occupants were recovered by T+31.",
+      },
+      {
+        heading: "2. Corroboration",
+        body: "Seven reports from five unique sources. Two reports were repeat messages from the same reporter and were not counted as independent confirmation.",
+        table: {
+          columns: ["Source", "Reports", "Independent"],
+          rows: [
+            ["Citizen app", "4", "2"],
+            ["112 call centre", "1", "1"],
+            ["Water-level sensor", "1", "1"],
+            ["Field unit", "1", "1"],
+          ],
+        },
+      },
+      {
+        heading: "3. Response",
+        body: "NDRF-BOAT-02 and NDRF-TEAM-02 tasked; 108-AMD-01 held at the Naranpura exit. The underpass was closed to traffic from both approaches.",
+      },
+      {
+        heading: "4. Outcome",
+        body: "Three occupants recovered without injury. Incident closed. The underpass remains closed pending a water-level review.",
+      },
+    ],
+  },
+  {
+    id: "DISREP-KUTCH-0919",
+    kind: "district",
+    title: "District Report — Kutch Cyclone Preparedness",
+    district: "Kutch",
+    periodStart: ago(86400),
+    periodEnd: ago(0),
+    generatedAt: ago(900),
+    author: "Kutch District Emergency",
+    status: "published",
+    summary:
+      "Kutch is at CRITICAL risk with landfall expected within 12 hours. 14 incidents are active, 5 shelters are open holding 428 people, and 8 response teams are deployed.",
+    sections: [
+      {
+        heading: "1. Risk assessment",
+        body: "Landfall anticipated near Jakhau. Coastal surge is already affecting the Jakhau port road and has cut off a fishing settlement. Wind speeds are forecast to peak at 96 kph on Monday.",
+      },
+      {
+        heading: "2. Shelters",
+        body: "Three shelters are active in the district.",
+        table: {
+          columns: ["Shelter", "Occupancy", "Capacity", "Status"],
+          rows: [
+            ["Bhuj Public Shelter", "184", "250", "Open"],
+            ["Jakhau Coastal Shelter", "96", "150", "Open"],
+            ["Mandvi Town Hall", "148", "160", "Near Capacity"],
+          ],
+        },
+      },
+      {
+        heading: "3. Outstanding requests",
+        body: "4,000 litres of water for Jakhau Coastal Shelter and 4 paramedics for Mandvi Town Hall remain unclaimed.",
+      },
+    ],
+  },
+  {
+    id: "PERFREP-2026-0919",
+    kind: "response_performance",
+    title: "Response Performance — Last 24 Hours",
+    district: null,
+    periodStart: ago(86400),
+    periodEnd: ago(0),
+    generatedAt: ago(1200),
+    author: "State Control Room",
+    status: "published",
+    summary:
+      "Average time from report to dispatch was 3 minutes 8 seconds against a 5-minute target. Average time to scene was 10 minutes 42 seconds. One P1 incident breached the dispatch target because no hazmat unit was available.",
+    sections: [
+      {
+        heading: "1. Against target",
+        body: "Dispatch and on-scene averages by incident type.",
+        table: {
+          columns: ["Type", "Avg dispatch", "Avg on scene", "Target met"],
+          rows: [
+            ["Flood", "4m 00s", "12m 00s", "Yes"],
+            ["Fire", "3m 00s", "9m 00s", "Yes"],
+            ["Road accident", "4m 00s", "8m 00s", "Yes"],
+            ["Medical", "2m 00s", "7m 00s", "Yes"],
+            ["Industrial", "Not dispatched", "—", "No"],
+          ],
+        },
+      },
+      {
+        heading: "2. Breaches",
+        body: "INC-0002 (Vatva GIDC chlorine leak) was not dispatched within the P1 target because no hazmat unit was available in Ahmedabad. The nearest unit is in Vadodara and was already committed.",
+      },
+    ],
+  },
+  {
+    id: "RESREP-2026-0919",
+    kind: "resource",
+    title: "Resource Report — Utilisation and Shortages",
+    district: null,
+    periodStart: ago(86400),
+    periodEnd: ago(0),
+    generatedAt: ago(1500),
+    author: "State Control Room",
+    status: "published",
+    summary:
+      "11 of 25 units are available. Rescue teams, rescue boats and hazmat are all in shortage against current demand.",
+    sections: [
+      {
+        heading: "1. Demand against availability",
+        body: "Demand counts each open incident's required unit types.",
+        table: {
+          columns: ["Type", "Required", "Available", "Shortage"],
+          rows: [
+            ["Rescue Team", "5", "0", "5"],
+            ["Rescue Boat", "4", "2", "2"],
+            ["Hazmat", "1", "0", "1"],
+            ["Ambulance", "9", "7", "2"],
+            ["Fire Unit", "4", "2", "2"],
+          ],
+        },
+      },
+      {
+        heading: "2. Recommendation",
+        body: "Request two additional NDRF teams from the central pool and move the Vadodara hazmat unit to Ahmedabad once released.",
+      },
+    ],
+  },
+  {
+    id: "AAR-2026-0912",
+    kind: "after_action",
+    title: "After-Action Report — Ahmedabad Urban Flooding, 12 September",
+    district: "Ahmedabad",
+    periodStart: ago(604800),
+    periodEnd: ago(518400),
+    generatedAt: ago(432000),
+    author: "Ahmedabad District Emergency",
+    status: "archived",
+    summary:
+      "31 incidents over 14 hours. Response times met target in 84% of cases. Duplicate reporting inflated the apparent incident count early in the event.",
+    sections: [
+      {
+        heading: "1. What happened",
+        body: "A 190mm rainfall event over 9 hours flooded underpasses across the western city. 31 incidents were opened from 74 reports.",
+      },
+      {
+        heading: "2. What worked",
+        body: "Sensor corroboration at Vasna gave roughly 20 minutes of early warning on the Akhbarnagar underpass. Deduplication collapsed 74 reports into 31 incidents, keeping the queue readable.",
+      },
+      {
+        heading: "3. What to change",
+        body: "Repeat reports from a single reporter initially read as independent confirmation in the queue. The unique-source count has since been made explicit in the interface. Underpass closures should be triggered on the sensor threshold rather than on the first citizen report.",
+      },
+    ],
+  },
+];

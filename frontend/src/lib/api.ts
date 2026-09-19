@@ -47,6 +47,7 @@ import type {
   SituationUpdate,
   SourceBreakdown,
   VerificationStatus,
+  WeatherAlert,
 } from "@/types";
 import {
   CAPABILITY_MAP,
@@ -63,7 +64,11 @@ import * as mock from "./mock";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
-/** Mock mode is the default until the backend is live (see TEAM_WORKFLOW §2). */
+/**
+ * Mock mode. `.env.production` sets this to `false`, so a deployed build talks
+ * to the real API and only degrades to fixtures when a call actually fails —
+ * and says so on screen when it does.
+ */
 export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 
 const TIMEOUT_MS = 8000;
@@ -192,10 +197,14 @@ export async function ping(): Promise<boolean> {
 
 export async function submitReport(body: ReportCreate): Promise<ReportCreateResponse> {
   if (USE_MOCK) return mockSubmit(body);
-  // citizen_type is a UI-only hint (used by the mock). The API contract has no such field and
-  // rejects unknown fields (422), so it is not sent; the AI classifies from the text itself.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { citizen_type, ...payload } = body;
+  // The API rejects unknown fields (422). Send only the contract's ReportCreate fields; UI-only
+  // hints (citizen_type, disaster_type, citizen_urgency, people_affected, special_assistance)
+  // stay on the client until the backend contract grows them. The AI classifies from the text.
+  const payload = {
+    source: body.source, text: body.text, lang: body.lang, lat: body.lat, lng: body.lng,
+    address: body.address, photo_url: body.photo_url, reporter: body.reporter, sensor: body.sensor,
+    ...(body.incident_id != null ? { incident_id: body.incident_id } : {}),
+  };
   // A new report runs the full AI triage (classify + embeddings), ~2-9 s on Render's free tier:
   // a short timeout would show "failed" for a report that was actually stored.
   return request<ReportCreateResponse>(
@@ -862,4 +871,260 @@ export async function getIncidentsWithTrust(): Promise<
     })),
   );
   return envelope(paired, incidents.mode, incidents.error);
+}
+
+/* ================================================================== */
+/* Gujarat State Emergency Response Platform                           */
+/* ------------------------------------------------------------------ */
+/* ADAPTER LAYER. None of these entities exist in API_CONTRACT.md yet  */
+/* (no shelter, missing-person, relief, weather, pulse or report-doc   */
+/* endpoints). Each function is written so that swapping the mock for  */
+/* a real call is a one-line change, and each is listed as an open     */
+/* integration dependency rather than presented as live data.          */
+/* ================================================================== */
+
+import type {
+  DispatchLogEntry,
+  DistrictSituation,
+  ForecastDay,
+  GroundTruthReport,
+  MissingPerson,
+  QueuedSubmission,
+  ReliefRequest,
+  ReportDoc,
+  ResQPulse,
+  SafeCheckIn,
+  SafeRoute,
+  Shelter,
+} from "@/types";
+import { haversineKm as haversine } from "./constants";
+
+export async function getDistrictSituations(): Promise<Envelope<DistrictSituation[]>> {
+  return withFallback(
+    "district-situations",
+    () => mock.MOCK_DISTRICT_SITUATIONS,
+    () => request<DistrictSituation[]>("/api/districts/situation"),
+  );
+}
+
+export async function getPulse(): Promise<Envelope<ResQPulse[]>> {
+  return withFallback(
+    "resq-pulse",
+    () => mock.MOCK_PULSE,
+    () => request<ResQPulse[]>("/api/pulse"),
+  );
+}
+
+export async function getShelters(): Promise<Envelope<Shelter[]>> {
+  return withFallback(
+    "shelters",
+    () => mock.MOCK_SHELTERS,
+    () => request<Shelter[]>("/api/shelters"),
+  );
+}
+
+/**
+ * Shelters ordered by straight-line distance from a point. Distance is
+ * as-the-crow-flies, not a road distance — callers label it accordingly.
+ */
+export function nearestShelters(
+  shelters: Shelter[],
+  lat: number,
+  lng: number,
+  limit = 3,
+): (Shelter & { distanceKm: number })[] {
+  return shelters
+    .map((s) => ({ ...s, distanceKm: haversine(lat, lng, s.lat, s.lng) }))
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, limit);
+}
+
+export async function getGroundTruth(): Promise<Envelope<GroundTruthReport[]>> {
+  return withFallback(
+    "ground-truth",
+    () => mock.MOCK_GROUND_TRUTH,
+    () => request<GroundTruthReport[]>("/api/ground-truth"),
+  );
+}
+
+export async function getMissingPersons(): Promise<Envelope<MissingPerson[]>> {
+  return withFallback(
+    "missing-persons",
+    () => mock.MOCK_MISSING,
+    () => request<MissingPerson[]>("/api/missing-persons"),
+  );
+}
+
+export async function getReliefRequests(): Promise<Envelope<ReliefRequest[]>> {
+  return withFallback(
+    "relief-requests",
+    () => mock.MOCK_RELIEF,
+    () => request<ReliefRequest[]>("/api/relief-requests"),
+  );
+}
+
+export async function getWeatherAlerts(): Promise<Envelope<WeatherAlert[]>> {
+  return withFallback(
+    "weather-alerts",
+    () => mock.MOCK_WEATHER_ALERTS,
+    () => request<WeatherAlert[]>("/api/weather/alerts"),
+  );
+}
+
+export async function getForecast(): Promise<Envelope<ForecastDay[]>> {
+  return withFallback(
+    "forecast",
+    () => mock.MOCK_FORECAST,
+    () => request<ForecastDay[]>("/api/weather/forecast"),
+  );
+}
+
+export async function getDispatchLog(): Promise<Envelope<DispatchLogEntry[]>> {
+  return withFallback(
+    "dispatch-log",
+    () => mock.MOCK_DISPATCH_LOG,
+    () => request<DispatchLogEntry[]>("/api/logs"),
+  );
+}
+
+export async function getReportDocs(): Promise<Envelope<ReportDoc[]>> {
+  return withFallback(
+    "report-docs",
+    () => mock.MOCK_REPORT_DOCS,
+    () => request<ReportDoc[]>("/api/reports/documents"),
+  );
+}
+
+/**
+ * SafeRoute. There is no routing engine wired up, so the returned route is
+ * always flagged `live: false` and the UI must say the path is illustrative.
+ * A real integration would replace this body and set `live: true`.
+ */
+export async function getSafeRoute(
+  fromLabel: string,
+  shelter: Shelter,
+): Promise<Envelope<SafeRoute>> {
+  const canned = mock.MOCK_SAFE_ROUTES.find((r) => r.toLabel === shelter.name);
+  if (canned) return envelope(canned, "simulated");
+
+  // Derived fallback so every shelter has a usable route card.
+  const distance = haversine(
+    shelter.lat,
+    shelter.lng,
+    shelter.lat + 0.02,
+    shelter.lng + 0.02,
+  );
+  return envelope(
+    {
+      fromLabel,
+      toLabel: shelter.name,
+      toKind: "shelter",
+      distanceKm: Number(distance.toFixed(1)),
+      etaMin: Math.max(5, Math.round(distance * 3)),
+      steps: [
+        { instruction: `Head towards ${shelter.address}`, distanceKm: distance },
+        { instruction: `Arrive at ${shelter.name}`, distanceKm: 0 },
+      ],
+      hazardsAvoided: [],
+      live: false,
+    },
+    "simulated",
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Offline queue and safe check-in                                     */
+/* ------------------------------------------------------------------ */
+
+const QUEUE_KEY = "resqnet.queue.v1";
+const SAFE_KEY = "resqnet.safe.v1";
+
+/** Anything held here has NOT reached the authorities yet. */
+export function readQueue(): QueuedSubmission[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(QUEUE_KEY);
+    return raw ? (JSON.parse(raw) as QueuedSubmission[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeQueue(items: QueuedSubmission[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(QUEUE_KEY, JSON.stringify(items));
+  } catch {
+    /* storage unavailable (private mode) — the in-memory list still works */
+  }
+}
+
+export function enqueue(item: Omit<QueuedSubmission, "id" | "queuedAt" | "attempts">): QueuedSubmission {
+  const entry: QueuedSubmission = {
+    ...item,
+    id: `Q-${Date.now()}`,
+    queuedAt: new Date().toISOString(),
+    attempts: 0,
+  };
+  writeQueue([...readQueue(), entry]);
+  return entry;
+}
+
+export function dequeue(id: string): void {
+  writeQueue(readQueue().filter((q) => q.id !== id));
+}
+
+export function readSafeCheckIns(): SafeCheckIn[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SAFE_KEY);
+    return raw ? (JSON.parse(raw) as SafeCheckIn[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Record an "I'm Safe" check-in. When the device is offline the record is
+ * stored locally with `synced: false` and queued — the caller must not tell
+ * the user their family has been notified until it actually syncs.
+ */
+export async function submitSafeCheckIn(
+  input: Omit<SafeCheckIn, "id" | "at" | "synced">,
+): Promise<SafeCheckIn> {
+  const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+  const record: SafeCheckIn = {
+    ...input,
+    id: `SAFE-${Date.now()}`,
+    at: new Date().toISOString(),
+    synced: !offline && !USE_MOCK ? true : false,
+  };
+
+  if (!USE_MOCK && !offline) {
+    try {
+      await request<unknown>("/api/safe-check-in", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+      record.synced = true;
+    } catch {
+      record.synced = false;
+    }
+  }
+
+  if (!record.synced) {
+    enqueue({ kind: "safe_check_in", label: `I'm Safe — ${input.name}` });
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        SAFE_KEY,
+        JSON.stringify([...readSafeCheckIns(), record]),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+  return record;
 }

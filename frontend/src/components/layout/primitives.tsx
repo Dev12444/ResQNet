@@ -22,8 +22,8 @@ export function Badge({
   variant?: "solid" | "outline" | "tint";
   title?: string;
 }) {
-  const base =
-    "inline-flex items-center gap-1.5 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap";
+  // Square plate in the condensed command face — the platform's badge idiom.
+  const base = "cmd inline-flex items-center gap-1.5 whitespace-nowrap px-1.5 py-0.5 text-[11px]";
   if (variant === "solid") {
     return (
       <span
@@ -102,14 +102,16 @@ export function Panel({
       className={`border border-[var(--border)] bg-[var(--surface)] ${className}`}
     >
       {(title || actions) && (
-        <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-          <div className="min-w-0">
-            {title && (
-              <h2 className="text-[13px] font-semibold uppercase tracking-wide">{title}</h2>
-            )}
-            {subtitle && (
-              <p className="mt-0.5 text-xs text-[var(--muted)]">{subtitle}</p>
-            )}
+        <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2">
+          <div className="flex min-w-0 items-baseline gap-2">
+            {/* Accent tick — the mark that makes a panel head a ResQNet panel head */}
+            <span aria-hidden className="h-3 w-0.5 shrink-0 self-center bg-[var(--teal)]" />
+            <div className="min-w-0">
+              {title && <h2 className="cmd text-[13px]">{title}</h2>}
+              {subtitle && (
+                <p className="mt-0.5 text-xs text-[var(--muted)]">{subtitle}</p>
+              )}
+            </div>
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </header>
@@ -131,7 +133,7 @@ export function DataRow({
 }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-1">
-      <dt className="w-32 shrink-0 text-xs uppercase tracking-wide text-[var(--muted)]">
+      <dt className="eyebrow w-32 shrink-0 text-[var(--muted)]">
         {label}
       </dt>
       <dd className={`min-w-0 flex-1 text-sm ${mono ? "mono" : ""}`}>{children}</dd>

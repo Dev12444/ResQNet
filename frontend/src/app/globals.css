@@ -1,41 +1,183 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 /*
- * ResQNet — operational theme.
+ * ResQNet — Gujarat Emergency Response Network.
+ * Integrated Disaster Response & Public Safety Platform.
  *
- * Dense, high-contrast, printable-looking. Colour carries meaning only:
- * red critical, orange high, yellow medium, green available/resolved,
- * blue information/resources. Everything else is neutral so that a coloured
- * pixel on screen always means something.
+ * The visual language is an Indian government geo-portal crossed with an
+ * emergency operations centre: deep navy structure, crimson for anything
+ * operationally urgent, a light institutional workspace, white cards with thin
+ * borders and small radii, and high information density. Nothing here is
+ * decorative — colour is rationed to meaning:
+ *
+ *   CRIMSON   emergency actions, P1, critical incidents, the comms ticker
+ *   AMBER     warning, moderate risk, pending attention
+ *   GREEN     safe, online, available, operational
+ *   BLUE      water, hydrology, information
+ *   NAVY      structure: header, nav, sidebar, footer
+ *
+ * Two naming systems resolve onto this one palette. The `--surface/--border/
+ * --critical/...` names are used by the platform pages; the `--panel/--line/
+ * --accent/...` names are used by the FE1 operator console that was merged in.
+ * Aliasing rather than rewriting means both codebases share one theme and a
+ * palette change is a one-file change.
+ *
+ * Light is the operational default. A dark theme is retained for the console
+ * (`html[data-theme="dark"]`) because FE1 shipped with one and night shifts use
+ * it; it never applies to the citizen-facing pages.
  */
 
 :root {
-  --background: #f4f4f5;
-  --surface: #ffffff;
-  --surface-2: #fafafa;
-  --foreground: #18181b;
-  --muted: #52525b;
-  --faint: #71717a;
-  --border: #d4d4d8;
-  --border-strong: #a1a1aa;
+  color-scheme: light;
 
-  /* Operational palette */
-  --critical: #dc2626;
-  --critical-deep: #7f1d1d;
-  --high: #f97316;
-  --medium: #eab308;
-  --ok: #22c55e;
-  --info: #3b82f6;
-  --simulated: #a855f7;
+  /* ---- Institutional navy ---- */
+  --navy-900: #071d34;
+  /* The helpline strip. A government-portal blue, deeper than the nav band so
+     the strip still reads as its own instrument rather than as part of it. */
+  --gov-blue: #0b4778;
+  --gov-blue-deep: #0a416f;
+  --navy-800: #102a43;
+  --navy-700: #1a3c60;
+  --navy-600: #22517f;
+  --navy-500: #2677b5;
 
-  /* Tinted backgrounds for banded rows and callouts */
-  --critical-bg: #fef2f2;
-  --high-bg: #fff7ed;
-  --medium-bg: #fefce8;
-  --ok-bg: #f0fdf4;
-  --info-bg: #eff6ff;
+  /* ---- Operational signals ---- */
+  --crimson: #b51f32;
+  --crimson-700: #8d1526;
+  --crimson-800: #6d0f1d;
+  --crimson-500: #d63a3a;
+  --crimson-300: #e97d87;
+  --amber: #d89a25;
+  --amber-600: #a9760f;
+  --amber-700: #7f570a;
+  --green: #32805d;
+  --green-500: #3d9a70;
+  --blue: #2677b5;
+  --teal: #0f6e7a;
+  --violet: #6b4fa0;
 
-  --focus: #1d4ed8;
+  /* ---- Workspace ---- */
+  --background: #f1f2f0;
+  --surface: #fafaf7;
+  --surface-2: #f1f2f0;
+  --surface-3: #e4e7e6;
+
+  /* ---- Ink ---- */
+  --foreground: #263238;
+  --muted: #51636d;
+  --faint: #78888f;
+
+  /* ---- Structure ---- */
+  --border: #cdd3d5;
+  --border-strong: #b8bec1;
+  --hairline: #e0e4e4;
+
+  /* ---- Command rail ---- */
+  --rail: var(--navy-800);
+  --rail-deep: var(--navy-900);
+  --rail-hover: #17395a;
+  --rail-ink: #dbe6f3;
+  --rail-muted: #8fa5b8;
+  --rail-border: #1c3f5f;
+
+  /* ---- Semantic aliases used across the platform pages ---- */
+  --critical: var(--crimson);
+  --critical-deep: var(--crimson-700);
+  --critical-bright: var(--crimson-500);
+  --high: #c4641f;
+  --medium: var(--amber);
+  --ok: var(--green);
+  --info: var(--blue);
+  --simulated: var(--violet);
+  --coral: var(--crimson);
+  --coral-deep: var(--crimson-700);
+  --carbon: var(--navy-900);
+  --petrol: var(--navy-700);
+  --jade: var(--green);
+  --cyan: var(--blue);
+  --teal-bright: #2a8f9c;
+  --amber-deep: var(--amber-600);
+  --sage: #8ba4c4;
+  --bone: var(--background);
+  --paper: var(--surface);
+
+  /* ---- Tints for banded rows and callouts ---- */
+  --critical-bg: #fbeaec;
+  --high-bg: #fdf0e6;
+  --medium-bg: #fdf6e3;
+  --ok-bg: #e9f3ee;
+  --info-bg: #e7f0f8;
+  --teal-bg: #e6f2f4;
+
+  --focus: #2677b5;
+  --shadow-panel: 0 1px 2px rgba(38, 50, 56, 0.08);
+  --shadow-card: 0 1px 3px rgba(38, 50, 56, 0.10), 0 1px 1px rgba(38, 50, 56, 0.04);
+  --shadow-pop: 0 12px 32px rgba(7, 29, 52, 0.24);
+  --radius: 6px;
+
+  /* ---- FE1 console aliases (same palette, its own vocabulary) ---- */
+  --bg: var(--background);
+  --panel: var(--surface);
+  --panel2: var(--surface-2);
+  --subbar: var(--surface-2);
+  --input: var(--surface-2);
+  --soft-bg: var(--surface-3);
+  --selected-bg: #e4eef6;
+  --line: var(--border);
+  --line-strong: var(--border-strong);
+  --body-text: var(--muted);
+  --text: var(--foreground);
+  --accent: var(--navy-600);
+  --accent-border: var(--navy-500);
+  --danger: var(--crimson);
+  --button-bg: var(--surface-2);
+  --run-bg: #e6eefa;
+  --avatar: #dde7f4;
+  --action-bg: #e6eefa;
+  --action-strong: var(--navy-600);
+  --panel-glass: rgba(255, 255, 255, 0.96);
+  --map-loading: var(--surface-3);
+  --danger-soft: var(--critical-bg);
+  --danger-text: var(--crimson-700);
+  --nav-bg: var(--navy-800);
+  --emergency-bg: var(--crimson);
+}
+
+/*
+ * Night shift theme for the operator console. Opt-in via the ThemeToggle FE1
+ * shipped; the citizen pages stay light because they are read on phones in
+ * daylight and on projectors.
+ */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #08172b;
+  --surface: #0d2039;
+  --surface-2: #112743;
+  --surface-3: #16304f;
+  --foreground: #e8eff7;
+  --muted: #9db2ca;
+  --faint: #7c93ad;
+  --border: #1d3a5c;
+  --border-strong: #274b73;
+  --hairline: #18334f;
+  --critical-bg: #3a151b;
+  --high-bg: #3a2414;
+  --medium-bg: #35290f;
+  --ok-bg: #0f2e21;
+  --info-bg: #10263f;
+  --teal-bg: #0f2b30;
+  --crimson: #e04a58;
+  --crimson-700: #b3202e;
+  --amber: #e8a33c;
+  --green: #2fa771;
+  --blue: #4a9de8;
+  --selected-bg: #16304f;
+  --avatar: #1d3a5c;
+  --run-bg: #16304f;
+  --action-bg: #16304f;
+  --panel-glass: rgba(13, 32, 57, 0.96);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 @theme inline {
@@ -52,43 +194,68 @@
   --color-medium: var(--medium);
   --color-ok: var(--ok);
   --color-info: var(--info);
-  --font-sans: var(--font-plex-sans);
+  --color-rail: var(--rail);
+  --color-navy: var(--navy-800);
+  --color-crimson: var(--crimson);
+  --font-sans: var(--font-sans-body);
+  --font-condensed: var(--font-archivo);
   --font-mono: var(--font-plex-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --surface: #131316;
-    --surface-2: #1c1c20;
-    --foreground: #f4f4f5;
-    --muted: #a1a1aa;
-    --faint: #8b8b93;
-    --border: #2e2e35;
-    --border-strong: #52525b;
-
-    --critical-bg: #2a1214;
-    --high-bg: #2a1a0e;
-    --medium-bg: #2a2410;
-    --ok-bg: #0f2418;
-    --info-bg: #10203a;
-
-    --focus: #60a5fa;
-  }
-}
-
-html {
-  color-scheme: light dark;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
-  /* Plex covers Latin; Noto Gujarati picks up the Indic scripts behind it. */
-  font-family: var(--font-plex-sans), var(--font-noto-gujarati), "Nirmala UI",
-    "Segoe UI", system-ui, sans-serif;
+  /* Source Sans for running text; Noto Gujarati picks up Gujarati and Hindi. */
+  font-family: var(--font-sans-body), var(--font-noto-gujarati), "Nirmala UI",
+    "Source Sans 3", "Segoe UI", Arial, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
   font-synthesis-weight: none;
   -webkit-text-size-adjust: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ */
+/* Typography                                                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Operational label. Uppercase, compact, modest tracking — government portal,
+ * not a condensed display face. Used for panel heads, status words and nav.
+ */
+.cmd {
+  font-family: var(--font-archivo), var(--font-noto-gujarati), "Archivo Narrow",
+    "Arial Narrow", Roboto, Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+/* The smallest label: metadata, column heads, card kickers. */
+.eyebrow {
+  font-family: var(--font-archivo), var(--font-noto-gujarati), "Archivo Narrow",
+    "Arial Narrow", Roboto, Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1.1;
 }
 
 /* Technical data — IDs, timestamps, ETAs, coordinates, readings. */
@@ -101,14 +268,285 @@ samp {
   letter-spacing: -0.01em;
 }
 
+/* Telemetry: tiny mono metadata. */
+.telemetry {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+
+/*
+ * Headings take the condensed face. This is the single decision that keeps the
+ * portal off the generic-SaaS road: a narrow, authoritative signage voice for
+ * every title on the platform, at operational sizes rather than display sizes.
+ */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--font-archivo), var(--font-noto-gujarati), "Archivo Narrow",
+    "Arial Narrow", Roboto, Arial, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.005em;
+  line-height: 1.22;
+}
+
+/* Navigation and controls are signage too, not prose. */
+nav a,
+nav button,
+.cmd,
+.eyebrow,
+th {
+  font-family: var(--font-archivo), var(--font-noto-gujarati), "Archivo Narrow",
+    "Arial Narrow", Roboto, Arial, sans-serif;
+}
+
+/* ------------------------------------------------------------------ */
+/* Card + panel geometry                                               */
+/* ------------------------------------------------------------------ */
+
+/* The standard card: white, 1px border, 6px radius, whisper of a shadow. */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+/* Card head: tinted strip, thin rule, compact uppercase title. */
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-2);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+/*
+ * Console assembly: children share hairlines instead of floating apart. Used
+ * where a group of readouts should read as one instrument.
+ */
+.console {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--border);
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+}
+.console > * {
+  background: var(--surface);
+  min-width: 0;
+}
+
 /* Visible focus everywhere — operators use keyboards under pressure. */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  outline-offset: 1px;
   border-radius: 2px;
 }
 
-/* Respect reduced-motion; there is no decorative animation to lose. */
+/* Scrollbars sized for dense panels rather than the OS default. */
+.thin-scroll,
+.scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.thin-scroll::-webkit-scrollbar,
+.scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.thin-scroll::-webkit-scrollbar-thumb,
+.scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Emergency comms ticker                                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A thin government-blue strip, never a banner. The list is rendered twice into one
+ * track and the animation translates exactly -50%, so the loop is seamless.
+ * Hover or keyboard focus pauses it, because nobody should have to chase a
+ * phone number across the screen during an emergency.
+ */
+.ticker {
+  position: relative;
+  overflow: hidden;
+  /* Blue, not crimson. Crimson on this platform means an emergency is
+     happening right now — the ticker is a standing directory of numbers, and
+     colouring it the same as a live warning spends the alarm colour on
+     information that is always true. The strip now reads with the navy
+     header stack instead of competing with the alert banner under it. */
+  background: var(--gov-blue);
+  border-bottom: 1px solid var(--gov-blue-deep);
+}
+@keyframes resq-ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: resq-ticker 52s linear infinite;
+  will-change: transform;
+}
+.ticker:hover .ticker-track,
+.ticker:focus-within .ticker-track {
+  animation-play-state: paused;
+}
+.ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px;
+  height: 24px;
+  white-space: nowrap;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.45);
+}
+.ticker-item strong {
+  color: #ffffff;
+  font-weight: 800;
+}
+.ticker-sep {
+  color: rgba(255, 255, 255, 0.55);
+}
+.ticker-item:hover {
+  background: rgba(0, 0, 0, 0.16);
+  color: #ffffff;
+}
+
+/* ------------------------------------------------------------------ */
+/* Motion — functional only                                            */
+/* ------------------------------------------------------------------ */
+
+@keyframes resq-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.pulse-critical {
+  animation: resq-pulse 2s ease-in-out infinite;
+}
+
+/* Marker ring on an unattended P1. */
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(179, 32, 46, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(179, 32, 46, 0);
+  }
+}
+.pulse {
+  animation: pulse 1.6s infinite;
+}
+
+/* Slow halo under a critical district marker on the map. */
+@keyframes resq-halo {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.5;
+  }
+  70%,
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+.halo {
+  animation: resq-halo 2.6s ease-out infinite;
+  transform-origin: center;
+}
+
+/* The live lamp on any panel drawing from a moving source. */
+@keyframes resq-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.4;
+  }
+}
+.live-dot {
+  animation: resq-live 2.4s ease-in-out infinite;
+}
+
+/* A log line arriving in the dispatch terminal. */
+@keyframes resq-incoming {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.incoming {
+  animation: resq-incoming 0.45s ease-out;
+}
+
+/* Radar sweep over the forecast schematic. */
+@keyframes resq-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.sweep {
+  animation: resq-sweep 4s linear infinite;
+  transform-origin: center;
+}
+
+/* Flash-alert siren bar. Reserved for an active mass warning. */
+@keyframes resq-flash {
+  0%,
+  100% {
+    background-color: var(--crimson-700);
+  }
+  50% {
+    background-color: var(--crimson-800);
+  }
+}
+.flash-bar {
+  animation: resq-flash 1.1s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -117,9 +555,14 @@ samp {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* With the scroll suppressed the comms strip must still be reachable, so it
+     becomes an ordinary horizontally-scrollable list. */
+  .ticker-track {
+    transform: none !important;
+    overflow-x: auto;
+  }
 }
 
-/* Skip link, revealed on focus. */
 .skip-link {
   position: absolute;
   left: -9999px;
@@ -132,18 +575,53 @@ samp {
   padding: 0.5rem 0.75rem;
   background: var(--surface);
   border: 2px solid var(--focus);
+  z-index: 200;
 }
 
-/* A single, slow pulse reserved for unattended P1 — never decorative. */
-@keyframes resq-pulse {
-  0%,
-  100% {
-    opacity: 1;
+/* MapLibre chrome, matched to the portal rather than its own defaults. */
+.maplibregl-ctrl-group {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+}
+.maplibregl-popup-content {
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  font-size: 12px;
+}
+.maplibregl-popup-tip {
+  border-top-color: var(--surface);
+}
+html[data-theme="dark"] .maplibregl-ctrl button {
+  filter: invert(1);
+}
+
+/* Print: reports must come out as clean documents, not screenshots. */
+@media print {
+  @page {
+    margin: 16mm;
   }
-  50% {
-    opacity: 0.45;
+  body {
+    background: #ffffff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .panel,
+  .console {
+    border: 1px solid #999;
+    box-shadow: none;
+    break-inside: avoid;
   }
 }
-.pulse-critical {
-  animation: resq-pulse 2s ease-in-out infinite;
+
+.print-only {
+  display: none;
 }
