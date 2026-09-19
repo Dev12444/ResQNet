@@ -62,7 +62,32 @@ import * as mock from "./mock";
 /* Configuration                                                       */
 /* ------------------------------------------------------------------ */
 
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+/**
+ * Where the backend lives. `NEXT_PUBLIC_API_URL` is the only source of it;
+ * no component builds a URL of its own.
+ *
+ * The localhost default is a development convenience and nothing more. In a
+ * browser it means "the machine this page is open on", so shipping it to
+ * production pointed every visitor at their own laptop — which fails in a way
+ * that looks like the API being down rather than like a missing setting, and
+ * on a developer's own machine would quietly appear to work.
+ *
+ * So production refuses to guess. With the variable unset, `API_URL` is empty
+ * and every call fails immediately naming the variable, which is a mistake
+ * somebody can fix in a minute instead of an afternoon.
+ */
+const DEV_API_URL = "http://localhost:8000";
+
+function resolveApiUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  return process.env.NODE_ENV === "production" ? "" : DEV_API_URL;
+}
+
+export const API_URL = resolveApiUrl();
+
+/** True when a production build shipped without `NEXT_PUBLIC_API_URL`. */
+export const API_URL_MISSING = API_URL === "";
 
 /**
  * Mock mode. `.env.production` sets this to `false`, so a deployed build talks
@@ -106,6 +131,12 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number | null,
+    /**
+     * This deployment is misconfigured, as opposed to the server being slow
+     * or down. It matters because the two need opposite advice: one is fixed
+     * by waiting, the other never is.
+     */
+    readonly isConfigError = false,
   ) {
     super(message);
     this.name = "ApiError";
@@ -113,6 +144,15 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<T> {
+  if (API_URL_MISSING) {
+    // Named precisely, because this is a deployment mistake and the person
+    // reading the screen is the one who can fix it.
+    throw new ApiError(
+      "NEXT_PUBLIC_API_URL is not set on this deployment, so there is no backend to call.",
+      null,
+      true,
+    );
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -168,6 +208,9 @@ export async function request<T>(path: string, init?: RequestInit, timeoutMs = T
  */
 function isProbablyWaking(err: unknown): boolean {
   if (!(err instanceof ApiError)) return false;
+  // A missing API URL also has no status, but "retrying will work" is a lie
+  // about it: nothing this side of a redeploy will make the request succeed.
+  if (err.isConfigError) return false;
   // A timeout or a transport-level failure carries no status. A 502/503/504
   // is the platform answering while the container is still coming up.
   return err.status === null || err.status === 502 || err.status === 503 || err.status === 504;
@@ -260,6 +303,9 @@ export async function getAiStatus(): Promise<Envelope<AiStatus | null>> {
     "ai-status",
     () => null,
     () => request<AiStatus>("/api/ai/status"),
+    // Real endpoint. "AI unavailable" is a fact an operator can act on;
+    // a fixture saying the classifier is healthy is not.
+    () => null,
   );
 }
 
@@ -633,8 +679,11 @@ export async function getResourceViews(): Promise<Envelope<ResourceView[]>> {
     getIncidents({ includeResolved: true }),
   ]);
 
-  const worst: DataMode =
-    resources.mode === "live" && assignments.mode === "live" ? "live" : "stale";
+  // This used to collapse every non-live combination to "stale", which told
+  // an operator they were looking at the last known unit positions even when
+  // nothing had ever been fetched. `worstMode` keeps the real state, so an
+  // unreachable API reads as no data rather than as old data.
+  const worst: DataMode = worstMode(resources.mode, assignments.mode);
 
   const views: ResourceView[] = resources.data.map((r) => {
     const assignment = assignments.data.find(
@@ -860,6 +909,20 @@ export async function getAnalyticsSummary(
     `analytics-summary${qs}`,
     () => mock.MOCK_ANALYTICS_SUMMARY,
     () => request<AnalyticsSummary>(`/api/analytics/summary${qs}`),
+    // Real endpoint, so a failure must not produce fixtures. Note the zeros
+    // are NOT an all-clear: any consumer must check `mode` before rendering
+    // them, exactly as /analytics does for the eval and hotspot panels.
+    () => ({
+      active_incidents: 0,
+      p1_open: 0,
+      resolved_today: 0,
+      total_reports: 0,
+      duplicates_merged: 0,
+      units_available: 0,
+      units_total: 0,
+      avg_time_to_dispatch_sec: null,
+      avg_time_to_scene_sec: null,
+    }),
   );
 }
 
@@ -871,6 +934,7 @@ export async function getAnalyticsByType(
     `analytics-by-type${qs}`,
     () => mock.MOCK_ANALYTICS_BY_TYPE,
     () => request<AnalyticsByType[]>(`/api/analytics/by-type${qs}`),
+    () => [],
   );
 }
 
@@ -882,6 +946,7 @@ export async function getResponseTimes(
     `analytics-response-times${qs}`,
     () => mock.MOCK_RESPONSE_TIMES,
     () => request<AnalyticsResponseTimes>(`/api/analytics/response-times${qs}`),
+    () => ({ buckets: [], by_type: [], timeline: [] }),
   );
 }
 
@@ -890,6 +955,7 @@ export async function getShortages(): Promise<Envelope<AnalyticsShortage[]>> {
     "analytics-shortages",
     () => mock.MOCK_SHORTAGES,
     () => request<AnalyticsShortage[]>("/api/analytics/shortages"),
+    () => [],
   );
 }
 
@@ -898,6 +964,7 @@ export async function getHotspots(): Promise<Envelope<AnalyticsHotspot[]>> {
     "analytics-hotspots",
     () => mock.MOCK_HOTSPOTS,
     () => request<AnalyticsHotspot[]>("/api/analytics/hotspots"),
+    () => [],
   );
 }
 
@@ -906,6 +973,10 @@ export async function getEval(): Promise<Envelope<AnalyticsEval | null>> {
     "analytics-eval",
     () => mock.MOCK_EVAL,
     () => request<AnalyticsEval>("/api/analytics/eval"),
+    // /analytics already renders UnavailableState for this. Until now that
+    // branch was unreachable, because the data layer could not produce the
+    // mode that triggers it.
+    () => null,
   );
 }
 
