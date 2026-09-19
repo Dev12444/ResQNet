@@ -84,3 +84,12 @@ def test_merge_never_downgrades_severity(db):
     sev = a.severity
     b, new_b, _ = ingest(db, t0 + timedelta(minutes=2), source="citizen", text="Behrampura wall fell", lat=22.9992, lng=72.5812)
     assert not new_b and b.severity == sev and b.priority == "P1"
+
+
+def test_field_update_with_incident_hint_attaches_without_gps(db):
+    t0 = datetime.now(timezone.utc)
+    a, _, _ = ingest(db, t0, source="citizen", text="Car stuck in Akhbarnagar underpass", lat=23.0588, lng=72.5620)
+    b, new_b, t = ingest(db, t0 + timedelta(minutes=5), source="field", incident_id=a.id,
+                         text="Severity now 2. Road partially blocked. Occupants rescued")  # no GPS, type may differ
+    assert not new_b and b.id == a.id and not t.approximate
+    assert (t.lat, t.lng) == (23.0588, 72.5620)
