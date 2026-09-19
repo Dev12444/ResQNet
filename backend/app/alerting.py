@@ -3,8 +3,15 @@
 Adds an Alert to the caller's session (caller commits, then calls publish_alert()).
 Used by manual escalation (PATCH /api/incidents) and the escalation loop. publish_alert() is the
 single exit point for every alert: WebSocket broadcast + Telegram to the authority chat.
+
+Alert dedup is check-then-insert ("no open alert of this kind yet?"), and the escalation loop,
+a report's immediate check and a manual escalation can run on different threads at once. Hold
+ALERT_LOCK from the check until the commit. It is process-local: the API runs as one worker
+(render.yaml), which the in-process WebSocket hub requires anyway.
 """
 from __future__ import annotations
+
+import threading
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,6 +20,8 @@ from app import models as m
 from app.schemas import AlertOut, IncidentOut
 from app.services.notifier import notify_alert
 from app.ws_manager import manager
+
+ALERT_LOCK = threading.Lock()
 
 
 def open_alert_exists(db: Session, incident_id: int | None, kind: str) -> bool:

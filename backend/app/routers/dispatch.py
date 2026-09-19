@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session, selectinload
 from app import audit
 from app import models as m
 from app.db import get_db
-from app.routers.incidents import get_incident_or_404
+from app.routers.incidents import get_incident_or_404, lock_incident
 from app.schemas import AssignmentOut, AssignmentPatch, DispatchRequest, IncidentDetail, IncidentOut, ResourceOut
 from app.services import geo
 from app.services.notifier import notify_dispatch
@@ -56,6 +56,7 @@ def dispatch(
     x_actor: str | None = Header(None),
 ) -> m.Incident:
     actor = audit.clean_actor(x_actor, default=body.approved_by)
+    lock_incident(db, incident_id)  # a concurrent resolve / escalate waits (or we wait for it): no lost update
     incident = db.get(m.Incident, incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found")
@@ -149,14 +150,21 @@ def update_assignment(
     x_actor: str | None = Header(None),
 ) -> m.Assignment:
     actor = audit.clean_actor(x_actor, default="field")
+    incident_id = db.scalar(select(m.Assignment.incident_id).where(m.Assignment.id == assignment_id))
+    if incident_id is None:
+        raise HTTPException(status_code=404, detail=f"Assignment {assignment_id} not found")
+    # Incident row first, then the assignment: the same order as dispatch and resolve, so a tap
+    # racing a resolve queues behind it instead of deadlocking (Postgres; no-op on SQLite).
+    lock_incident(db, incident_id)
     a = db.scalars(
         select(m.Assignment)
         .options(selectinload(m.Assignment.resource),
                  selectinload(m.Assignment.incident).selectinload(m.Incident.assignments))
         .where(m.Assignment.id == assignment_id)
-        .with_for_update()  # serialise concurrent taps on Postgres (no-op on SQLite)
+        .with_for_update()  # serialise concurrent taps on the same assignment
+        .execution_options(populate_existing=True)
     ).one_or_none()
-    if a is None:
+    if a is None:  # wiped by a demo reset in between
         raise HTTPException(status_code=404, detail=f"Assignment {assignment_id} not found")
     if body.status == a.status:
         return a  # idempotent: a retried tap changes nothing

@@ -26,11 +26,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app import models as m
-from app.alerting import add_alert, publish_alert
+from app.alerting import ALERT_LOCK, add_alert, publish_alert
 from app.config import Settings, get_settings
 from app.schemas import IncidentOut
 from app.services.recommender import needed_kinds
@@ -68,6 +69,23 @@ def _where(inc: m.Incident) -> str:
 
 def _dispatch_sla(inc: m.Incident, st: Settings) -> int | None:
     return {"P1": st.sla_p1_dispatch_sec, "P2": st.sla_p2_dispatch_sec}.get(inc.priority)
+
+
+def _escalate_if_still_undispatched(db: Session, inc: m.Incident, now: datetime) -> bool:
+    """Conditional UPDATE: a dispatch (or resolve) committed since this tick read the incident wins.
+
+    A plain attribute write would overwrite it and leave an "escalated" incident with units out.
+    """
+    changed = db.execute(
+        update(m.Incident)
+        .where(m.Incident.id == inc.id, m.Incident.status.in_(("new", "triaged")))
+        .values(status="escalated", updated_at=now)
+        .execution_options(synchronize_session=False)
+    ).rowcount
+    if changed:  # keep the in-memory row in step without marking it dirty (no second UPDATE)
+        set_committed_value(inc, "status", "escalated")
+        set_committed_value(inc, "updated_at", now)
+    return bool(changed)
 
 
 def evaluate(
@@ -125,9 +143,8 @@ def evaluate(
             if breaches >= 1 and not has(inc, "sla_breach", DISPATCH_BREACH_MARK):
                 fire("sla_breach", f"{label} ({_where(inc)}) {DISPATCH_BREACH_MARK} {_minutes(waited)}", inc)
             auto = st.auto_escalate_after_breaches
-            if auto > 0 and breaches >= auto and inc.status != "escalated" and not has(inc, "escalation"):
-                inc.status = "escalated"
-                inc.updated_at = now
+            if (auto > 0 and breaches >= auto and inc.status != "escalated" and not has(inc, "escalation")
+                    and _escalate_if_still_undispatched(db, inc, now)):
                 result.escalated.append(inc)
                 fire("escalation", f"{label} escalated automatically: {DISPATCH_BREACH_MARK} "
                                    f"{_minutes(waited)} ({breaches} SLA periods missed)", inc)
@@ -154,10 +171,11 @@ def run_tick(
     """One evaluation with its own session: commit, then broadcast. Never raises."""
     try:
         with session_factory() as db:
-            result = evaluate(db, now=now, incident_ids=incident_ids)
-            if not result.alerts and not result.escalated:
-                return result
-            db.commit()
+            with ALERT_LOCK:  # dedup check -> insert -> commit must not interleave with another check
+                result = evaluate(db, now=now, incident_ids=incident_ids)
+                if not result.alerts and not result.escalated:
+                    return result
+                db.commit()
             for inc in result.escalated:
                 manager.publish("incident.updated", IncidentOut.model_validate(inc))
             for alert in result.alerts:

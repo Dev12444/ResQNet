@@ -3,6 +3,8 @@
 Rules run against a frozen clock so SLA boundaries are exact.
 """
 import asyncio
+import contextlib
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -329,3 +331,41 @@ def test_new_p1_report_gets_critical_alert_immediately(Session):
             assert [a["kind"] for a in alerts] == ["critical"]
     finally:
         app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------- concurrency
+
+
+def test_concurrent_checks_create_one_alert(tmp_path, monkeypatch):
+    """The loop tick and a report's immediate check can evaluate the same incident at once.
+
+    A barrier inside add_alert() holds the first thread after its "already alerted?" check until
+    the second arrives (or 0.5 s pass): without serialisation both would insert a critical alert.
+    """
+    eng = create_engine(f"sqlite:///{(tmp_path / 'race.db').as_posix()}",
+                        connect_args={"check_same_thread": False, "timeout": 30})
+    Base.metadata.create_all(eng)
+    S = sessionmaker(bind=eng, expire_on_commit=False)
+    with S() as db:
+        reset_database(db)
+        inc_id = _incident(db).id
+
+    barrier = threading.Barrier(2, timeout=0.5)
+    real_add = escalation.add_alert
+
+    def slow_add(db, **kw):
+        # BrokenBarrierError = serialised: the other thread is waiting for us, not beside us.
+        with contextlib.suppress(threading.BrokenBarrierError):
+            barrier.wait()
+        return real_add(db, **kw)
+
+    monkeypatch.setattr(escalation, "add_alert", slow_add)
+    threads = [threading.Thread(target=run_tick, args=(S,), kwargs={"incident_ids": [inc_id]}) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    with S() as db:
+        kinds = db.scalars(select(m.Alert.kind).where(m.Alert.incident_id == inc_id)).all()
+    eng.dispose()
+    assert kinds.count("critical") == 1

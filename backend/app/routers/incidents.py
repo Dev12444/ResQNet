@@ -11,6 +11,7 @@ on_scene are derived from reports and assignments (setting them by hand would de
 """
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 from datetime import datetime, timezone
 
@@ -21,7 +22,7 @@ from sqlalchemy.sql import Select
 
 from app import audit
 from app import models as m
-from app.alerting import add_alert, open_alert_exists, publish_alert
+from app.alerting import ALERT_LOCK, add_alert, open_alert_exists, publish_alert
 from app.db import get_db
 from app.pipeline import PIPELINE_LOCK, incident_code, refresh_summary_in_background
 from app.schemas import (
@@ -126,14 +127,28 @@ def _close_active_assignments(incident: m.Incident, now: datetime) -> list[m.Ass
     return closed
 
 
-@router.patch("/{incident_id}", response_model=IncidentDetail)
-def update_incident(
-    incident_id: int,
-    body: IncidentPatch,
-    db: Session = Depends(get_db),
-    x_actor: str | None = Header(None),
-) -> m.Incident:
-    actor = audit.clean_actor(x_actor)
+def lock_incident(db: Session, incident_id: int) -> None:
+    """Row-lock the incident for this transaction (Postgres; a no-op on SQLite, which serialises writes).
+
+    Lock order for every write that touches an incident and its units: [ALERT_LOCK ->] incident row
+    -> assignment rows -> resource rows. Dispatch, PATCH incident and PATCH assignment all start
+    here, so they queue up instead of overwriting each other or deadlocking. Anything read before
+    this call is stale: load the incident afterwards (get_incident_or_404 uses populate_existing).
+    """
+    db.execute(select(m.Incident.id).where(m.Incident.id == incident_id).with_for_update())
+
+
+@dataclasses.dataclass
+class _PatchResult:
+    incident: m.Incident
+    closed: list[m.Assignment]
+    new_alert: m.Alert | None
+    status_changed: bool
+    committed: bool
+
+
+def _apply_patch(db: Session, incident_id: int, body: IncidentPatch, actor: str) -> _PatchResult:
+    lock_incident(db, incident_id)
     incident = get_incident_or_404(db, incident_id)
     now = datetime.now(timezone.utc)
     before = {"status": incident.status, "severity": incident.severity, "priority": incident.priority}
@@ -173,21 +188,38 @@ def update_incident(
 
     after = {"status": incident.status, "severity": incident.severity, "priority": incident.priority}
     if after == before and not body.note:
-        return incident  # nothing changed: no audit row, no broadcast
+        return _PatchResult(incident, [], None, status_changed=False, committed=False)  # no audit, no broadcast
 
     audit.record(db, actor=actor, action="incident.updated", entity="incident", entity_id=incident.id,
                  payload={"code": incident.code, "before": before, "after": after, "note": body.note,
                           "closed_assignment_ids": [a.id for a in closed]})
     db.commit()
+    return _PatchResult(incident, closed, new_alert, status_changed=after != before, committed=True)
 
-    for a in closed:
+
+@router.patch("/{incident_id}", response_model=IncidentDetail)
+def update_incident(
+    incident_id: int,
+    body: IncidentPatch,
+    db: Session = Depends(get_db),
+    x_actor: str | None = Header(None),
+) -> m.Incident:
+    # Escalating is check-then-insert on alerts: hold ALERT_LOCK (taken before the row lock, the
+    # same order as the escalation loop) so it can't interleave with an automatic escalation.
+    lock = ALERT_LOCK if body.status == "escalated" else contextlib.nullcontext()
+    with lock:
+        result = _apply_patch(db, incident_id, body, audit.clean_actor(x_actor))
+    if not result.committed:
+        return result.incident
+
+    for a in result.closed:
         manager.publish("assignment.updated", AssignmentOut.model_validate(a))
         manager.publish("resource.updated", ResourceOut.model_validate(a.resource))
-    if new_alert is not None:
-        publish_alert(new_alert)
-    if after != before:
-        manager.publish("incident.updated", IncidentOut.model_validate(incident))
-    return get_incident_or_404(db, incident.id)
+    if result.new_alert is not None:
+        publish_alert(result.new_alert)
+    if result.status_changed:
+        manager.publish("incident.updated", IncidentOut.model_validate(result.incident))
+    return get_incident_or_404(db, incident_id)
 
 
 # ---------------------------------------------------------------- POST /api/incidents/{id}/unmerge
