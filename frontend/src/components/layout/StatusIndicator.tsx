@@ -26,7 +26,8 @@ export interface ConnectivityInfo {
   lastSynced: Date | null;
   queue: QueuedSubmission[];
   recheck: () => void;
-  flush: () => void;
+  /** `force` retries entries the server already refused. A person asks for it. */
+  flush: (opts?: { force?: boolean }) => void;
   /** True while queued reports are being resent. */
   flushing: boolean;
   /** Outcome of the last flush, for a message that matches what happened. */
@@ -90,7 +91,7 @@ export function useConnectivity(): ConnectivityInfo {
    * the reports were never sent anywhere. Entries now leave the queue only
    * when the server has accepted them.
    */
-  const flush = useCallback(() => {
+  const flush = useCallback((opts: { force?: boolean } = {}) => {
     void (async () => {
       const reachable = await ping();
       if (!reachable) {
@@ -99,12 +100,12 @@ export function useConnectivity(): ConnectivityInfo {
       }
       setFlushing(true);
       try {
-        const result = await flushQueue();
+        const result = await flushQueue(opts);
         setLastFlush(result);
         setQueue(readQueue());
         // "Last synced" means the queue is genuinely clear, so it is only
         // stamped when nothing is left waiting.
-        if (result.failed === 0 && result.undeliverable === 0) {
+        if (result.failed === 0 && result.undeliverable === 0 && result.rejected === 0) {
           setLastSynced(new Date());
         }
         setState("online");
@@ -154,6 +155,10 @@ export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
   if (info.state === "online" && info.queue.length === 0) return null;
   const meta = CONNECTIVITY_META[info.state];
   const queued = info.queue.length;
+  // The server's own words about the refusal, not our paraphrase of them. One
+  // of the real ones is "the demo was reset while this was processing; please
+  // send it again", which tells the citizen the retry button is worth using.
+  const rejectedReason = info.queue.find((q) => q.undeliverable && q.lastError)?.lastError ?? null;
 
   return (
     <div
@@ -193,7 +198,7 @@ export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
       {queued > 0 && (
         <button
           type="button"
-          onClick={info.flush}
+          onClick={() => info.flush()}
           disabled={info.flushing}
           className="inline-flex min-h-9 items-center gap-1.5 border border-[var(--carbon)] bg-[var(--surface)] px-3 text-xs font-semibold disabled:opacity-60"
         >
@@ -217,6 +222,27 @@ export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
             `${info.lastFlush.undeliverable} cannot be sent automatically — please submit ${
               info.lastFlush.undeliverable === 1 ? "it" : "them"
             } again.`}
+          {/* A refusal is not a network problem, and repeating it changes
+              nothing, so these stop riding every reconnection. The text is
+              still on the device and the server's reason is shown with it —
+              some of those reasons ("the demo was reset, send it again") are
+              worth a second try, which is what the button is for. */}
+          {info.lastFlush.rejected > 0 && (
+            <>
+              {" "}
+              {info.lastFlush.rejected} {info.lastFlush.rejected === 1 ? "was" : "were"} refused
+              by the control room and will not be resent on their own.{" "}
+              {rejectedReason && <em className="not-italic">Reason: {rejectedReason}. </em>}
+              <button
+                type="button"
+                onClick={() => info.flush({ force: true })}
+                disabled={info.flushing}
+                className="underline underline-offset-2 disabled:opacity-60"
+              >
+                Try {info.lastFlush.rejected === 1 ? "it" : "them"} again anyway
+              </button>
+            </>
+          )}
         </span>
       )}
     </div>

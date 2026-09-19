@@ -69,7 +69,22 @@ export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:800
  * to the real API and only degrades to fixtures when a call actually fails —
  * and says so on screen when it does.
  */
-export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
+/**
+ * Demo mode has to be asked for.
+ *
+ * This used to read `!== "false"`, which meant an unset variable selected
+ * fixtures. That is the wrong way round for a deployment: forgetting to set
+ * anything in a hosting dashboard is the single most likely mistake, and its
+ * punishment was a site that quietly never called the backend and showed
+ * invented incidents to whoever opened it. Nothing on screen would say so,
+ * because as far as the app knew, demo mode was what someone wanted.
+ *
+ * The default is now live. A deployment that sets nothing tries the real API
+ * and reports honestly when it cannot reach it — a visible, correctable
+ * failure instead of a convincing false one. Local work opts back into
+ * fixtures explicitly through `.env.development`.
+ */
+export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
 const TIMEOUT_MS = 8000;
 const REPORT_TIMEOUT_MS = 25_000;
@@ -119,7 +134,14 @@ export async function request<T>(path: string, init?: RequestInit, timeoutMs = T
         // FastAPI validation errors (422) are a list of {loc, msg}: show them readably.
         else if (Array.isArray(body?.detail))
           detail = body.detail
-            .map((d: { loc?: unknown[]; msg?: string }) => `${(d.loc ?? []).slice(1).join(".")}: ${d.msg ?? "invalid"}`)
+            .map((d: { loc?: unknown[]; msg?: string }) => {
+              // A whole-body validator has no field path, and prefixing its
+              // message with an empty one produced "Reason: : Value error…"
+              // in front of the citizen.
+              const field = (d.loc ?? []).slice(1).join(".");
+              const msg = d.msg ?? "invalid";
+              return field ? `${field}: ${msg}` : msg;
+            })
             .join("; ");
       } catch {
         /* non-JSON error body — keep the status message */
@@ -204,6 +226,29 @@ async function withFallback<T>(
     }
     return lastResort(note);
   }
+}
+
+/**
+ * The weakest provenance among several envelopes.
+ *
+ * One label over a screen fed by several endpoints has to describe the worst
+ * of them, not the best. A map showing live incidents and fixture district
+ * risk is not a live map; calling it one is how a viewer ends up trusting the
+ * fixture half.
+ *
+ * `unavailable` ranks last because it is the only state where we know nothing
+ * at all, which is the one that most needs saying out loud.
+ */
+const MODE_RANK: Record<DataMode, number> = {
+  live: 0,
+  cached: 1,
+  stale: 2,
+  simulated: 3,
+  unavailable: 4,
+};
+
+export function worstMode(...modes: DataMode[]): DataMode {
+  return modes.reduce((a, b) => (MODE_RANK[b] > MODE_RANK[a] ? b : a), "live" as DataMode);
 }
 
 /* ------------------------------------------------------------------ */
@@ -412,6 +457,12 @@ export async function getReports(incidentId: number): Promise<Envelope<Report[]>
     `reports-${incidentId}`,
     () => mock.reportsForIncident(incidentId),
     () => request<Report[]>(`/api/reports?incident_id=${incidentId}`),
+    // Reports are the evidence an incident is judged on: how many people
+    // called, whether a responder has been on site, whether a sensor agrees.
+    // Inventing that evidence when the endpoint is down is worse than showing
+    // none, because everything derived from it — the trust panel, the sensor
+    // view — then reads as corroboration that does not exist.
+    () => [],
   );
 }
 
@@ -448,6 +499,11 @@ export async function getIncident(id: number): Promise<Envelope<IncidentDetail |
       };
     },
     () => request<IncidentDetail>(`/api/incidents/${id}`),
+    // A fabricated incident detail is the most dangerous single screen in the
+    // build: it carries a location, a severity and a people-affected count
+    // that a dispatcher would act on. No detail at all is recoverable; a
+    // plausible wrong one is not.
+    () => null,
   );
 }
 
@@ -487,6 +543,11 @@ export async function getFacilities(): Promise<Envelope<Facility[]>> {
     "facilities",
     () => mock.MOCK_FACILITIES,
     () => request<Facility[]>("/api/facilities"),
+    // Shelters and hospitals are the one list a citizen may act on physically
+    // — they will drive to it. Sending someone to a demo address is the worst
+    // outcome this app can produce, so an unreachable endpoint shows nothing
+    // and says why.
+    () => [],
   );
 }
 
@@ -1131,9 +1192,32 @@ export function dequeue(id: string): void {
 /** Outcome of a flush, so the caller can report it truthfully. */
 export interface FlushResult {
   sent: number;
+  /** Refused for a reason that will pass: still queued, will be tried again. */
   failed: number;
   /** Entries with no stored body. Kept in the queue, not counted as sent. */
   undeliverable: number;
+  /** The server refused the body itself. Kept, but never resent on its own. */
+  rejected: number;
+}
+
+/**
+ * Statuses that mean “this exact body will never be accepted”.
+ *
+ * Retrying one of these is not persistence, it is a loop: the body does not
+ * change between attempts, so neither does the answer. Every flush — and one
+ * runs whenever the connection returns — would re-send it forever, burning a
+ * sleeping free-tier container's wake-ups on a request that is already
+ * decided.
+ *
+ * 408 and 429 are deliberately absent: those say “not now”, not “not ever”.
+ * So is every 5xx, which is the server's fault rather than the report's.
+ */
+const PERMANENT_REJECTIONS = new Set([400, 404, 409, 413, 422]);
+
+function isPermanentRejection(err: unknown): boolean {
+  return (
+    err instanceof ApiError && err.status !== null && PERMANENT_REJECTIONS.has(err.status)
+  );
 }
 
 /**
@@ -1147,15 +1231,24 @@ export interface FlushResult {
  * stays in the queue flagged `undeliverable` so the citizen is told to send it
  * again, because the one thing worse than a report stuck in a queue is a
  * report silently dropped from one.
+ *
+ * The same rule covers a body the server has refused outright. It is flagged
+ * and left alone rather than deleted — the text is still on screen and the
+ * server's own words are shown with it — but the automatic flush stops
+ * touching it, so a rejected report no longer rides every reconnection.
+ * `force` is the deliberate human retry behind that: the citizen pressing the
+ * button again, which is the only thing that should override a refusal.
  */
-export async function flushQueue(): Promise<FlushResult> {
+export async function flushQueue(opts: { force?: boolean } = {}): Promise<FlushResult> {
   const items = readQueue();
-  if (items.length === 0) return { sent: 0, failed: 0, undeliverable: 0 };
+  const empty: FlushResult = { sent: 0, failed: 0, undeliverable: 0, rejected: 0 };
+  if (items.length === 0) return empty;
 
   const remaining: QueuedSubmission[] = [];
   let sent = 0;
   let failed = 0;
   let undeliverable = 0;
+  let rejected = 0;
 
   for (const item of items) {
     if (item.kind !== "report" || !item.payload) {
@@ -1163,21 +1256,31 @@ export async function flushQueue(): Promise<FlushResult> {
       undeliverable += 1;
       continue;
     }
+    // Already refused once. Leave it exactly as it is unless a person asked.
+    if (item.undeliverable && !opts.force) {
+      remaining.push(item);
+      rejected += 1;
+      continue;
+    }
     try {
       await submitReport(item.payload);
       sent += 1;
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Send failed";
+      const permanent = isPermanentRejection(err);
       remaining.push({
         ...item,
         attempts: item.attempts + 1,
-        lastError: err instanceof Error ? err.message : "Send failed",
+        lastError: message,
+        undeliverable: permanent || undefined,
       });
-      failed += 1;
+      if (permanent) rejected += 1;
+      else failed += 1;
     }
   }
 
   writeQueue(remaining);
-  return { sent, failed, undeliverable };
+  return { sent, failed, undeliverable, rejected };
 }
 
 export function readSafeCheckIns(): SafeCheckIn[] {

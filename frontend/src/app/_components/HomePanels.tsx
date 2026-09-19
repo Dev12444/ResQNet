@@ -47,6 +47,7 @@ import {
   YAxis,
 } from "recharts";
 import type {
+  DataMode,
   DisasterType,
   DispatchLogEntry,
   ForecastDay,
@@ -63,6 +64,7 @@ import {
   SHELTER_STATUS_META,
 } from "@/lib/constants";
 import { axisProps, gridProps, tooltipProps } from "@/components/charts/chartTheme";
+import { DataModeBadge } from "@/components/layout/ConnectionBar";
 
 /* ------------------------------------------------------------------ */
 /* Search                                                              */
@@ -480,10 +482,19 @@ export function DispatchLogPanel({
   entries,
   lang,
   compact = false,
+  mode,
+  note,
 }: {
   entries: DispatchLogEntry[];
   lang: Lang;
   compact?: boolean;
+  /**
+   * Where these lines came from. There is no `/api/logs` in the contract, so
+   * in practice this is always the fixture set — and a dispatch log is read
+   * as a record of things that happened. It says which it is.
+   */
+  mode?: DataMode;
+  note?: string | null;
 }) {
   const t = PLATFORM_STRINGS[lang];
   const [filter, setFilter] = useState("");
@@ -505,6 +516,7 @@ export function DispatchLogPanel({
       <div className="panel-head">
         <Radio className="size-3.5 shrink-0 text-[var(--navy-600)]" aria-hidden />
         <h2 className="cmd min-w-0 text-[12px] sm:shrink-0 sm:whitespace-nowrap">{t.dispatchLogs}</h2>
+        {mode && <DataModeBadge mode={mode} note={note} />}
         <PanelStamp />
       </div>
 

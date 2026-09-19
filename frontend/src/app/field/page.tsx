@@ -48,6 +48,7 @@ import {
   LoadingState,
   Panel,
   PartialDataNote,
+  UnavailableState,
   readableOn,
 } from "@/components/layout/primitives";
 import { DataModeBadge } from "@/components/layout/ConnectionBar";
@@ -266,7 +267,13 @@ export default function FieldPage() {
               <span className="mono text-sm font-bold">{inc.code}</span>
               <TypeBadge type={inc.type} />
               <PriorityBadge priority={inc.priority} />
-              {trust.data && <VerificationBadge status={trust.data.verification} />}
+              {/* Verification is derived from the reports. When the report
+                  endpoint did not answer there are no reports to derive it
+                  from, and "unverified" would be our guess presented as the
+                  control room's finding. */}
+              {trust.data && trust.mode !== "unavailable" && (
+                <VerificationBadge status={trust.data.verification} />
+              )}
             </div>
             <h1 className="cmd mt-2 text-[20px] leading-tight">{inc.title}</h1>
             <p className="mt-1 text-sm text-[var(--muted)]">{inc.address}</p>
@@ -353,7 +360,18 @@ export default function FieldPage() {
             </p>
           </Panel>
 
-          {trust.data && (
+          {trust.mode === "unavailable" ? (
+            <Panel title="Evidence">
+              <div className="px-3 py-2">
+                <UnavailableState
+                  what="the reports behind this incident"
+                  note={trust.error}
+                  onRetry={trust.reload}
+                />
+              </div>
+            </Panel>
+          ) : (
+            trust.data && (
             <Panel title="Evidence">
               <div className="space-y-2 px-3 py-2">
                 <SourceEvidence sources={trust.data.sources} />
@@ -370,6 +388,7 @@ export default function FieldPage() {
                 </div>
               )}
             </Panel>
+            )
           )}
 
           <Panel title="Suggested actions" subtitle="Advisory — your assessment on scene overrides these.">

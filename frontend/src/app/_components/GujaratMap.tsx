@@ -21,6 +21,7 @@ import type { StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Crosshair, Grid3x3, Layers, X } from "lucide-react";
 import type {
+  DataMode,
   DistrictSituation,
   MapBaseLayer,
   MapLayer,
@@ -28,8 +29,8 @@ import type {
 } from "@/types";
 import { ensureMapLibreWorker } from "@/components/layout/maplibreWorker";
 import { Coordinates, MAP_GRID, gridRef } from "@/components/layout/Telemetry";
-import { USE_MOCK } from "@/lib/api";
 import {
+  DATA_MODE_META,
   DEFAULT_MAP_LAYERS,
   GUJARAT_DISTRICTS,
   MAP_LAYER_META,
@@ -251,6 +252,8 @@ export function GujaratMap({
   selectedDistrict,
   onSelectDistrict,
   shelters,
+  mode = "live",
+  situationsMode = "live",
   className = "",
 }: {
   situations: DistrictSituation[];
@@ -258,6 +261,14 @@ export function GujaratMap({
   selectedDistrict: string | null;
   onSelectDistrict: (district: string | null) => void;
   shelters: Shelter[];
+  /**
+   * Provenance of the weakest layer drawn on the map, because the corner stamp
+   * speaks for the whole picture. If any layer on it is a fixture, the stamp
+   * must not say Live.
+   */
+  mode?: DataMode;
+  /** Provenance of the district figures specifically, for the district card. */
+  situationsMode?: DataMode;
   className?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -903,12 +914,27 @@ export function GujaratMap({
                 {gridRef(selected.lat, selected.lng)}
               </span>
             </span>
+            {/* Every figure on this card — risk level, incident count, people
+                affected — comes from the district feed. Saying Live above them
+                when that feed is a fixture set is the most confident lie on
+                the page, because a commander reads this card as the answer. */}
             <span
               aria-hidden
-              className="live-dot size-1.5 shrink-0"
-              style={{ background: "var(--jade)", color: "var(--jade)" }}
+              className={`size-1.5 shrink-0 rounded-full ${
+                situationsMode === "live" ? "live-dot" : ""
+              }`}
+              style={{
+                background: DATA_MODE_META[situationsMode].color,
+                color: DATA_MODE_META[situationsMode].color,
+              }}
             />
-            <span className="eyebrow shrink-0 text-[var(--rail-muted)]">Live</span>
+            <span className="eyebrow shrink-0 text-[var(--rail-muted)]">
+              {situationsMode === "live"
+                ? "Live"
+                : situationsMode === "simulated"
+                  ? "Demo"
+                  : DATA_MODE_META[situationsMode].label}
+            </span>
             <button
               type="button"
               onClick={() => onSelectDistrict(null)}
@@ -1053,6 +1079,7 @@ export function GujaratMap({
 
       {/* Live stamp */}
       <MapLiveStamp
+        mode={mode}
         detail={`${visibleMarkers.length} MARKERS · OVERLAPS GROUPED`}
       />
     </div>
@@ -1069,11 +1096,16 @@ const LEGEND_LAYERS: MapLayer[] = ["cyclone", "flood", "fire", "warning", "shelt
  * wall time, and rendering one during SSR guarantees a hydration mismatch a
  * second later.
  *
- * The feed word is the honest one. When the platform is running on mock data
- * the stamp says DEMO DATA in amber and does not pulse — a green LIVE dot over
- * fixture data is exactly the lie this interface is built not to tell.
+ * The feed word is the honest one. A green LIVE dot over fixture data is
+ * exactly the lie this interface is built not to tell.
+ *
+ * It used to read `USE_MOCK`, which is a build flag, not a fact about what is
+ * on the map. A live build drawing district risk and shelter pins from
+ * fixtures — which is every build, because those endpoints do not exist —
+ * showed a pulsing green Live. The stamp now reports the provenance of what
+ * was actually drawn.
  */
-function MapLiveStamp({ detail }: { detail: string }) {
+function MapLiveStamp({ detail, mode }: { detail: string; mode: DataMode }) {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -1085,23 +1117,36 @@ function MapLiveStamp({ detail }: { detail: string }) {
     };
   }, []);
 
-  const demo = USE_MOCK;
+  const live = mode === "live";
+  const meta = DATA_MODE_META[mode];
 
   return (
     <div className="notch-sm absolute bottom-3 right-3 z-10 hidden items-center gap-2 border border-[var(--carbon)] bg-[var(--surface)]/95 px-2 py-1 shadow-sm sm:flex">
       <span
         aria-hidden
-        className={`size-1.5 rounded-full ${demo ? "" : "live-dot"}`}
-        style={{
-          background: demo ? "var(--medium)" : "var(--ok)",
-          color: demo ? "var(--medium)" : "var(--ok)",
-        }}
+        className={`size-1.5 rounded-full ${live ? "live-dot" : ""}`}
+        style={{ background: meta.color, color: meta.color }}
       />
+      {/* "NO DATA" would be the wrong words in this corner: the map is
+          plainly showing markers, and the missing thing is one layer, not the
+          picture. The badge names the weakest layer's state; the note above
+          the map names which layers those are. */}
       <span
         className="cmd text-[10px]"
-        style={{ color: demo ? "var(--amber-600)" : "var(--ok)" }}
+        style={{ color: meta.color }}
+        title={
+          live
+            ? "Every layer on this map came from the API."
+            : `Weakest layer on this map: ${meta.label.toLowerCase()}.`
+        }
       >
-        {demo ? "Demo data" : "Live"}
+        {live
+          ? "Live"
+          : mode === "simulated"
+            ? "Demo data"
+            : mode === "unavailable"
+              ? "Layer missing"
+              : meta.label}
       </span>
       <span aria-hidden className="h-3 w-px bg-[var(--hairline)]" />
       <span className="mono text-[10px] font-semibold">

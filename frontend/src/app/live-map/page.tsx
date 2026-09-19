@@ -27,6 +27,7 @@ import {
   getResources,
   getShelters,
   getWeatherAlerts,
+  worstMode,
 } from "@/lib/api";
 import { GUJARAT_CENTER, RISK_META, districtByName } from "@/lib/constants";
 
@@ -141,6 +142,15 @@ export default function LiveMapPage() {
           selectedDistrict={district}
           onSelectDistrict={setDistrict}
           shelters={shelters.data ?? []}
+          mode={worstMode(
+            situations.mode,
+            shelters.mode,
+            groundTruth.mode,
+            incidents.mode,
+            resources.mode,
+            alerts.mode,
+          )}
+          situationsMode={situations.mode}
         />
 
         <div className="flex min-w-0 flex-col gap-3">

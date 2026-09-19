@@ -51,6 +51,7 @@ import {
   getResources,
   getShelters,
   getWeatherAlerts,
+  worstMode,
 } from "@/lib/api";
 import {
   GUJARAT_CENTER,
@@ -73,6 +74,31 @@ export default function HomePage() {
   const resources = useEnvelope(useCallback(() => getResources(), []));
 
   const [query, setQuery] = useState("");
+  /* Named per layer, and only when that layer is not live, so the note
+     disappears by itself the day an endpoint appears behind one of them. */
+  /* The corner stamp speaks for the whole map, so it takes the weakest of
+     everything drawn on it rather than the best. */
+  const mapMode = useMemo(
+    () =>
+      worstMode(
+        situations.mode,
+        shelters.mode,
+        groundTruth.mode,
+        incidents.mode,
+        resources.mode,
+        alerts.mode,
+      ),
+    [situations.mode, shelters.mode, groundTruth.mode, incidents.mode, resources.mode, alerts.mode],
+  );
+
+  const demoLayers = useMemo(() => {
+    const names: string[] = [];
+    if (situations.mode !== "live") names.push("district risk shading");
+    if (shelters.mode !== "live") names.push("shelter locations");
+    if (groundTruth.mode !== "live") names.push("ground-truth pins");
+    return names;
+  }, [situations.mode, shelters.mode, groundTruth.mode]);
+
   const [district, setDistrict] = useState<string | null>(null);
   /* Whether the operator has chosen a district themselves. Until they have,
      the map opens on the one that most needs attention — an operations screen
@@ -251,6 +277,24 @@ export default function HomePage() {
         </p>
       )}
 
+      {/* The map draws several layers from several sources, and three of them
+          have no endpoint behind them at all — there is no /api/districts/situation,
+          /api/shelters or /api/ground-truth in the contract, so they are
+          fixtures in every build, live or not. A single badge on the map would
+          be read as covering everything on it, so the layers are named
+          individually instead. The incident, unit and alert layers beside them
+          are real. */}
+      {demoLayers.length > 0 && (
+        <p
+          role="note"
+          className="panel mb-2 border-l-[3px] border-l-[var(--amber)] px-3 py-1.5 text-[12px] text-[var(--muted)]"
+        >
+          <strong className="font-semibold text-[var(--foreground)]">Demo data on this map:</strong>{" "}
+          {demoLayers.join(", ")}. These are illustrative and are not coming from the
+          control room. Incidents, units and alerts on the map are not demo data.
+        </p>
+      )}
+
       {/* ---- Map + right rail ------------------------------------------ */}
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_296px] xl:grid-cols-[minmax(0,1fr)_320px]">
         <GujaratMap
@@ -260,6 +304,8 @@ export default function HomePage() {
           selectedDistrict={focusDistrict}
           onSelectDistrict={selectDistrict}
           shelters={shelters.data ?? []}
+          mode={mapMode}
+          situationsMode={situations.mode}
         />
 
         {/* Location first. Everything below it — the alerts that matter to
@@ -275,7 +321,13 @@ export default function HomePage() {
 
       {/* ---- Lower operational band ------------------------------------ */}
       <div className="mt-2 grid gap-2 lg:grid-cols-3">
-        <DispatchLogPanel entries={logs.data ?? []} lang={lang} compact />
+        <DispatchLogPanel
+          entries={logs.data ?? []}
+          lang={lang}
+          compact
+          mode={logs.mode}
+          note={logs.error}
+        />
         <RadarForecast forecast={forecast.data ?? []} lang={lang} />
         <WeatherTrend forecast={forecast.data ?? []} />
       </div>

@@ -431,21 +431,27 @@ export default function AnalyticsPage() {
           note={kpis.avgDispatch === null ? "No dispatches in window" : "Report → dispatch"}
         />
         <Kpi label="Teams deployed" value={kpis.teams} tone="var(--info)" />
+        {/* These two read like measurements but are computed from fixtures,
+            so the caption says so in the tile rather than only in a badge
+            further down the page — a KPI is the thing people screenshot. */}
         <Kpi
           label="Shelter occupancy"
           value={kpis.shelterPct === null ? "—" : `${kpis.shelterPct}%`}
           tone={kpis.shelterPct !== null && kpis.shelterPct >= 85 ? "var(--high)" : "var(--ok)"}
-          note={`${kpis.occupancy.toLocaleString("en-IN")} of ${kpis.capacity.toLocaleString("en-IN")}`}
+          note={`${kpis.occupancy.toLocaleString("en-IN")} of ${kpis.capacity.toLocaleString(
+            "en-IN",
+          )}${shelters.mode === "live" ? "" : " — demo figures"}`}
         />
         <Kpi
           label="Highest district risk"
           value={RISK_META[kpis.worstRisk].label}
           tone={RISK_META[kpis.worstRisk].color}
-          note={
-            kpis.utilisation === null
-              ? undefined
-              : `Units committed: ${kpis.utilisation}%`
-          }
+          note={[
+            kpis.utilisation === null ? null : `Units committed: ${kpis.utilisation}%`,
+            situations.mode === "live" ? null : "Demo district risk",
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined}
         />
       </div>
 
@@ -714,7 +720,17 @@ export default function AnalyticsPage() {
           </div>
         </Panel>
 
-        <Panel title="Shelter capacity" subtitle="Places in use against total capacity.">
+        {/* Shelters, pulse and the district table are drawn from fixtures:
+            the API has no /api/shelters, /api/pulse or /api/districts/situation,
+            so these three panels never become live no matter what the backend
+            is doing. They carry their provenance badge for the same reason the
+            live panels do — a chart that cannot say where its numbers came
+            from is a chart nobody should quote. */}
+        <Panel
+          title="Shelter capacity"
+          subtitle="Places in use against total capacity."
+          actions={<DataModeBadge mode={shelters.mode} note={shelters.error} />}
+        >
           <div className="px-2 py-2">
             <ShelterCapacity data={shelterSeries} />
           </div>
@@ -729,13 +745,17 @@ export default function AnalyticsPage() {
         <Panel
           title="ResQ Pulse distribution"
           subtitle="How many districts sit at each risk level."
+          actions={<DataModeBadge mode={pulse.mode} note={pulse.error} />}
         >
           <div className="px-2 py-2">
             <PulseDistribution data={pulseSeries} />
           </div>
         </Panel>
 
-        <Panel title="District comparison">
+        <Panel
+          title="District comparison"
+          actions={<DataModeBadge mode={situations.mode} note={situations.error} />}
+        >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] border-collapse text-sm">
               <caption className="sr-only">

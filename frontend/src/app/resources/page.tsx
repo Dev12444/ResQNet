@@ -26,6 +26,7 @@ import { useEnvelope } from "@/components/layout/useEnvelope";
 import {
   Badge,
   ErrorState,
+  UnavailableState,
   LoadingState,
   Panel,
   PartialDataNote,
@@ -261,6 +262,15 @@ export default function ResourcesPage() {
         >
           {facilities.loading && !facilities.data ? (
             <LoadingState />
+          ) : facilities.mode === "unavailable" ? (
+            /* An empty list here would read as "no hospitals, no shelters",
+               which is an answer nobody should act on. Say the endpoint did
+               not answer instead. */
+            <UnavailableState
+              what="hospitals and shelters"
+              note={facilities.error}
+              onRetry={facilities.reload}
+            />
           ) : (
             <FacilitiesPanel facilities={filteredFacilities} />
           )}
