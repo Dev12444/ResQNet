@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import {
   Archivo_Narrow,
@@ -77,7 +78,14 @@ export const viewport: Viewport = {
  */
 const THEME_BOOTSTRAP = `try{var t=localStorage.getItem('resqnet-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}`;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+/*
+ * The props are written out rather than using Next's `LayoutProps<"/">`.
+ * That helper is generated into `.next/types` by a build, so a fresh clone
+ * fails `tsc --noEmit` until something has built — which is exactly the order
+ * a CI job or a new contributor does things in. The root layout takes children
+ * and nothing else, so spelling it out costs nothing and removes the trap.
+ */
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
