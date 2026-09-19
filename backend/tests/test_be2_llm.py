@@ -263,3 +263,32 @@ def test_missing_or_corrupt_seed_is_ignored(env, tmp_path):
         env.monkeypatch.setattr(llm, "_cache", llm.OrderedDict())
         assert llm.generate_text("anything") == "live"
         assert llm.demo_seed_size() == 0
+
+
+def test_seeded_answer_served_without_any_api_key(env, tmp_path):
+    import gzip
+    import json
+
+    env.install(FakeOpenAI(reply=lambda kw: "tested answer"))
+    llm.RECORD_KEYS = set()
+    try:
+        llm.generate_text("demo prompt")
+        model, vecs = llm.embed_with_model(["demo text"])
+        recorded = set(llm.RECORD_KEYS)
+    finally:
+        llm.RECORD_KEYS = None
+    seed = tmp_path / "seed.json.gz"
+    with gzip.open(seed, "wt", encoding="utf-8") as f:
+        json.dump(llm.export_entries(recorded), f)
+
+    for k in ("openai_api_key", "gemini_api_key"):
+        env.monkeypatch.setattr(env.st, k, "")
+    env.monkeypatch.setattr(llm, "DEMO_SEED_PATH", seed)
+    env.monkeypatch.setattr(llm, "_seed", None)
+    env.monkeypatch.setattr(llm, "_cache", llm.OrderedDict())
+    assert not llm.available()
+    assert llm.generate_text("demo prompt") == "tested answer"
+    assert llm.embed_with_model(["demo text"]) == (model, vecs)
+    assert llm.generate_text("never seen") is None  # uncached + no provider -> caller falls back to rules
+    env.monkeypatch.setattr(env.st, "ai_enabled", False)
+    assert llm.generate_text("demo prompt") is None  # AI_ENABLED=false always means rules only
