@@ -81,6 +81,16 @@ def triage(db, report: Any) -> TriageResult:
     if not address:
         address = cls.location_text
 
+    # A report that already names its incident (e.g. a responder's field update from /field)
+    # attaches to it directly — no duplicate guessing, even without GPS.
+    hinted = _hinted_incident(db, _get(report, "incident_id"))
+    if hinted is not None:
+        if approximate:
+            lat, lng = _get(hinted, "lat") or lat, _get(hinted, "lng") or lng
+            address = _get(hinted, "address") or address
+            approximate = False
+        return TriageResult(cls, hinted, lat, lng, address, geocoded, approximate)
+
     view = SimpleNamespace(
         id=_get(report, "id"),
         source=_get(report, "source"),
@@ -92,6 +102,19 @@ def triage(db, report: Any) -> TriageResult:
     )
     match = dedup.find_match(db, view, cls)
     return TriageResult(cls, match, lat, lng, address, geocoded, approximate)
+
+
+def _hinted_incident(db, incident_id: Any) -> Any | None:
+    if not incident_id:
+        return None
+    try:
+        from app.models import Incident
+
+        inc = db.get(Incident, incident_id)
+        return inc if inc is not None and _get(inc, "status") != "resolved" else None
+    except Exception as e:
+        log.info("incident hint %s ignored: %s", incident_id, e)
+        return None
 
 
 def apply_to_incident(incident: Any, cls: ClassificationResult, is_new: bool) -> Any:

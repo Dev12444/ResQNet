@@ -215,6 +215,7 @@ Request:
 }
 ```
 - `text` required unless `source = "sensor"` (then `sensor` required)
+- `incident_id` (optional, for `/field` responder updates): attach the report to that open incident directly — no duplicate matching, and its location is used when the report has no GPS. Without it, a field update with `lat/lng = null` would open a new incident at the city centre
 - `photo_url` (optional): a `data:image/jpeg|png|webp;base64,...` URL (≤ 6 MB — FE should downscale to ~1280 px) or a public `https://` image URL. Analysed by Gemini Vision in parallel; a relevant photo can raise severity by +1
 - `lat/lng` optional — if missing, BE2 extracts `location_text` and BE1 geocodes against a small Ahmedabad gazetteer (fallback: city centre + flag low confidence)
 
@@ -501,4 +502,4 @@ Rules:
 | 2026-09-19 | v1 | team |
 | 2026-09-19 | `photo_url` formats, `classification.photo`, geocoding note, `GET /api/ai/status`, `triage.py` internal API | BE2 |
 | 2026-09-19 | OpenAI primary provider: `source_model` values, `classification.model`, `/api/ai/status` shape | BE2 |
-| 2026-09-19 | `GET /api/incidents/{id}/trust`, `GET /api/analytics/insights`; hotspot `top_type` never null | BE2 |
+| 2026-09-19 | `GET /api/incidents/{id}/trust`, `GET /api/analytics/insights`; hotspot `top_type` never null; optional `incident_id` on `POST /api/reports` | BE2 |
