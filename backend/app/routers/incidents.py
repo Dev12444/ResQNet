@@ -24,6 +24,7 @@ from app import audit
 from app import models as m
 from app.alerting import ALERT_LOCK, add_alert, open_alert_exists, publish_alert
 from app.db import get_db
+from app.locking import lock_incident
 from app.pipeline import PIPELINE_LOCK, incident_code, refresh_summary_in_background
 from app.schemas import (
     AssignmentOut,
@@ -125,17 +126,6 @@ def _close_active_assignments(incident: m.Incident, now: datetime) -> list[m.Ass
             a.resource.status, a.resource.current_incident_id = "available", None
         closed.append(a)
     return closed
-
-
-def lock_incident(db: Session, incident_id: int) -> None:
-    """Row-lock the incident for this transaction (Postgres; a no-op on SQLite, which serialises writes).
-
-    Lock order for every write that touches an incident and its units: [ALERT_LOCK ->] incident row
-    -> assignment rows -> resource rows. Dispatch, PATCH incident and PATCH assignment all start
-    here, so they queue up instead of overwriting each other or deadlocking. Anything read before
-    this call is stale: load the incident afterwards (get_incident_or_404 uses populate_existing).
-    """
-    db.execute(select(m.Incident.id).where(m.Incident.id == incident_id).with_for_update())
 
 
 @dataclasses.dataclass

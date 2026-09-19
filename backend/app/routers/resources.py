@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app import audit
 from app import models as m
 from app.db import get_db
+from app.locking import lock_row
 from app.schemas import FacilityKind, FacilityOut, ResourceKind, ResourceOut, ResourcePatch, ResourceStatus
 from app.ws_manager import manager
 
@@ -54,7 +55,10 @@ def update_resource(
 ) -> m.Resource:
     """Mark a unit available / busy / offline. 'assigned' belongs to dispatch, and a unit with an
     active assignment must be released through PATCH /api/assignments first."""
-    resource = db.get(m.Resource, resource_id)
+    # Lock the unit before checking its status: a dispatch claiming it right now waits for us and
+    # then gets a clean 409, instead of us overwriting its "assigned" with e.g. "offline".
+    lock_row(db, m.Resource, resource_id)
+    resource = db.get(m.Resource, resource_id, populate_existing=True)
     if resource is None:
         raise HTTPException(status_code=404, detail=f"Resource {resource_id} not found")
     if body.status == resource.status:

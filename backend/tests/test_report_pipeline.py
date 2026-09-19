@@ -352,6 +352,41 @@ def test_prepare_failure_keeps_raw_report(env, monkeypatch):
         assert db.scalar(select(func.count()).select_from(m.Incident)) == 0
 
 
+def test_report_does_not_merge_into_an_incident_resolved_after_dedup(tmp_path, monkeypatch):
+    """Dedup picks an open incident; a supervisor resolves it before the merge commits.
+
+    The pipeline re-reads the match under a row lock, so the new report opens a NEW incident
+    instead of disappearing into the resolved one. (Postgres variants: test_concurrency_pg.py.)
+    """
+    from app.services import triage as triage_mod
+
+    eng = create_engine(f"sqlite:///{(tmp_path / 'resolve.db').as_posix()}",
+                        connect_args={"check_same_thread": False, "timeout": 30})
+    Session = _make_client(eng)
+    try:
+        with TestClient(app) as client:
+            first = _post(client, source="citizen", text=AKHBARNAGAR_EN, lat=23.0588, lng=72.562).json()["incident"]
+            real_find = triage_mod.dedup.find_match
+
+            def find_then_resolve(*args, **kwargs):
+                match = real_find(*args, **kwargs)
+                with Session() as other:  # the supervisor's resolve commits in between
+                    other.get(m.Incident, first["id"]).status = "resolved"
+                    other.commit()
+                return match
+
+            monkeypatch.setattr(triage_mod.dedup, "find_match", find_then_resolve)
+            r = _post(client, source="call", text=AKHBARNAGAR_EN, lat=23.0589, lng=72.562)
+        body = r.json()
+        assert r.status_code == 201 and body["merged"] is False
+        assert body["incident"]["id"] != first["id"] and body["incident"]["status"] == "new"
+        with Session() as db:
+            assert db.get(m.Incident, first["id"]).report_count == 1
+    finally:
+        app.dependency_overrides.clear()
+        eng.dispose()
+
+
 # ---------------------------------------------------------------- debounced summaries catch up
 
 

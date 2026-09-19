@@ -22,7 +22,8 @@ from sqlalchemy.orm import Session, selectinload
 from app import audit
 from app import models as m
 from app.db import get_db
-from app.routers.incidents import get_incident_or_404, lock_incident
+from app.locking import lock_incident
+from app.routers.incidents import get_incident_or_404
 from app.schemas import AssignmentOut, AssignmentPatch, DispatchRequest, IncidentDetail, IncidentOut, ResourceOut
 from app.services import geo
 from app.services.notifier import notify_dispatch
@@ -154,7 +155,7 @@ def update_assignment(
     if incident_id is None:
         raise HTTPException(status_code=404, detail=f"Assignment {assignment_id} not found")
     # Incident row first, then the assignment: the same order as dispatch and resolve, so a tap
-    # racing a resolve queues behind it instead of deadlocking (Postgres; no-op on SQLite).
+    # racing a resolve queues behind it instead of deadlocking (see app/locking.py).
     lock_incident(db, incident_id)
     a = db.scalars(
         select(m.Assignment)

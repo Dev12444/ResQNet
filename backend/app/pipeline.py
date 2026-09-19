@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app import audit
 from app import models as m
+from app.locking import lock_incident
 from app.schemas import IncidentOut, ReportCreate
 from app.services import summarizer
 from app.services.classifier import ClassificationResult
@@ -80,6 +81,21 @@ def _save_raw(db: Session, body: ReportCreate) -> m.Report:
     return report
 
 
+def _still_open(db: Session, match: m.Incident | None) -> m.Incident | None:
+    """Row-lock dedup's match and re-read it: a supervisor may have resolved it since dedup read it.
+
+    PIPELINE_LOCK does not cover PATCH /api/incidents, so without this a new report could merge into
+    an incident resolved a moment earlier and silently drop off the dashboard queue. Holding the row
+    lock until our commit also makes a resolve arriving now wait for the merge (lock order: see
+    app/locking.py). Returns None if the incident is closed: open a new one.
+    """
+    if match is None:
+        return None
+    lock_incident(db, match.id)
+    db.refresh(match)  # re-read after the lock: the status dedup saw may be stale
+    return match if match.status in m.OPEN_INCIDENT_STATUSES else None
+
+
 def ingest_report(db: Session, body: ReportCreate, actor: str) -> IngestResult:
     """Store, triage and attach one report. Does not broadcast (see publish_ingest).
 
@@ -99,9 +115,10 @@ def ingest_report(db: Session, body: ReportCreate, actor: str) -> IngestResult:
             report.lat, report.lng = t.lat, t.lng
             report.lang = cls.lang
             report.ai_json = cls.to_dict()
-            merged = t.match is not None
+            match = _still_open(db, t.match)
+            merged = match is not None
             if merged:
-                incident = t.match
+                incident = match
                 incident.report_count = (incident.report_count or 1) + 1
                 apply_to_incident(incident, cls, is_new=False)
             else:

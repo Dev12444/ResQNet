@@ -112,10 +112,14 @@ Incident codes restart at `INC-0001` after a reset.
 | Dispatch / resolve / field tap on one incident | Row lock on the incident first (`lock_incident`), then assignments, then resources: one order everywhere, so no lost updates and no deadlocks |
 | Escalation loop vs. a new report's alert check vs. manual escalation | `ALERT_LOCK` around "already alerted?" → insert → commit (`app/alerting.py`); taken **before** any row lock |
 | Loop auto-escalates while a dispatch commits | Conditional `UPDATE … WHERE status IN ('new','triaged')`: the dispatch wins |
+| A report merges into an incident a supervisor just resolved | The pipeline row-locks and re-reads dedup's match; if it is closed now, the report opens a new incident |
+| Unit marked offline while a dispatch claims it | PATCH resource row-locks the unit before checking it; the loser gets a 409 |
 | Double tap on a unit status | Idempotent (same status = no-op) + forward-only lifecycle (409 on a step back) |
 
-Row locks are Postgres-only (SQLite serialises writes on its own); the races are reproduced
-deterministically in `tests/test_concurrency_pg.py` and each guard was verified by removing it
+Row locks live in `app/locking.py`: `SELECT … FOR UPDATE` on Postgres; on SQLite (no row locks,
+and reads before a write are unprotected) a no-op `UPDATE` that takes the database write lock.
+The races are reproduced deterministically on Postgres in `tests/test_concurrency_pg.py`, and
+`tests/test_load.py` runs the full race mix on SQLite; each guard was verified by removing it
 and watching its test fail.
 
 ## Troubleshooting

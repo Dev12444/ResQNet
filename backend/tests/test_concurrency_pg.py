@@ -1,7 +1,7 @@
-"""Row-locking races that only a real Postgres can show (Task 15). Owner: BE1.
+"""Row-locking races, forced step by step on a real Postgres (Task 15). Owner: BE1.
 
-SQLite serialises every write, so these run only with TEST_POSTGRES_URL set (a throwaway DB:
-the tables are dropped and recreated), e.g.
+They need real row locks and concurrent connections, so they run only with TEST_POSTGRES_URL set
+(a throwaway DB: the tables are dropped and recreated), e.g.
     TEST_POSTGRES_URL=postgresql://postgres@127.0.0.1:55432/resqnet_test pytest tests/test_concurrency_pg.py
 
 Each test pauses one request at a hook inside its transaction, fires the competing request, and
@@ -217,3 +217,103 @@ def test_auto_escalation_does_not_overwrite_a_concurrent_dispatch(pg, monkeypatc
         assert db.get(m.Incident, inc_id).status == "dispatched"
         kinds = db.scalars(select(m.Alert.kind).where(m.Alert.incident_id == inc_id)).all()
     assert "escalation" not in kinds
+
+
+AKH = {"source": "citizen", "lat": 23.0588, "lng": 72.562, "text": "Car stuck in Akhbarnagar underpass, water rising"}
+
+
+@pytest.mark.parametrize("pause", ["after_dedup", "after_row_lock"])
+def test_report_never_merges_into_an_incident_resolved_meanwhile(pg, monkeypatch, pause):
+    """Dedup picks an open incident, then (paused) a supervisor resolves it.
+
+    Valid outcomes: the report opens a NEW incident (resolve won the race), or it merged first and
+    the resolve closed the incident afterwards. Invalid: a new report inside an incident that was
+    already resolved (it silently drops off the dashboard queue).
+    """
+    from app import pipeline
+    from app.services import triage as triage_mod
+
+    client, Session = pg
+    first = client.post("/api/reports", json=AKH).json()["incident"]["id"]
+    paused, rival_done = threading.Event(), threading.Event()
+
+    def hold():
+        if not paused.is_set():
+            paused.set()
+            rival_done.wait(PAUSE_SEC)
+
+    if pause == "after_dedup":  # before the pipeline locks the matched incident
+        real_find = triage_mod.dedup.find_match
+        monkeypatch.setattr(triage_mod.dedup, "find_match", lambda *a, **kw: (real_find(*a, **kw), hold())[0])
+    else:  # the pipeline holds the incident row: the resolve must wait for the merge
+        real_apply = pipeline.apply_to_incident
+        monkeypatch.setattr(pipeline, "apply_to_incident",
+                            lambda inc, cls, is_new: (is_new or hold(), real_apply(inc, cls, is_new))[1])
+    out, codes, finished = {}, {}, []
+
+    def do_report():
+        r = client.post("/api/reports", json={**AKH, "source": "call"})
+        codes["report"], out["body"] = r.status_code, r.json()
+        finished.append("report")
+
+    def do_resolve():
+        codes["resolve"] = client.patch(f"/api/incidents/{first}", json={"status": "resolved"}).status_code
+        finished.append("resolve")
+
+    t = _run(do_report)
+    assert paused.wait(5)
+    r = _run(do_resolve)
+    t.join(10)
+    rival_done.set()
+    r.join(10)
+
+    assert codes == {"report": 201, "resolve": 200}
+    landed = out["body"]["incident"]
+    with Session() as db:
+        old = db.get(m.Incident, first)
+        assert old.status == "resolved"
+        if pause == "after_dedup":  # resolve committed first: the report must open a new incident
+            assert (landed["id"], out["body"]["merged"], landed["status"]) != (first, True, "new")
+            assert landed["id"] != first and landed["status"] == "new" and old.report_count == 1
+        else:  # the resolve waited for the merge's row lock: merged while open, resolved afterwards
+            assert finished == ["report", "resolve"], "resolve did not wait for the merge"
+            assert (landed["id"], out["body"]["merged"], old.report_count) == (first, True, 2)
+
+
+def test_marking_a_unit_offline_while_it_is_dispatched(pg, monkeypatch):
+    """PATCH /api/resources (paused after its check) races a dispatch claiming the same unit.
+
+    Valid: one wins cleanly (offline + dispatch 409, or assigned + PATCH 409). Invalid: both 200
+    and the unit "offline" while holding an active assignment.
+    """
+    from app.routers import resources as res_router
+
+    client, Session = pg
+    inc_id, unit = _incident(Session), _free_unit(Session)
+    paused, rival_done = threading.Event(), threading.Event()
+    real_record = res_router.audit.record
+
+    def slow_record(*a, **kw):
+        if not paused.is_set():
+            paused.set()
+            rival_done.wait(PAUSE_SEC)
+        return real_record(*a, **kw)
+
+    monkeypatch.setattr(res_router.audit, "record", slow_record)
+    codes = {}
+    t = _run(lambda: codes.__setitem__(
+        "patch", client.patch(f"/api/resources/{unit}", json={"status": "offline"}).status_code))
+    assert paused.wait(5)
+    codes["dispatch"] = client.post(f"/api/incidents/{inc_id}/dispatch", json={"resource_ids": [unit]}).status_code
+    rival_done.set()
+    t.join(10)
+
+    with Session() as db:
+        res = db.get(m.Resource, unit)
+        active = db.scalars(select(m.Assignment).where(m.Assignment.resource_id == unit,
+                                                       m.Assignment.status.in_(m.ACTIVE_ASSIGNMENT_STATUSES))).all()
+    assert sorted(codes.values()) == [200, 409], codes
+    if active:
+        assert (res.status, res.current_incident_id) == ("assigned", inc_id)
+    else:
+        assert (res.status, res.current_incident_id) == ("offline", None)
