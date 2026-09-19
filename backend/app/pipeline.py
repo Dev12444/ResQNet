@@ -30,7 +30,7 @@ from app import models as m
 from app.schemas import IncidentOut, ReportCreate
 from app.services import summarizer
 from app.services.classifier import ClassificationResult
-from app.services.triage import apply_to_incident, refresh_summary, triage
+from app.services.triage import apply_to_incident, prepare, refresh_summary, triage
 from app.ws_manager import manager
 
 log = logging.getLogger("resqnet.pipeline")
@@ -90,8 +90,11 @@ def ingest_report(db: Session, body: ReportCreate, actor: str) -> IngestResult:
     report = _save_raw(db, body)
     report_id = report.id
     try:
+        # BE2: the slow part (LLM classify + geocode + embedding, ~1-2 s) runs OUTSIDE the lock so
+        # concurrent reports overlap; only dedup + the DB write are serialised (milliseconds).
+        prepared = prepare(report)
         with _PIPELINE_LOCK:
-            t = triage(db, report)
+            t = triage(db, report, prepared=prepared)
             cls = t.classification
             report.lat, report.lng = t.lat, t.lng
             report.lang = cls.lang
