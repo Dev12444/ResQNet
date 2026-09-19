@@ -17,8 +17,9 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db, init_db
-from app.routers import ai, alerts, analytics, incidents, reports, resources
+from app.routers import ai, alerts, analytics, incidents, reports, resources, ws
 from app.schemas import HealthOut
+from app.ws_manager import manager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("resqnet.main")
@@ -29,8 +30,12 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     init_db()
+    await manager.start()
     log.info("ResQNet API started (ai_available=%s)", settings.ai_available)
-    yield
+    try:
+        yield
+    finally:
+        await manager.stop()
 
 
 app = FastAPI(
@@ -74,6 +79,7 @@ app.include_router(incidents.router)
 app.include_router(reports.router)
 app.include_router(resources.router)
 app.include_router(alerts.router)
+app.include_router(ws.router)
 # BE2 routers (contract §3 AI + Analytics).
 app.include_router(ai.router)
 app.include_router(analytics.router)
