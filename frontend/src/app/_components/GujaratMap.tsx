@@ -787,7 +787,7 @@ export function GujaratMap({
               aria-hidden
               className="size-3 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--navy-600)]"
             />
-            LOADING MAP…
+            {m.loadingMap}
           </p>
         </div>
       )}
@@ -1079,20 +1079,19 @@ export function GujaratMap({
           ))}
         </ul>
         <p className="border-t border-[var(--hairline)] px-2.5 py-1 text-[9px] leading-tight text-[var(--faint)]">
-          Discs mark district centroids and show risk posture — they are not
-          administrative boundaries.
+          {m.centroidNote}
         </p>
         {/* On a narrow map the marker count rides inside the legend rather
             than as a second floating chip that would overlap it. */}
         <p className="mono border-t border-[var(--hairline)] bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-semibold sm:hidden">
-          {visibleMarkers.length} MARKERS · OVERLAPS GROUPED
+          {m.markersGrouped(visibleMarkers.length)}
         </p>
       </div>
 
       {/* Live stamp */}
       <MapLiveStamp
         mode={mode}
-        detail={`${visibleMarkers.length} MARKERS · OVERLAPS GROUPED`}
+        detail={m.markersGrouped(visibleMarkers.length)}
       />
     </div>
   );

@@ -23,6 +23,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { Lang } from "@/types";
+import { PLATFORM_STRINGS } from "@/lib/constants";
 
 const LANG_KEY = "resqnet.lang";
 
@@ -80,6 +81,27 @@ export function LangProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <LangContext.Provider value={{ lang, setLang }}>{children}</LangContext.Provider>
+    <LangContext.Provider value={{ lang, setLang }}>
+      {/*
+       * The tab title, rendered rather than assigned.
+       *
+       * `metadata` in the root layout is resolved on the server, before
+       * anyone's preference is known, and `generateMetadata` is Server
+       * Component only — so no server hook can read the saved language, and
+       * the tab kept its English title on an otherwise Gujarati console.
+       *
+       * Assigning `document.title` from an effect does not hold: Next renders
+       * the title from `metadata` as part of the React tree, so React reverts
+       * the assignment on its next commit — and with several panels polling,
+       * that is immediately. Rendering React's own `<title>` is the documented
+       * alternative for client components (see the `global-error` note in the
+       * Next docs), and it wins because it is the only title in the tree —
+       * `metadata.title` in the root layout was removed for exactly that
+       * reason. On the server this renders English, which is the correct
+       * pre-preference default, and it re-renders when the choice is restored.
+       */}
+      <title>{PLATFORM_STRINGS[lang].platformName}</title>
+      {children}
+    </LangContext.Provider>
   );
 }

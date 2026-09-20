@@ -32,6 +32,7 @@ import type {
   Lang,
   MissingStatus,
   Priority,
+  QuickAction,
   ReliefKind,
   ReliefStatus,
   ReportKind,
@@ -62,6 +63,8 @@ interface EnumLabels {
   hazard: Record<Hazard, string>;
   source: Record<ReportSource, string>;
   alertKind: Record<AlertKind, string>;
+  /** The field responder's one-tap signals to the control room. */
+  quickAction: Record<QuickAction, string>;
   dataMode: Record<DataMode, string>;
   sensorHealth: Record<SensorHealth, string>;
   roadAccess: Record<RoadAccess, string>;
@@ -174,6 +177,17 @@ const en: EnumLabels = {
     sla_breach: "SLA Breach",
     escalation: "Escalation",
     shortage: "Shortage",
+  },
+  quickAction: {
+    situation_worse: "Situation Worse",
+    situation_stable: "Situation Stable",
+    wrong_location: "Wrong Location",
+    road_blocked: "Road Blocked",
+    need_ambulance: "Need Ambulance",
+    need_fire: "Need Fire",
+    need_rescue: "Need Rescue",
+    need_hazmat: "Need Hazmat",
+    unable_to_reach: "Unable To Reach",
   },
   dataMode: {
     live: "LIVE",
@@ -359,6 +373,17 @@ const gu: EnumLabels = {
     escalation: "ઉચ્ચ સ્તરે",
     shortage: "અછત",
   },
+  quickAction: {
+    situation_worse: "સ્થિતિ બગડી",
+    situation_stable: "સ્થિતિ સ્થિર",
+    wrong_location: "ખોટું સ્થળ",
+    road_blocked: "રસ્તો બંધ",
+    need_ambulance: "એમ્બ્યુલન્સ જોઈએ",
+    need_fire: "ફાયર યુનિટ જોઈએ",
+    need_rescue: "બચાવ ટુકડી જોઈએ",
+    need_hazmat: "હઝમેટ જોઈએ",
+    unable_to_reach: "પહોંચી શકાતું નથી",
+  },
   dataMode: {
     live: "લાઇવ",
     cached: "સંગ્રહિત",
@@ -542,6 +567,17 @@ const hi: EnumLabels = {
     sla_breach: "SLA उल्लंघन",
     escalation: "उच्च स्तर पर",
     shortage: "कमी",
+  },
+  quickAction: {
+    situation_worse: "स्थिति बिगड़ी",
+    situation_stable: "स्थिति स्थिर",
+    wrong_location: "गलत स्थान",
+    road_blocked: "रास्ता बंद",
+    need_ambulance: "एम्बुलेंस चाहिए",
+    need_fire: "फायर यूनिट चाहिए",
+    need_rescue: "बचाव दल चाहिए",
+    need_hazmat: "हज़मैट चाहिए",
+    unable_to_reach: "पहुँच नहीं सकते",
   },
   dataMode: {
     live: "लाइव",

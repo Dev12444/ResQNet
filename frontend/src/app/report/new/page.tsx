@@ -68,7 +68,7 @@ export default function NewReportPage() {
         className="mb-3 inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--info)] no-underline hover:underline"
       >
         <ChevronLeft className="size-4" aria-hidden />
-        Back to overview
+        {UI_STRINGS[lang].backToOverview}
       </Link>
 
       {submission ? (

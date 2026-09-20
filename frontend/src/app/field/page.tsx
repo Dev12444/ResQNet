@@ -279,7 +279,7 @@ export default function FieldPage() {
               </span>
               <span className="mono">ETA {assignment.eta_min} min</span>
               <span className="text-xs text-[var(--muted)]">
-                straight-line estimate — not a routed ETA
+                {t.etaNote}
               </span>
             </div>
 
@@ -306,7 +306,7 @@ export default function FieldPage() {
                     color: readableOn(SEVERITY_COLOR[verified?.reported ?? inc.severity]),
                   }}
                 >
-                  SEV {verified?.reported ?? inc.severity} ·{" "}
+                  {t.sev} {verified?.reported ?? inc.severity} ·{" "}
                   {enums.severity[verified?.reported ?? inc.severity]}
                 </p>
               </div>
@@ -322,7 +322,7 @@ export default function FieldPage() {
                       color: readableOn(SEVERITY_COLOR[fieldSeverity]),
                     }}
                   >
-                    SEV {fieldSeverity} · {enums.severity[fieldSeverity]}
+                    {t.sev} {fieldSeverity} · {enums.severity[fieldSeverity]}
                   </p>
                 ) : (
                   <p className="mt-1 text-sm text-[var(--muted)]">{pageStrings(lang).misc.notVerifiedOnScene}</p>
@@ -330,7 +330,7 @@ export default function FieldPage() {
               </div>
             </div>
             <p className="border-t border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)]">
-              Latest change by:{" "}
+              {t.lastChangeBy}{" "}
               <strong className="font-semibold uppercase">{lastSource}</strong>
             </p>
           </Panel>
@@ -548,7 +548,11 @@ export default function FieldPage() {
                     className="min-h-14 bg-[var(--surface)] px-2 text-sm font-semibold disabled:opacity-60"
                     style={{ color: sent ? "var(--muted)" : tone }}
                   >
-                    {sent ? `${action.label} ✓` : action.label}
+                    {/* Display only. The `notes` sent above stay English on
+                        purpose: `api.ts` declares that payload as `lang: "en"`. */}
+                    {sent
+                      ? `${enums.quickAction[action.id]} ✓`
+                      : enums.quickAction[action.id]}
                   </button>
                 );
               })}

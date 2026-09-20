@@ -118,7 +118,7 @@ export default function ReportsPage() {
             className="inline-flex min-h-9 items-center gap-1.5 border border-[var(--carbon)] bg-[var(--surface)] px-2.5 text-xs font-semibold hover:bg-[var(--surface-2)]"
           >
             <Download className="size-3.5" aria-hidden />
-            Export index ({filtered.length})
+            {t.exportIndex(filtered.length)}
           </button>
           <Link
             href="/report/new"
@@ -209,7 +209,7 @@ export default function ReportsPage() {
             <option value="">{t.anyStatus}</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {t.publicationState[s]}
               </option>
             ))}
           </select>
@@ -251,7 +251,7 @@ export default function ReportsPage() {
           <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
             <h2 className="cmd text-[13px]">{t.index}</h2>
             <span className="mono text-[11px] text-[var(--muted)]">
-              {filtered.length} of {docs.data?.length ?? 0}
+              {t.countOf(filtered.length, docs.data?.length ?? 0)}
             </span>
           </div>
 

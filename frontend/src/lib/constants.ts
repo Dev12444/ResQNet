@@ -113,6 +113,56 @@ export const EMERGENCY_NUMBERS: EmergencyNumber[] = [
 
 export const PRIMARY_EMERGENCY_NUMBER = "112";
 
+/**
+ * The same lines, translated.
+ *
+ * `EMERGENCY_NUMBERS` keeps its English `label` — it is the fallback and the
+ * value non-visual consumers (dialler metadata, logs) read. Anything on screen
+ * looks the number up here instead, the same split `TYPE_LABEL_I18N` uses.
+ * Keyed by the number itself, which is the one stable identifier a helpline has.
+ */
+export const EMERGENCY_NUMBER_LABEL_I18N: Record<Lang, Record<string, string>> = {
+  en: {
+    "112": "Unified Emergency Number",
+    "100": "Police",
+    "101": "Fire & Rescue",
+    "108": "Emergency Medical",
+    "102": "Ambulance",
+    "1070": "Disaster / Relief",
+    "1077": "District Emergency",
+    "181": "Women Helpline",
+    "1098": "Child Helpline",
+    "103": "Traffic Control",
+    "1090": "Crime Stopper",
+  },
+  gu: {
+    "112": "એકીકૃત કટોકટી નંબર",
+    "100": "પોલીસ",
+    "101": "ફાયર અને બચાવ",
+    "108": "કટોકટી તબીબી",
+    "102": "એમ્બ્યુલન્સ",
+    "1070": "આપત્તિ / રાહત",
+    "1077": "જિલ્લા કટોકટી",
+    "181": "મહિલા હેલ્પલાઇન",
+    "1098": "બાળ હેલ્પલાઇન",
+    "103": "ટ્રાફિક કંટ્રોલ",
+    "1090": "ક્રાઇમ સ્ટોપર",
+  },
+  hi: {
+    "112": "एकीकृत आपातकालीन नंबर",
+    "100": "पुलिस",
+    "101": "फायर और बचाव",
+    "108": "आपातकालीन चिकित्सा",
+    "102": "एम्बुलेंस",
+    "1070": "आपदा / राहत",
+    "1077": "जिला आपातकाल",
+    "181": "महिला हेल्पलाइन",
+    "1098": "बाल हेल्पलाइन",
+    "103": "ट्रैफिक कंट्रोल",
+    "1090": "क्राइम स्टॉपर",
+  },
+};
+
 /* ------------------------------------------------------------------ */
 /* Severity                                                            */
 /* ------------------------------------------------------------------ */
@@ -513,6 +563,11 @@ export const UI_STRINGS = {
     landmarkLabel: "Nearest landmark or address",
     landmarkPlaceholder: "e.g. Akhbarnagar underpass, Naranpura",
     photo: "Photo (optional)",
+    video: "video",
+    urgencyNote:
+      "This helps the control room order the queue. It does not set the official priority \u2014 an operator does that.",
+    demoSubmitAs: "Demo \u2014 submit as",
+    backToOverview: "Back to overview",
     addPhoto: "Add Photo",
     removePhoto: "Remove",
     photoError: "Could not read that image. You can submit without it.",
@@ -574,6 +629,11 @@ export const UI_STRINGS = {
     landmarkLabel: "નજીકનું સ્થળ અથવા સરનામું",
     landmarkPlaceholder: "દા.ત. અખબારનગર અંડરપાસ, નારણપુરા",
     photo: "ફોટો (વૈકલ્પિક)",
+    video: "વિડિયો",
+    urgencyNote:
+      "આનાથી કંટ્રોલ રૂમને કતાર ગોઠવવામાં મદદ મળે છે. આ સત્તાવાર પ્રાથમિકતા નક્કી કરતું નથી \u2014 તે ઓપરેટર કરે છે.",
+    demoSubmitAs: "ડેમો \u2014 આ રીતે મોકલો",
+    backToOverview: "ઝાંખી પર પાછા",
     addPhoto: "ફોટો ઉમેરો",
     removePhoto: "કાઢી નાખો",
     photoError: "આ ફોટો વાંચી શકાયો નથી. તમે ફોટા વગર મોકલી શકો છો.",
@@ -633,6 +693,11 @@ export const UI_STRINGS = {
     landmarkLabel: "पास का लैंडमार्क या पता",
     landmarkPlaceholder: "जैसे अखबारनगर अंडरपास, नारणपुरा",
     photo: "फ़ोटो (वैकल्पिक)",
+    video: "वीडियो",
+    urgencyNote:
+      "इससे कंट्रोल रूम को कतार क्रमबद्ध करने में मदद मिलती है। यह आधिकारिक प्राथमिकता तय नहीं करता \u2014 वह ऑपरेटर करता है।",
+    demoSubmitAs: "डेमो \u2014 इस रूप में भेजें",
+    backToOverview: "अवलोकन पर वापस",
     addPhoto: "फ़ोटो जोड़ें",
     removePhoto: "हटाएं",
     photoError: "यह फ़ोटो पढ़ी नहीं जा सकी। आप बिना फ़ोटो के भेज सकते हैं।",

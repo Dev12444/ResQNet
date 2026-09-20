@@ -220,6 +220,12 @@ interface FieldStrings {
   assignedUnits: string;
   quickActions: string;
   quickActionsNote: string;
+  /** Qualifies the ETA — it is a straight line, not a routed drive time. */
+  etaNote: string;
+  /** Precedes the role that last changed the severity, e.g. "RESPONDER". */
+  lastChangeBy: string;
+  /** Prefixes a numeric severity, e.g. "SEV 4". */
+  sev: string;
   sendError: string;
   signalError: string;
   /** The button that moves the assignment on, per status. */
@@ -400,7 +406,15 @@ interface SupportStrings {
   faq: string;
   contactControlRoom: string;
   callBanner: string;
+  /** Sits under the call banner: what ResQNet is, and is not. */
+  notAReplacement: string;
+  /** Explains that the lines below 112 are specialised. */
+  specialisedLinesNote: string;
   queuedNote: string;
+  /** Heading over the offline queue, e.g. "2 submissions waiting on this device". */
+  queuedWaiting: (n: number) => string;
+  /** One queued row: kind, label and the time it was queued. */
+  queuedItem: (kind: string, label: string, time: string) => string;
   accessibility: string;
   a11yKeyboard: string;
   a11yColour: string;
@@ -434,6 +448,12 @@ interface ReportsPageStrings {
   preview: string;
   selectOne: string;
   exportCsv: string;
+  /** The toolbar button, which carries the row count. */
+  exportIndex: (n: number) => string;
+  /** "<shown> of <total>" above the index. */
+  countOf: (shown: number, total: number) => string;
+  /** Publication state of a report document. */
+  publicationState: { published: string; draft: string; archived: string };
   print: string;
   reportEmergency: string;
   anyStatus: string;
@@ -772,8 +792,23 @@ interface MiscStrings {
     mute: string;
     muted: string;
     soundOn: string;
+    /** The button that dismisses an alert from the stack. */
+    acknowledge: string;
   };
-  queue: { title: string; sort: string };
+  queue: {
+    title: string;
+    sort: string;
+    activeSignals: string;
+    live: string;
+    /** The three filter selects, shown as each select's "all" option. */
+    filterType: string;
+    filterStatus: string;
+    filterSev: string;
+    /** Prefixes the sort order, which is shown as a value beside it. */
+    sortPrefix: string;
+    /** Abbreviated "reports", suffixed to a count in the queue row. */
+    reportsShort: string;
+  };
   liveIst: string;
   urgency: { immediate: string; urgent: string; standard: string };
   urgencyQuestion: string;
@@ -789,6 +824,31 @@ interface MiscStrings {
   resetView: string;
   closeDistrictPanel: string;
   resqPulse: string;
+  /** The four ResQ Pulse counters. */
+  pulse: {
+    reports: string;
+    blockedRoads: string;
+    sheltersActive: string;
+    responseTeams: string;
+  };
+  /** Under the district risk ladder, e.g. "Level 4 / 5 · composite posture". */
+  compositePosture: (rank: number) => string;
+  /** Shown while the map tiles are still loading. */
+  loadingMap: string;
+  /** Sub-heading under the Live map title. */
+  liveMapIntro: string;
+  /** Count of districts currently listed, e.g. "17 in view". */
+  inView: (n: number) => string;
+  /** Unit under a district's active-incident count. */
+  incidentsLabel: string;
+  /** Amenity chips on a shelter card. */
+  amenity: { food: string; water: string; medical: string };
+  /** Footnote under the nearby-shelters list. */
+  shelterDistanceNote: string;
+  /** Marker count under the map, with a note that overlaps are grouped. */
+  markersGrouped: (n: number) => string;
+  /** Explains that the discs are centroids, not administrative boundaries. */
+  centroidNote: string;
   mapLive: string;
   mapDemoData: string;
   mapLayerMissing: string;
@@ -828,6 +888,8 @@ interface MiscStrings {
 interface DrawerStrings {
   selectIncident: string;
   close: string;
+  /** Prefixes the numeric severity on the drawer badge, e.g. "SEV 4". */
+  sev: string;
   overview: string;
   reports: string;
   aiSummary: string;
@@ -1201,6 +1263,9 @@ const en: PageStrings = {
     assignedUnits: "Assigned to this incident",
     quickActions: "Quick actions",
     quickActionsNote: "Sends a single signal to the control room.",
+    etaNote: "straight-line estimate — not a routed ETA",
+    lastChangeBy: "Latest change by:",
+    sev: "SEV",
     sendError: "Could not send the update",
     signalError: "Could not send the signal",
     action: {
@@ -1386,6 +1451,13 @@ const en: PageStrings = {
     faq: "Common questions",
     contactControlRoom: "Contact the control room",
     callBanner: "In an emergency, call 112",
+    notAReplacement:
+      "ResQNet supports coordination between citizens, responders and departments. It does not replace an emergency call, and submitting a report here does not summon help on its own.",
+    specialisedLinesNote:
+      "112 reaches all services. The lines below are specialised \u2014 use them only when you already know which service you need.",
+    queuedWaiting: (n) =>
+      `${n} submission${n === 1 ? "" : "s"} waiting on this device`,
+    queuedItem: (kind, label, time) => `${kind} — ${label} (queued ${time})`,
     queuedNote:
       "These have not reached the control room yet. They will send automatically when the connection returns.",
     accessibility: "Accessibility",
@@ -1429,6 +1501,9 @@ const en: PageStrings = {
     preview: "Preview",
     selectOne: "Select a report to preview it",
     exportCsv: "Export index (CSV)",
+    exportIndex: (n) => `Export index (${n})`,
+    countOf: (shown, total) => `${shown} of ${total}`,
+    publicationState: { published: "Published", draft: "Draft", archived: "Archived" },
     print: "Print / Save as PDF",
     reportEmergency: "Report an Emergency",
     anyStatus: "Any status",
@@ -1777,6 +1852,7 @@ const en: PageStrings = {
   drawer: {
     selectIncident: "Select an incident",
     close: "Close",
+    sev: "SEV",
     overview: "OVERVIEW",
     reports: "REPORTS",
     aiSummary: "AI SITUATION SUMMARY",
@@ -1854,8 +1930,19 @@ const en: PageStrings = {
       mute: "Mute alert sound",
       muted: "MUTED",
       soundOn: "SOUND ON",
+      acknowledge: "ACKNOWLEDGE",
     },
-    queue: { title: "INCIDENT QUEUE", sort: "PRIORITY \u2192 AGE" },
+    queue: {
+      title: "INCIDENT QUEUE",
+      sort: "PRIORITY \u2192 AGE",
+      activeSignals: "ACTIVE SIGNALS",
+      live: "LIVE",
+      filterType: "TYPE",
+      filterStatus: "STATUS",
+      filterSev: "SEV",
+      sortPrefix: "SORT",
+      reportsShort: "rpt",
+    },
     liveIst: "LIVE IST",
     urgency: {
       immediate: "Life at risk now",
@@ -1881,6 +1968,24 @@ const en: PageStrings = {
     resetView: "Reset the map view",
     closeDistrictPanel: "Close district panel",
     resqPulse: "ResQ Pulse",
+    pulse: {
+      reports: "Reports",
+      blockedRoads: "Blocked roads",
+      sheltersActive: "Shelters active",
+      responseTeams: "Response teams",
+    },
+    compositePosture: (rank) => `Level ${rank} / 5 \u00b7 composite posture`,
+    loadingMap: "LOADING MAP\u2026",
+    liveMapIntro:
+      "District risk posture and operational markers across the state.",
+    inView: (n) => `${n} in view`,
+    incidentsLabel: "incidents",
+    amenity: { food: "Food", water: "Water", medical: "Med" },
+    shelterDistanceNote:
+      "Distances are straight-line from the selected district centre, not road distance.",
+    markersGrouped: (n) => `${n} MARKERS \u00b7 OVERLAPS GROUPED`,
+    centroidNote:
+      "Discs mark district centroids and show risk posture \u2014 they are not administrative boundaries.",
     mapLive: "Live",
     mapDemoData: "Demo data",
     mapLayerMissing: "Layer missing",
@@ -2129,6 +2234,9 @@ const gu: PageStrings = {
     assignedUnits: "આ ઘટના માટે સોંપાયેલ",
     quickActions: "ઝડપી પગલાં",
     quickActionsNote: "કંટ્રોલ રૂમને એક સંકેત મોકલે છે.",
+    etaNote: "સીધી રેખાનો અંદાજ — માર્ગ મુજબનો ETA નથી",
+    lastChangeBy: "છેલ્લો ફેરફાર:",
+    sev: "ગંભીરતા",
     sendError: "અપડેટ મોકલી શકાયું નથી",
     signalError: "સંકેત મોકલી શકાયો નથી",
     action: {
@@ -2314,6 +2422,12 @@ const gu: PageStrings = {
     faq: "સામાન્ય પ્રશ્નો",
     contactControlRoom: "કંટ્રોલ રૂમનો સંપર્ક કરો",
     callBanner: "કટોકટીમાં 112 પર કૉલ કરો",
+    notAReplacement:
+      "ResQNet નાગરિકો, બચાવકર્મીઓ અને વિભાગો વચ્ચે સંકલનમાં મદદ કરે છે. તે કટોકટી કૉલનો વિકલ્પ નથી, અને અહીં અહેવાલ મોકલવાથી જાતે મદદ આવી જતી નથી.",
+    specialisedLinesNote:
+      "112 બધી સેવાઓ સુધી પહોંચે છે. નીચેની લાઇનો ખાસ સેવા માટે છે \u2014 તમને ખબર હોય કે કઈ સેવા જોઈએ ત્યારે જ તે વાપરો.",
+    queuedWaiting: (n) => `આ ઉપકરણ પર ${n} સબમિશન બાકી છે`,
+    queuedItem: (kind, label, time) => `${kind} — ${label} (કતારમાં ${time})`,
     queuedNote:
       "આ હજુ કંટ્રોલ રૂમ સુધી પહોંચ્યા નથી. જોડાણ પાછું આવતાં આપોઆપ મોકલાઈ જશે.",
     accessibility: "સુલભતા",
@@ -2357,6 +2471,9 @@ const gu: PageStrings = {
     preview: "પૂર્વાવલોકન",
     selectOne: "પૂર્વાવલોકન માટે અહેવાલ પસંદ કરો",
     exportCsv: "અનુક્રમણિકા નિકાસ (CSV)",
+    exportIndex: (n) => `અનુક્રમણિકા નિકાસ (${n})`,
+    countOf: (shown, total) => `${total} માંથી ${shown}`,
+    publicationState: { published: "પ્રકાશિત", draft: "મુસદ્દો", archived: "આર્કાઇવ" },
     print: "છાપો / PDF તરીકે સાચવો",
     reportEmergency: "કટોકટીની જાણ કરો",
     anyStatus: "કોઈપણ સ્થિતિ",
@@ -2704,6 +2821,7 @@ const gu: PageStrings = {
   drawer: {
     selectIncident: "એક ઘટના પસંદ કરો",
     close: "બંધ કરો",
+    sev: "ગંભીરતા",
     overview: "ઝાંખી",
     reports: "અહેવાલો",
     aiSummary: "AI પરિસ્થિતિ સારાંશ",
@@ -2778,8 +2896,19 @@ const gu: PageStrings = {
       mute: "ચેતવણીનો અવાજ બંધ કરો",
       muted: "અવાજ બંધ",
       soundOn: "અવાજ ચાલુ",
+      acknowledge: "સ્વીકારો",
     },
-    queue: { title: "ઘટના કતાર", sort: "પ્રાથમિકતા \u2192 ઉંમર" },
+    queue: {
+      title: "ઘટના કતાર",
+      sort: "પ્રાથમિકતા \u2192 ઉંમર",
+      activeSignals: "સક્રિય સંકેત",
+      live: "લાઇવ",
+      filterType: "પ્રકાર",
+      filterStatus: "સ્થિતિ",
+      filterSev: "ગંભીરતા",
+      sortPrefix: "ક્રમ",
+      reportsShort: "અહેવાલ",
+    },
     liveIst: "લાઇવ IST",
     urgency: {
       immediate: "અત્યારે જીવનું જોખમ",
@@ -2805,6 +2934,23 @@ const gu: PageStrings = {
     resetView: "નકશાનું દૃશ્ય રીસેટ કરો",
     closeDistrictPanel: "જિલ્લા પેનલ બંધ કરો",
     resqPulse: "ResQ પલ્સ",
+    pulse: {
+      reports: "અહેવાલ",
+      blockedRoads: "બંધ રસ્તા",
+      sheltersActive: "ચાલુ આશ્રયસ્થાન",
+      responseTeams: "પ્રતિસાદ ટુકડી",
+    },
+    compositePosture: (rank) => `સ્તર ${rank} / 5 \u00b7 સંયુક્ત સ્થિતિ`,
+    loadingMap: "નકશો લોડ થાય છે\u2026",
+    liveMapIntro: "રાજ્યભરમાં જિલ્લા જોખમ સ્થિતિ અને કામગીરીના માર્કર.",
+    inView: (n) => `${n} દેખાય છે`,
+    incidentsLabel: "ઘટના",
+    amenity: { food: "ભોજન", water: "પાણી", medical: "તબીબી" },
+    shelterDistanceNote:
+      "અંતર પસંદ કરેલા જિલ્લા કેન્દ્રથી સીધી રેખામાં છે, માર્ગ અંતર નથી.",
+    markersGrouped: (n) => `${n} માર્કર \u00b7 ઓવરલેપ જૂથબદ્ધ`,
+    centroidNote:
+      "ગોળા જિલ્લાના કેન્દ્રબિંદુ દર્શાવે છે અને જોખમની સ્થિતિ બતાવે છે \u2014 તે વહીવટી સીમા નથી.",
     mapLive: "લાઇવ",
     mapDemoData: "ડેમો માહિતી",
     mapLayerMissing: "સ્તર ગુમ",
@@ -3052,6 +3198,9 @@ const hi: PageStrings = {
     assignedUnits: "इस घटना के लिए नियुक्त",
     quickActions: "त्वरित कार्रवाई",
     quickActionsNote: "कंट्रोल रूम को एक संकेत भेजता है।",
+    etaNote: "सीधी रेखा का अनुमान — मार्ग आधारित ETA नहीं",
+    lastChangeBy: "अंतिम बदलाव:",
+    sev: "गंभीरता",
     sendError: "अपडेट नहीं भेजा जा सका",
     signalError: "संकेत नहीं भेजा जा सका",
     action: {
@@ -3237,6 +3386,12 @@ const hi: PageStrings = {
     faq: "सामान्य प्रश्न",
     contactControlRoom: "कंट्रोल रूम से संपर्क करें",
     callBanner: "आपात स्थिति में 112 पर कॉल करें",
+    notAReplacement:
+      "ResQNet नागरिकों, बचावकर्मियों और विभागों के बीच समन्वय में मदद करता है। यह आपातकालीन कॉल का विकल्प नहीं है, और यहाँ रिपोर्ट भेजने से अपने आप मदद नहीं पहुँचती।",
+    specialisedLinesNote:
+      "112 सभी सेवाओं तक पहुँचता है। नीचे दी गई लाइनें विशेष सेवाओं के लिए हैं \u2014 इनका उपयोग तभी करें जब आपको पता हो कि कौन सी सेवा चाहिए।",
+    queuedWaiting: (n) => `इस डिवाइस पर ${n} सबमिशन बाकी हैं`,
+    queuedItem: (kind, label, time) => `${kind} — ${label} (कतार में ${time})`,
     queuedNote:
       "ये अभी कंट्रोल रूम तक नहीं पहुँचे हैं। कनेक्शन लौटने पर अपने आप भेज दिए जाएँगे।",
     accessibility: "सुलभता",
@@ -3280,6 +3435,9 @@ const hi: PageStrings = {
     preview: "पूर्वावलोकन",
     selectOne: "पूर्वावलोकन के लिए रिपोर्ट चुनें",
     exportCsv: "अनुक्रमणिका निर्यात (CSV)",
+    exportIndex: (n) => `अनुक्रमणिका निर्यात (${n})`,
+    countOf: (shown, total) => `${total} में से ${shown}`,
+    publicationState: { published: "प्रकाशित", draft: "मसौदा", archived: "संग्रहित" },
     print: "प्रिंट / PDF के रूप में सहेजें",
     reportEmergency: "आपात स्थिति की सूचना दें",
     anyStatus: "कोई भी स्थिति",
@@ -3627,6 +3785,7 @@ const hi: PageStrings = {
   drawer: {
     selectIncident: "एक घटना चुनें",
     close: "बंद करें",
+    sev: "गंभीरता",
     overview: "अवलोकन",
     reports: "रिपोर्टें",
     aiSummary: "AI स्थिति सारांश",
@@ -3700,8 +3859,19 @@ const hi: PageStrings = {
       mute: "चेतावनी ध्वनि बंद करें",
       muted: "ध्वनि बंद",
       soundOn: "ध्वनि चालू",
+      acknowledge: "स्वीकारें",
     },
-    queue: { title: "घटना कतार", sort: "प्राथमिकता \u2192 आयु" },
+    queue: {
+      title: "घटना कतार",
+      sort: "प्राथमिकता \u2192 आयु",
+      activeSignals: "सक्रिय संकेत",
+      live: "लाइव",
+      filterType: "प्रकार",
+      filterStatus: "स्थिति",
+      filterSev: "गंभीरता",
+      sortPrefix: "क्रम",
+      reportsShort: "रिपोर्ट",
+    },
     liveIst: "लाइव IST",
     urgency: {
       immediate: "अभी जान का ख़तरा",
@@ -3727,6 +3897,23 @@ const hi: PageStrings = {
     resetView: "मानचित्र दृश्य रीसेट करें",
     closeDistrictPanel: "ज़िला पैनल बंद करें",
     resqPulse: "ResQ पल्स",
+    pulse: {
+      reports: "रिपोर्ट",
+      blockedRoads: "बंद रास्ते",
+      sheltersActive: "सक्रिय आश्रय",
+      responseTeams: "प्रतिक्रिया दल",
+    },
+    compositePosture: (rank) => `स्तर ${rank} / 5 \u00b7 संयुक्त स्थिति`,
+    loadingMap: "नक्शा लोड हो रहा है\u2026",
+    liveMapIntro: "राज्यभर में जिला जोखिम स्थिति और परिचालन मार्कर।",
+    inView: (n) => `${n} दिख रहे हैं`,
+    incidentsLabel: "घटनाएँ",
+    amenity: { food: "भोजन", water: "पानी", medical: "चिकित्सा" },
+    shelterDistanceNote:
+      "दूरियाँ चयनित जिला केंद्र से सीधी रेखा में हैं, सड़क दूरी नहीं।",
+    markersGrouped: (n) => `${n} मार्कर \u00b7 ओवरलैप समूहित`,
+    centroidNote:
+      "गोले जिलों के केंद्रबिंदु दर्शाते हैं और जोखिम की स्थिति बताते हैं \u2014 ये प्रशासनिक सीमाएँ नहीं हैं।",
     mapLive: "लाइव",
     mapDemoData: "डेमो डेटा",
     mapLayerMissing: "परत अनुपलब्ध",

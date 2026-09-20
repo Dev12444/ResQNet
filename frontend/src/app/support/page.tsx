@@ -42,9 +42,7 @@ export default function SupportPage() {
       >
         <h2 className="text-base font-bold">{t.callBanner}</h2>
         <p className="mt-1 text-sm">
-          ResQNet supports coordination between citizens, responders and departments. It
-          does not replace an emergency call, and submitting a report here does not
-          summon help on its own.
+          {t.notAReplacement}
         </p>
       </section>
 
@@ -54,14 +52,16 @@ export default function SupportPage() {
           style={{ borderColor: "var(--medium)", background: "var(--medium-bg)" }}
         >
           <h2 className="text-sm font-bold">
-            {queued.length} submission{queued.length === 1 ? "" : "s"} waiting on this
-            device
+            {t.queuedWaiting(queued.length)}
           </h2>
           <ul className="mono mt-1 space-y-0.5 text-[11px]">
             {queued.map((q) => (
               <li key={q.id}>
-                {q.kind.replace("_", " ")} — {q.label} (queued{" "}
-                {new Date(q.queuedAt).toTimeString().slice(0, 5)})
+                {t.queuedItem(
+                  q.kind.replace("_", " "),
+                  q.label,
+                  new Date(q.queuedAt).toTimeString().slice(0, 5),
+                )}
               </li>
             ))}
           </ul>
@@ -77,7 +77,7 @@ export default function SupportPage() {
             {t.helplines}
           </h2>
           <div className="p-3">
-            <EmergencyDirectory />
+            <EmergencyDirectory lang={lang} note={t.specialisedLinesNote} />
           </div>
         </section>
 

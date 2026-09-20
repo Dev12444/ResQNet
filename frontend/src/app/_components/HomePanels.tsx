@@ -11,6 +11,7 @@
 
 import { useLang } from "@/components/layout/LangProvider";
 import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
 import Link from "next/link";
 import type { Route } from "next";
 import { useEffect, useMemo, useState } from "react";
@@ -195,6 +196,8 @@ export function NearestShelters({
   lang: Lang;
 }) {
   const t = PLATFORM_STRINGS[lang];
+  const m = pageStrings(lang).misc;
+  const enums = labels(lang);
   return (
     <section className="panel flex min-h-0 flex-col">
       <PanelHeader
@@ -228,7 +231,7 @@ export function NearestShelters({
                     className="shrink-0 rounded-[3px] px-1 py-0.5 text-[9.5px] font-bold"
                     style={{ background: `${meta.color}1f`, color: meta.color }}
                   >
-                    {meta.label}
+                    {enums.shelterStatus[s.status] ?? meta.label}
                   </span>
                 </div>
 
@@ -253,17 +256,17 @@ export function NearestShelters({
                   <span className="ml-auto flex gap-2 text-[9.5px] uppercase tracking-wide text-[var(--faint)]">
                     {s.amenities.food && (
                       <span className="flex items-center gap-0.5">
-                        <Utensils className="size-3" aria-hidden /> Food
+                        <Utensils className="size-3" aria-hidden /> {m.amenity.food}
                       </span>
                     )}
                     {s.amenities.water && (
                       <span className="flex items-center gap-0.5">
-                        <Droplets className="size-3" aria-hidden /> Water
+                        <Droplets className="size-3" aria-hidden /> {m.amenity.water}
                       </span>
                     )}
                     {s.amenities.medical && (
                       <span className="flex items-center gap-0.5">
-                        <HeartPulse className="size-3" aria-hidden /> Med
+                        <HeartPulse className="size-3" aria-hidden /> {m.amenity.medical}
                       </span>
                     )}
                   </span>
@@ -274,8 +277,7 @@ export function NearestShelters({
         })}
       </ul>
       <p className="border-t border-[var(--hairline)] px-2.5 py-1.5 text-[10px] text-[var(--faint)]">
-        Distances are straight-line from the selected district centre, not road
-        distance.
+        {m.shelterDistanceNote}
       </p>
     </section>
   );
@@ -336,17 +338,17 @@ export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) 
           </span>
         </div>
 
-        <PulseGauge rank={meta.rank} colour={meta.color} />
+        <PulseGauge rank={meta.rank} colour={meta.color} m={m} />
 
         <p className="mt-2 text-[11.5px] leading-snug text-[var(--muted)]">
           {current.headline}
         </p>
 
         <dl className="mt-2 grid grid-cols-2 gap-x-4">
-          <PulseStat label="Reports" value={current.reports} />
-          <PulseStat label="Blocked roads" value={current.blockedRoads} />
-          <PulseStat label="Shelters active" value={current.sheltersActive} />
-          <PulseStat label="Response teams" value={current.responseTeams} />
+          <PulseStat label={m.pulse.reports} value={current.reports} />
+          <PulseStat label={m.pulse.blockedRoads} value={current.blockedRoads} />
+          <PulseStat label={m.pulse.sheltersActive} value={current.sheltersActive} />
+          <PulseStat label={m.pulse.responseTeams} value={current.responseTeams} />
         </dl>
 
         <p
@@ -365,7 +367,15 @@ export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) 
 
 const PULSE_SEGMENTS = 22;
 
-function PulseGauge({ rank, colour }: { rank: number; colour: string }) {
+function PulseGauge({
+  rank,
+  colour,
+  m,
+}: {
+  rank: number;
+  colour: string;
+  m: ReturnType<typeof pageStrings>["misc"];
+}) {
   // RISK_META ranks run 0 (normal) to 4 (critical). NORMAL still lights part of
   // the meter, so an unlit gauge always means "no reading", never "calm".
   const lit = Math.round(((rank + 1) / 5) * PULSE_SEGMENTS);
@@ -396,7 +406,7 @@ function PulseGauge({ rank, colour }: { rank: number; colour: string }) {
           );
         })}
       </div>
-      <p className="telemetry mt-1">Level {rank + 1} / 5 · composite posture</p>
+      <p className="telemetry mt-1">{m.compositePosture(rank + 1)}</p>
     </div>
   );
 }

@@ -154,7 +154,7 @@ export function ReportForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
-      <EmergencyCallBanner text={t.callBanner} />
+      <EmergencyCallBanner text={t.callBanner} callLabel={t.call112} />
 
       <div>
         <span className="mb-1.5 block text-sm font-semibold">{t.language}</span>
@@ -248,8 +248,7 @@ export function ReportForm({
           })}
         </div>
         <p className="mt-1 text-xs text-[var(--muted)]">
-          This helps the control room order the queue. It does not set the official
-          priority — an operator does that.
+          {t.urgencyNote}
         </p>
       </fieldset>
 
@@ -272,7 +271,7 @@ export function ReportForm({
       <PhotoInput
         value={media}
         onChange={setMedia}
-        label={`${t.photo} / video`}
+        label={`${t.photo} / ${t.video}`}
         addLabel={t.addPhoto}
         removeLabel={t.removePhoto}
         errorLabel={t.photoError}
@@ -377,7 +376,7 @@ export function ReportForm({
           simulator on /dashboard, which has real readings to send. */}
       <details className="border border-dashed border-[var(--border)]">
         <summary className="min-h-11 cursor-pointer px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Demo — submit as
+          {t.demoSubmitAs}
         </summary>
         <div className="flex flex-wrap gap-1.5 px-3 pb-3">
           {(["citizen", "call", "field"] as ReportSource[]).map((option) => (

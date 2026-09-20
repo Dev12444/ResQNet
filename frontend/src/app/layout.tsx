@@ -58,8 +58,15 @@ const notoGujarati = Noto_Sans_Gujarati({
   display: "swap",
 });
 
+/*
+ * No `title` here on purpose.
+ *
+ * The title has to follow the interface language, which is a client-side
+ * preference this server-resolved object cannot see. `LangProvider` renders a
+ * React `<title>` instead; a `title` in this object would emit a second one
+ * that wins by document order and pin the tab to English.
+ */
 export const metadata: Metadata = {
-  title: "ResQNet — Emergency Response Network",
   description:
     "Integrated Disaster Response & Public Safety Platform: citizen and 112 reports, AI-assisted triage, GIS command map, dispatch, shelters and mass warning.",
 };

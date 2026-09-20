@@ -130,7 +130,7 @@ export default function LiveMapPage() {
         <div>
           <h1 className="cmd text-[24px] leading-none">{m.liveMap}</h1>
           <p className="text-sm text-[var(--muted)]">
-            District risk posture and operational markers across the state.
+            {m.liveMapIntro}
           </p>
         </div>
         <DataModeBadge mode={situations.mode} note={situations.error} />
@@ -161,7 +161,7 @@ export default function LiveMapPage() {
         <section className="panel flex min-h-0 flex-col">
           <div className="panel-head">
             <h2 className="cmd text-[12px]">{m.districtsByRisk}</h2>
-            <span className="telemetry ml-auto">{ranked.length} in view</span>
+            <span className="telemetry ml-auto">{m.inView(ranked.length)}</span>
           </div>
           <ul className="thin-scroll flex-1 divide-y divide-[var(--border)] overflow-y-auto">
             {ranked.map((s) => {
@@ -191,7 +191,7 @@ export default function LiveMapPage() {
                       <span className="block font-bold text-[var(--foreground)]">
                         {s.activeIncidents}
                       </span>
-                      incidents
+                      {m.incidentsLabel}
                     </span>
                   </button>
                 </li>
