@@ -13,10 +13,16 @@ import type { FacilityView, Sensor } from "@/types";
 import { SENSOR_HEALTH_META, STALE_AFTER_SEC } from "@/lib/constants";
 import { Badge, EmptyState } from "@/components/layout/primitives";
 import { FreshnessLabel, formatAge } from "@/components/layout/ConnectionBar";
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 
 export function FacilitiesPanel({ facilities }: { facilities: FacilityView[] }) {
+  const { lang } = useLang();
+  const t = pageStrings(lang).resources;
+  const tm = pageStrings(lang).misc.freshness;
   if (facilities.length === 0) {
-    return <EmptyState title="No facilities match these filters" />;
+    return <EmptyState title={t.noFacilities} />;
   }
   return (
     <ul className="divide-y divide-[var(--border)]">
@@ -41,7 +47,7 @@ export function FacilitiesPanel({ facilities }: { facilities: FacilityView[] }) 
                   <span className="mono text-sm">
                     <strong className="font-semibold">{free}</strong> of {total} beds free
                   </span>
-                  {tight && <Badge label="NEAR CAPACITY" color="var(--high)" variant="tint" />}
+                  {tight && <Badge label={t.nearCapacity} color="var(--high)" variant="tint" />}
                 </div>
                 <div
                   className="mt-1 h-2 w-full bg-[var(--surface-2)]"
@@ -65,11 +71,11 @@ export function FacilitiesPanel({ facilities }: { facilities: FacilityView[] }) 
                 </div>
               </div>
             ) : (
-              <p className="mt-1 text-sm text-[var(--muted)]">No bed capacity reported</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">{t.noBedCapacity}</p>
             )}
 
             <div className="mt-1.5">
-              <FreshnessLabel ageSec={f.freshness.age_sec} staleLabel="CAPACITY STALE" />
+              <FreshnessLabel ageSec={f.freshness.age_sec} staleLabel={tm.capacityStale} />
               {stale && (
                 <p className="mt-0.5 text-xs" style={{ color: "var(--high)" }}>
                   Confirm by phone before routing a patient — this count is{" "}
@@ -85,8 +91,11 @@ export function FacilitiesPanel({ facilities }: { facilities: FacilityView[] }) 
 }
 
 export function SensorsPanel({ sensors }: { sensors: Sensor[] }) {
+  const { lang } = useLang();
+  const t = pageStrings(lang).resources;
+  const enums = labels(lang);
   if (sensors.length === 0) {
-    return <EmptyState title="No sensors match these filters" />;
+    return <EmptyState title={t.noSensors} />;
   }
   return (
     <ul className="divide-y divide-[var(--border)]">
@@ -97,13 +106,13 @@ export function SensorsPanel({ sensors }: { sensors: Sensor[] }) {
           <li key={s.id} className="px-3 py-2.5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="mono text-sm font-semibold">{s.id}</span>
-              <Badge label={meta.label} color={meta.color} variant="tint" />
+              <Badge label={enums.sensorHealth[s.health]} color={meta.color} variant="tint" />
             </div>
             <p className="text-sm">{s.label}</p>
 
             <p className="mono mt-1 text-sm">
               {s.value === null ? (
-                <span style={{ color: "var(--faint)" }}>No reading</span>
+                <span style={{ color: "var(--faint)" }}>{t.noReading}</span>
               ) : (
                 <>
                   <strong
@@ -122,23 +131,23 @@ export function SensorsPanel({ sensors }: { sensors: Sensor[] }) {
 
             <dl className="mono mt-1 flex flex-wrap gap-x-4 text-xs text-[var(--muted)]">
               <div>
-                <dt className="inline">Reading </dt>
+                <dt className="inline">{t.reading} </dt>
                 <dd className="inline">{clock(s.updated_at)}</dd>
               </div>
               <div>
-                <dt className="inline">Heartbeat </dt>
+                <dt className="inline">{t.heartbeat} </dt>
                 <dd className="inline">{clock(s.last_heartbeat)}</dd>
               </div>
             </dl>
 
             {s.health === "offline" && (
               <p className="mt-1 text-xs" style={{ color: "var(--high)" }}>
-                No heartbeat. Absence of a reading is not evidence that conditions are normal.
+                {t.noHeartbeatNote}
               </p>
             )}
             {s.health === "anomalous" && (
               <p className="mt-1 text-xs" style={{ color: "var(--critical)" }}>
-                Reading is past its threshold. Corroborate before treating as confirmed.
+                {t.thresholdNote}
               </p>
             )}
           </li>

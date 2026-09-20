@@ -14,6 +14,7 @@
  * push the map down on every page and turn the portal into a dashboard.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import Link from "next/link";
 import { Bell, ChevronDown, Globe, Menu, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -36,6 +37,7 @@ export function GovHeader({
   onMenu: () => void;
 }) {
   const t = PLATFORM_STRINGS[lang];
+  const m = pageStrings(lang).misc;
   const [langOpen, setLangOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
@@ -71,7 +73,7 @@ export function GovHeader({
         <button
           type="button"
           onClick={onMenu}
-          aria-label="Open navigation"
+          aria-label={m.openNavigation}
           className="-ml-1 self-center rounded p-1.5 text-[var(--navy-700)] hover:bg-white/70 lg:hidden"
         >
           <Menu className="size-5" />

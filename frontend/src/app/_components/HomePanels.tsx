@@ -9,6 +9,9 @@
  * dedicated pages.
  */
 
+import { useLang } from "@/components/layout/LangProvider";
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
 import Link from "next/link";
 import type { Route } from "next";
 import { useEffect, useMemo, useState } from "react";
@@ -193,6 +196,8 @@ export function NearestShelters({
   lang: Lang;
 }) {
   const t = PLATFORM_STRINGS[lang];
+  const m = pageStrings(lang).misc;
+  const enums = labels(lang);
   return (
     <section className="panel flex min-h-0 flex-col">
       <PanelHeader
@@ -226,7 +231,7 @@ export function NearestShelters({
                     className="shrink-0 rounded-[3px] px-1 py-0.5 text-[9.5px] font-bold"
                     style={{ background: `${meta.color}1f`, color: meta.color }}
                   >
-                    {meta.label}
+                    {enums.shelterStatus[s.status] ?? meta.label}
                   </span>
                 </div>
 
@@ -251,17 +256,17 @@ export function NearestShelters({
                   <span className="ml-auto flex gap-2 text-[9.5px] uppercase tracking-wide text-[var(--faint)]">
                     {s.amenities.food && (
                       <span className="flex items-center gap-0.5">
-                        <Utensils className="size-3" aria-hidden /> Food
+                        <Utensils className="size-3" aria-hidden /> {m.amenity.food}
                       </span>
                     )}
                     {s.amenities.water && (
                       <span className="flex items-center gap-0.5">
-                        <Droplets className="size-3" aria-hidden /> Water
+                        <Droplets className="size-3" aria-hidden /> {m.amenity.water}
                       </span>
                     )}
                     {s.amenities.medical && (
                       <span className="flex items-center gap-0.5">
-                        <HeartPulse className="size-3" aria-hidden /> Med
+                        <HeartPulse className="size-3" aria-hidden /> {m.amenity.medical}
                       </span>
                     )}
                   </span>
@@ -272,8 +277,7 @@ export function NearestShelters({
         })}
       </ul>
       <p className="border-t border-[var(--hairline)] px-2.5 py-1.5 text-[10px] text-[var(--faint)]">
-        Distances are straight-line from the selected district centre, not road
-        distance.
+        {m.shelterDistanceNote}
       </p>
     </section>
   );
@@ -293,6 +297,7 @@ export function NearestShelters({
  * so motion on this component always means one thing.
  */
 export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) {
+  const m = pageStrings(lang).misc;
   const t = PLATFORM_STRINGS[lang];
   const [index, setIndex] = useState(0);
   const current = pulse[index];
@@ -304,7 +309,7 @@ export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) 
       <div className="panel-head">
         <Radio className="size-3.5 shrink-0" style={{ color: meta.color }} aria-hidden />
         <h2 className="cmd text-[12px]">{t.resqPulse}</h2>
-        <span className="telemetry ml-auto">District index</span>
+        <span className="telemetry ml-auto">{m.districtIndex}</span>
       </div>
 
       <div className="no-scrollbar flex overflow-x-auto border-b border-[var(--hairline)]">
@@ -333,24 +338,24 @@ export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) 
           </span>
         </div>
 
-        <PulseGauge rank={meta.rank} colour={meta.color} />
+        <PulseGauge rank={meta.rank} colour={meta.color} m={m} />
 
         <p className="mt-2 text-[11.5px] leading-snug text-[var(--muted)]">
           {current.headline}
         </p>
 
         <dl className="mt-2 grid grid-cols-2 gap-x-4">
-          <PulseStat label="Reports" value={current.reports} />
-          <PulseStat label="Blocked roads" value={current.blockedRoads} />
-          <PulseStat label="Shelters active" value={current.sheltersActive} />
-          <PulseStat label="Response teams" value={current.responseTeams} />
+          <PulseStat label={m.pulse.reports} value={current.reports} />
+          <PulseStat label={m.pulse.blockedRoads} value={current.blockedRoads} />
+          <PulseStat label={m.pulse.sheltersActive} value={current.sheltersActive} />
+          <PulseStat label={m.pulse.responseTeams} value={current.responseTeams} />
         </dl>
 
         <p
           className="mt-2 rounded-[4px] border-l-[3px] bg-[var(--surface-2)] px-2 py-1.5"
           style={{ borderLeftColor: meta.color }}
         >
-          <span className="eyebrow block text-[var(--muted)]">Priority area</span>
+          <span className="eyebrow block text-[var(--muted)]">{m.priorityArea}</span>
           <span className="mt-0.5 block text-[12px] font-bold">
             {current.priorityArea}
           </span>
@@ -362,7 +367,15 @@ export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) 
 
 const PULSE_SEGMENTS = 22;
 
-function PulseGauge({ rank, colour }: { rank: number; colour: string }) {
+function PulseGauge({
+  rank,
+  colour,
+  m,
+}: {
+  rank: number;
+  colour: string;
+  m: ReturnType<typeof pageStrings>["misc"];
+}) {
   // RISK_META ranks run 0 (normal) to 4 (critical). NORMAL still lights part of
   // the meter, so an unlit gauge always means "no reading", never "calm".
   const lit = Math.round(((rank + 1) / 5) * PULSE_SEGMENTS);
@@ -393,7 +406,7 @@ function PulseGauge({ rank, colour }: { rank: number; colour: string }) {
           );
         })}
       </div>
-      <p className="telemetry mt-1">Level {rank + 1} / 5 · composite posture</p>
+      <p className="telemetry mt-1">{m.compositePosture(rank + 1)}</p>
     </div>
   );
 }
@@ -511,6 +524,7 @@ export function DispatchLogPanel({
       : entries;
     return compact ? list.slice(0, 12) : list;
   }, [entries, filter, compact]);
+  const m = pageStrings(useLang().lang).misc;
 
   return (
     <section className="panel flex min-h-0 flex-col">
@@ -525,13 +539,13 @@ export function DispatchLogPanel({
         <div className="border-b border-[var(--hairline)] px-2.5 py-2">
           <label className="block">
             <span className="sr-only">
-              Filter log by incident, district, unit or severity
+              {m.filterPlaceholder}
             </span>
             <input
               type="search"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter by incident, district, unit or severity..."
+              placeholder={m.filterPlaceholder}
               className="h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-white px-2 text-[12px]"
             />
           </label>
@@ -662,13 +676,14 @@ export function RadarForecast({
  * anyone reading the shapes underneath as observation data.
  */
 function RadarSweep() {
+  const m = pageStrings(useLang().lang).misc;
   return (
     <div className="relative overflow-hidden rounded-[4px] border border-[var(--border)] bg-[#0b1f38]">
       <svg
         viewBox="0 0 200 130"
         className="h-[132px] w-full"
         role="img"
-        aria-label="Schematic of the cyclone system over the Arabian Sea with its projected track towards the Kutch coast"
+        aria-label={m.cycloneSchematic}
       >
         <defs>
           <radialGradient id="resq-eye" cx="50%" cy="50%">
@@ -778,11 +793,14 @@ function RadarSweep() {
  * alone is unreadable to part of the audience.
  */
 export function WeatherTrend({ forecast }: { forecast: ForecastDay[] }) {
+  const m = pageStrings(useLang().lang).misc;
   return (
     <section className="panel flex min-h-0 flex-col">
       <div className="panel-head">
         <TrendingUp className="size-3.5 shrink-0 text-[var(--navy-600)]" aria-hidden />
-        <h2 className="cmd min-w-0 text-[12px] sm:shrink-0 sm:whitespace-nowrap">Weather Trend</h2>
+        <h2 className="cmd min-w-0 text-[12px] sm:shrink-0 sm:whitespace-nowrap">
+          {m.weatherTrend}
+        </h2>
         <PanelStamp demo />
       </div>
 

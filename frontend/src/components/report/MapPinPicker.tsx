@@ -9,6 +9,8 @@
  * failing never blocks a report.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import { useEffect, useRef, useState } from "react";
 import { Map as MapLibreMap, Marker, NavigationControl } from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
@@ -27,6 +29,7 @@ export default function MapPinPicker({
   lng: number | null;
   onChange: (lat: number, lng: number) => void;
 }) {
+  const m = pageStrings(useLang().lang).misc;
   const container = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -112,7 +115,7 @@ export default function MapPinPicker({
         ref={container}
         className="h-56 w-full border border-[var(--border)]"
         role="application"
-        aria-label="Drag the pin to correct the location"
+        aria-label={m.dragPin}
       />
       <p className="mt-1 text-xs text-[var(--muted)]">
         Tap the map or drag the pin to correct the location.

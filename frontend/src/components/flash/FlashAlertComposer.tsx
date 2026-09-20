@@ -21,6 +21,8 @@
  * language, so nobody approves wording they have not read.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -64,6 +66,7 @@ export function FlashAlertComposer({
   incident?: { code: string; title: string } | null;
 }) {
   const { send } = useFlashAlert();
+  const t = pageStrings(useLang().lang).flash;
 
   const [scenario, setScenario] = useState<FlashScenario>(
     recommendation?.scenario ?? "cyclone",
@@ -132,20 +135,18 @@ export function FlashAlertComposer({
         <div className="flex items-start gap-3 border-b-[3px] border-[var(--crimson)] bg-[var(--navy-800)] px-4 py-3">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-[var(--crimson-300)]" aria-hidden />
           <div className="min-w-0 flex-1">
-            <p className="eyebrow text-[var(--crimson-300)]">
-              Mass Warning · Authorised Operators Only
-            </p>
+            <p className="eyebrow text-[var(--crimson-300)]">{t.massWarning}</p>
             <h2 id="flash-composer-title" className="mt-1 text-[18px] font-bold text-white">
-              ResQNet Flash Alert
+              {t.flashAlert}
             </h2>
           </div>
           <span className="shrink-0 rounded-[3px] bg-white/15 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-white">
-            Simulation
+            {t.simulation}
           </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t.close}
             className="shrink-0 rounded p-1 text-white/80 hover:bg-white/15 hover:text-white"
           >
             <X className="size-4" />
@@ -160,34 +161,32 @@ export function FlashAlertComposer({
                 <Bot className="mt-0.5 size-4 shrink-0 text-[var(--navy-600)]" aria-hidden />
                 <div className="min-w-0">
                   <p className="eyebrow text-[var(--navy-700)]">
-                    AI Recommendation · {Math.round(recommendation.confidence * 100)}% confidence
+                    {t.aiRecommendation(Math.round(recommendation.confidence * 100))}
                   </p>
                   <p className="mt-1 text-[12px] leading-snug text-[var(--foreground)]">
                     {recommendation.rationale}
                   </p>
                   <p className="mt-1 text-[11px] font-semibold text-[var(--navy-700)]">
-                    The model cannot issue a warning. You are the issuing authority.
+                    {t.authorityNote}
                   </p>
                 </div>
               </div>
             )}
 
             {/* Incident */}
-            <Row label="Incident">
+            <Row label={t.incident}>
               {incident ? (
                 <span className="flex flex-wrap items-baseline gap-2">
                   <span className="mono text-[12px] font-semibold">{incident.code}</span>
                   <span className="text-[12px] text-[var(--muted)]">{incident.title}</span>
                 </span>
               ) : (
-                <span className="text-[12px] text-[var(--muted)]">
-                  Not raised from an incident — standalone warning
-                </span>
+                <span className="text-[12px] text-[var(--muted)]">{t.standalone}</span>
               )}
             </Row>
 
             {/* Scenario */}
-            <Row label="Scenario">
+            <Row label={t.scenario}>
               <select
                 value={scenario}
                 onChange={(e) => {
@@ -199,14 +198,14 @@ export function FlashAlertComposer({
               >
                 {(Object.keys(FLASH_SCENARIO_META) as FlashScenario[]).map((s) => (
                   <option key={s} value={s}>
-                    {FLASH_SCENARIO_META[s].label}
+                    {t.scenarioLabel[s]}
                   </option>
                 ))}
               </select>
             </Row>
 
             {/* Severity */}
-            <Row label="Severity">
+            <Row label={t.severity}>
               <div className="flex flex-wrap gap-1.5">
                 {(["extreme", "serious", "advisory"] as FlashSeverity[]).map((s) => {
                   const m = FLASH_SEVERITY_META[s];
@@ -224,7 +223,7 @@ export function FlashAlertComposer({
                         color: on ? "#fff" : "var(--muted)",
                       }}
                     >
-                      {m.label}
+                      {t.severityLabel[s]}
                     </button>
                   );
                 })}
@@ -232,18 +231,18 @@ export function FlashAlertComposer({
             </Row>
 
             {/* Target */}
-            <Row label="Affected area">
+            <Row label={t.affectedArea}>
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={district ?? "__state"}
                   onChange={(e) => {
                     const v = e.target.value;
                     setDistrict(v === "__state" ? null : v);
-                    setArea(v === "__state" ? "All districts (state-wide)" : `${v} district`);
+                    setArea(v === "__state" ? t.allDistrictsWide : `${v} ${t.district}`);
                   }}
                   className="h-8 rounded-[4px] border border-[var(--border-strong)] bg-white px-2 text-[12px]"
                 >
-                  <option value="__state">All districts (state-wide)</option>
+                  <option value="__state">{t.allDistrictsWide}</option>
                   {GUJARAT_DISTRICTS.map((d) => (
                     <option key={d.id} value={d.name}>
                       {d.name}
@@ -253,32 +252,30 @@ export function FlashAlertComposer({
                 <input
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
-                  placeholder="Refine the area, e.g. coastal belt and low-lying villages"
-                  aria-label="Affected area description"
+                  placeholder={t.refineArea}
+                  aria-label={t.areaDescription}
                   className="h-8 min-w-[220px] flex-1 rounded-[4px] border border-[var(--border-strong)] bg-white px-2 text-[12px]"
                 />
               </div>
               {!district && (
                 <p className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-[var(--crimson)]">
                   <AlertTriangle className="size-3.5" aria-hidden />
-                  State-wide warnings reach every district. Confirm this is intended.
+                  {t.stateWideConfirm}
                 </p>
               )}
             </Row>
 
             {/* Reach */}
-            <Row label="Target population">
+            <Row label={t.targetPopulation}>
               <span className="flex items-center gap-2">
                 <Users className="size-4 text-[var(--navy-600)]" aria-hidden />
                 <span className="mono text-[15px] font-bold">{formatReach(reach)}</span>
-                <span className="text-[11px] text-[var(--muted)]">
-                  people — estimated from district population, not a device register
-                </span>
+                <span className="text-[11px] text-[var(--muted)]">{t.reachNote}</span>
               </span>
             </Row>
 
             {/* Languages */}
-            <Row label="Languages">
+            <Row label={t.languages}>
               <div className="flex flex-wrap gap-1.5">
                 {ALL_LANGS.map((l) => {
                   const on = languages.includes(l);
@@ -304,7 +301,7 @@ export function FlashAlertComposer({
             </Row>
 
             {/* Message */}
-            <Row label="Message">
+            <Row label={t.message}>
               <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-2)] p-2.5">
                 <p className="text-[13px] font-bold" style={{ color: sevMeta.color }}>
                   {copy.headline.en}
@@ -312,22 +309,19 @@ export function FlashAlertComposer({
                 <p className="mt-1 text-[12px] leading-snug text-[var(--foreground)]">
                   {copy.body.en}
                 </p>
-                <p className="mt-2 text-[10.5px] text-[var(--muted)]">
-                  Wording is pre-authored per language and reviewed on the preview
-                  step — it is never machine-translated at send time.
-                </p>
+                <p className="mt-2 text-[10.5px] text-[var(--muted)]">{t.wordingNote}</p>
               </div>
             </Row>
 
             {/* Authority + expiry */}
-            <Row label="Issuing authority">
+            <Row label={t.issuingAuthority}>
               <span className="text-[12px] font-semibold">{FLASH_AUTHORITY}</span>
               <p className="mt-0.5 text-[11px] text-[var(--muted)]">
-                Approving operator: {FLASH_OPERATOR}
+                {t.approvingOperator(FLASH_OPERATOR)}
               </p>
             </Row>
 
-            <Row label="Expiry">
+            <Row label={t.expiry}>
               <span className="flex items-center gap-2">
                 <Clock3 className="size-4 text-[var(--navy-600)]" aria-hidden />
                 <select
@@ -337,19 +331,19 @@ export function FlashAlertComposer({
                 >
                   {[3, 6, 12, 24].map((h) => (
                     <option key={h} value={h}>
-                      {h} hours
+                      {t.hours(h)}
                     </option>
                   ))}
                 </select>
                 <span className="telemetry">
                   {openedAt === null
                     ? "—"
-                    : `Until ${new Date(
-                        openedAt + expiryHours * 3600_000,
-                      ).toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}`}
+                    : t.until(
+                        new Date(openedAt + expiryHours * 3600_000).toLocaleTimeString(
+                          "en-IN",
+                          { hour: "2-digit", minute: "2-digit" },
+                        ),
+                      )}
                 </span>
               </span>
             </Row>
@@ -358,9 +352,7 @@ export function FlashAlertComposer({
           /* ---- Preview ---- */
           <div className="max-h-[70vh] overflow-y-auto thin-scroll px-4 py-3">
             <div className="mb-2 flex items-center gap-2">
-              <p className="eyebrow text-[var(--muted)]">
-                Exactly what a citizen will see
-              </p>
+              <p className="eyebrow text-[var(--muted)]">{t.exactlyWhatCitizenSees}</p>
               <div className="ml-auto flex gap-0.5">
                 {languages.map((l) => (
                   <button
@@ -388,10 +380,10 @@ export function FlashAlertComposer({
               >
                 <AlertTriangle className="size-4" aria-hidden />
                 <span className="text-[12px] font-extrabold uppercase tracking-wide">
-                  Emergency Alert
+                  {t.emergencyAlert}
                 </span>
                 <span className="ml-auto rounded-[3px] bg-white/25 px-1.5 py-0.5 text-[9px] font-bold uppercase">
-                  Simulation
+                  {t.simulation}
                 </span>
               </div>
               <div className="px-3 py-3">
@@ -407,16 +399,13 @@ export function FlashAlertComposer({
                 </p>
                 <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
                   <MapPin className="size-3.5" aria-hidden /> {area} ·{" "}
-                  {formatReach(reach)} people · expires in {expiryHours}h
+                  {t.people(formatReach(reach))} · {t.expiresIn(expiryHours)}
                 </p>
               </div>
             </div>
 
             <p className="mt-3 rounded-[4px] border border-[var(--border)] bg-[var(--medium-bg)] px-3 py-2 text-[11.5px] leading-relaxed">
-              <strong>This will not reach a real phone.</strong> ResQNet&apos;s
-              frontend cannot emit a cell broadcast. Sending records the warning
-              in Flash Alert History and displays it on the simulated citizen
-              handset so the workflow can be demonstrated end to end.
+              <strong>{t.notRealPhone}</strong> {t.cannotBroadcast}
             </p>
           </div>
         )}
@@ -428,7 +417,7 @@ export function FlashAlertComposer({
             onClick={stage === "preview" ? () => setStage("compose") : onClose}
             className="h-9 rounded-[4px] border border-[var(--border-strong)] bg-white px-3 text-[12px] font-bold text-[var(--muted)] hover:bg-[var(--surface-2)]"
           >
-            {stage === "preview" ? "BACK" : "CANCEL"}
+            {stage === "preview" ? t.back : t.cancelAction}
           </button>
 
           {stage === "compose" ? (
@@ -441,7 +430,7 @@ export function FlashAlertComposer({
               }}
               className="ml-auto flex h-9 items-center gap-2 rounded-[4px] border border-[var(--navy-600)] bg-[var(--navy-600)] px-3.5 text-[12px] font-bold text-white disabled:opacity-45"
             >
-              <Eye className="size-4" aria-hidden /> PREVIEW ALERT
+              <Eye className="size-4" aria-hidden /> {t.previewAlert}
             </button>
           ) : (
             <button
@@ -449,7 +438,7 @@ export function FlashAlertComposer({
               onClick={confirmSend}
               className="ml-auto flex h-9 items-center gap-2 rounded-[4px] border border-[var(--crimson-700)] bg-[var(--crimson)] px-3.5 text-[12px] font-bold text-white hover:bg-[var(--crimson-700)]"
             >
-              <Send className="size-4" aria-hidden /> SEND FLASH ALERT
+              <Send className="size-4" aria-hidden /> {t.send}
             </button>
           )}
         </div>

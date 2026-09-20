@@ -113,6 +113,56 @@ export const EMERGENCY_NUMBERS: EmergencyNumber[] = [
 
 export const PRIMARY_EMERGENCY_NUMBER = "112";
 
+/**
+ * The same lines, translated.
+ *
+ * `EMERGENCY_NUMBERS` keeps its English `label` — it is the fallback and the
+ * value non-visual consumers (dialler metadata, logs) read. Anything on screen
+ * looks the number up here instead, the same split `TYPE_LABEL_I18N` uses.
+ * Keyed by the number itself, which is the one stable identifier a helpline has.
+ */
+export const EMERGENCY_NUMBER_LABEL_I18N: Record<Lang, Record<string, string>> = {
+  en: {
+    "112": "Unified Emergency Number",
+    "100": "Police",
+    "101": "Fire & Rescue",
+    "108": "Emergency Medical",
+    "102": "Ambulance",
+    "1070": "Disaster / Relief",
+    "1077": "District Emergency",
+    "181": "Women Helpline",
+    "1098": "Child Helpline",
+    "103": "Traffic Control",
+    "1090": "Crime Stopper",
+  },
+  gu: {
+    "112": "એકીકૃત કટોકટી નંબર",
+    "100": "પોલીસ",
+    "101": "ફાયર અને બચાવ",
+    "108": "કટોકટી તબીબી",
+    "102": "એમ્બ્યુલન્સ",
+    "1070": "આપત્તિ / રાહત",
+    "1077": "જિલ્લા કટોકટી",
+    "181": "મહિલા હેલ્પલાઇન",
+    "1098": "બાળ હેલ્પલાઇન",
+    "103": "ટ્રાફિક કંટ્રોલ",
+    "1090": "ક્રાઇમ સ્ટોપર",
+  },
+  hi: {
+    "112": "एकीकृत आपातकालीन नंबर",
+    "100": "पुलिस",
+    "101": "फायर और बचाव",
+    "108": "आपातकालीन चिकित्सा",
+    "102": "एम्बुलेंस",
+    "1070": "आपदा / राहत",
+    "1077": "जिला आपातकाल",
+    "181": "महिला हेल्पलाइन",
+    "1098": "बाल हेल्पलाइन",
+    "103": "ट्रैफिक कंट्रोल",
+    "1090": "क्राइम स्टॉपर",
+  },
+};
+
 /* ------------------------------------------------------------------ */
 /* Severity                                                            */
 /* ------------------------------------------------------------------ */
@@ -513,6 +563,11 @@ export const UI_STRINGS = {
     landmarkLabel: "Nearest landmark or address",
     landmarkPlaceholder: "e.g. Akhbarnagar underpass, Naranpura",
     photo: "Photo (optional)",
+    video: "video",
+    urgencyNote:
+      "This helps the control room order the queue. It does not set the official priority \u2014 an operator does that.",
+    demoSubmitAs: "Demo \u2014 submit as",
+    backToOverview: "Back to overview",
     addPhoto: "Add Photo",
     removePhoto: "Remove",
     photoError: "Could not read that image. You can submit without it.",
@@ -540,6 +595,14 @@ export const UI_STRINGS = {
     submittedAt: "Submitted",
     newReport: "Send another report",
     required: "Required",
+    peopleQuestion: "How many people are affected?",
+    peopleHint: "Leave blank if you are not sure",
+    assistanceQuestion: "Does anyone need special assistance?",
+    assistanceElderly: "Elderly",
+    assistanceChild: "Child",
+    assistanceWheelchair: "Wheelchair",
+    assistanceMedical: "Medical Assistance",
+    assistanceOther: "Other",
   },
   gu: {
     reportTitle: "કટોકટીની જાણ કરો",
@@ -566,6 +629,11 @@ export const UI_STRINGS = {
     landmarkLabel: "નજીકનું સ્થળ અથવા સરનામું",
     landmarkPlaceholder: "દા.ત. અખબારનગર અંડરપાસ, નારણપુરા",
     photo: "ફોટો (વૈકલ્પિક)",
+    video: "વિડિયો",
+    urgencyNote:
+      "આનાથી કંટ્રોલ રૂમને કતાર ગોઠવવામાં મદદ મળે છે. આ સત્તાવાર પ્રાથમિકતા નક્કી કરતું નથી \u2014 તે ઓપરેટર કરે છે.",
+    demoSubmitAs: "ડેમો \u2014 આ રીતે મોકલો",
+    backToOverview: "ઝાંખી પર પાછા",
     addPhoto: "ફોટો ઉમેરો",
     removePhoto: "કાઢી નાખો",
     photoError: "આ ફોટો વાંચી શકાયો નથી. તમે ફોટા વગર મોકલી શકો છો.",
@@ -591,6 +659,14 @@ export const UI_STRINGS = {
     submittedAt: "મોકલ્યો",
     newReport: "બીજો રિપોર્ટ મોકલો",
     required: "જરૂરી",
+    peopleQuestion: "કેટલા લોકો અસરગ્રસ્ત છે?",
+    peopleHint: "ખાતરી ન હોય તો ખાલી રાખો",
+    assistanceQuestion: "શું કોઈને ખાસ સહાયની જરૂર છે?",
+    assistanceElderly: "વૃદ્ધ",
+    assistanceChild: "બાળક",
+    assistanceWheelchair: "વ્હીલચેર",
+    assistanceMedical: "તબીબી સહાય",
+    assistanceOther: "અન્ય",
   },
   hi: {
     reportTitle: "आपातकाल की सूचना दें",
@@ -617,6 +693,11 @@ export const UI_STRINGS = {
     landmarkLabel: "पास का लैंडमार्क या पता",
     landmarkPlaceholder: "जैसे अखबारनगर अंडरपास, नारणपुरा",
     photo: "फ़ोटो (वैकल्पिक)",
+    video: "वीडियो",
+    urgencyNote:
+      "इससे कंट्रोल रूम को कतार क्रमबद्ध करने में मदद मिलती है। यह आधिकारिक प्राथमिकता तय नहीं करता \u2014 वह ऑपरेटर करता है।",
+    demoSubmitAs: "डेमो \u2014 इस रूप में भेजें",
+    backToOverview: "अवलोकन पर वापस",
     addPhoto: "फ़ोटो जोड़ें",
     removePhoto: "हटाएं",
     photoError: "यह फ़ोटो पढ़ी नहीं जा सकी। आप बिना फ़ोटो के भेज सकते हैं।",
@@ -642,6 +723,14 @@ export const UI_STRINGS = {
     submittedAt: "भेजी गई",
     newReport: "दूसरी रिपोर्ट भेजें",
     required: "आवश्यक",
+    peopleQuestion: "कितने लोग प्रभावित हैं?",
+    peopleHint: "निश्चित न हो तो खाली छोड़ें",
+    assistanceQuestion: "क्या किसी को विशेष सहायता चाहिए?",
+    assistanceElderly: "बुज़ुर्ग",
+    assistanceChild: "बच्चा",
+    assistanceWheelchair: "व्हीलचेयर",
+    assistanceMedical: "चिकित्सा सहायता",
+    assistanceOther: "अन्य",
   },
 } as const;
 
@@ -1053,11 +1142,11 @@ export const CONNECTIVITY_META: Record<
 
 /** Special assistance options offered on the SOS form. */
 export const SPECIAL_ASSISTANCE = [
-  { id: "elderly", label: "Elderly" },
-  { id: "child", label: "Child" },
-  { id: "wheelchair", label: "Wheelchair" },
-  { id: "medical", label: "Medical Assistance" },
-  { id: "other", label: "Other" },
+  { id: "elderly", label: "Elderly", key: "assistanceElderly" },
+  { id: "child", label: "Child", key: "assistanceChild" },
+  { id: "wheelchair", label: "Wheelchair", key: "assistanceWheelchair" },
+  { id: "medical", label: "Medical Assistance", key: "assistanceMedical" },
+  { id: "other", label: "Other", key: "assistanceOther" },
 ] as const;
 
 export type SpecialAssistance = (typeof SPECIAL_ASSISTANCE)[number]["id"];

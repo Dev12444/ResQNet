@@ -13,6 +13,7 @@
  * is told plainly that it has NOT reached the control room.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import { useRef, useState } from "react";
 import type {
   CitizenUrgency,
@@ -56,10 +57,10 @@ const DISASTER_TO_INCIDENT: Record<DisasterType, IncidentType> = {
   other: "other",
 };
 
-const URGENCY: { id: CitizenUrgency; label: string; tone: string }[] = [
-  { id: "immediate", label: "Life at risk now", tone: "var(--critical)" },
-  { id: "urgent", label: "Urgent help needed", tone: "var(--high)" },
-  { id: "standard", label: "Needs attention", tone: "var(--medium)" },
+const URGENCY: { id: CitizenUrgency; tone: string }[] = [
+  { id: "immediate", tone: "var(--critical)" },
+  { id: "urgent", tone: "var(--high)" },
+  { id: "standard", tone: "var(--medium)" },
 ];
 
 export function ReportForm({
@@ -76,6 +77,7 @@ export function ReportForm({
   ) => void;
 }) {
   const t = UI_STRINGS[lang];
+  const m = pageStrings(lang).misc;
   const p = PLATFORM_STRINGS[lang];
 
   const [text, setText] = useState("");
@@ -152,7 +154,7 @@ export function ReportForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
-      <EmergencyCallBanner text={t.callBanner} />
+      <EmergencyCallBanner text={t.callBanner} callLabel={t.call112} />
 
       <div>
         <span className="mb-1.5 block text-sm font-semibold">{t.language}</span>
@@ -223,7 +225,7 @@ export function ReportForm({
 
       {/* Urgency */}
       <fieldset>
-        <legend className="text-sm font-semibold">How urgent is it?</legend>
+        <legend className="text-sm font-semibold">{m.urgencyQuestion}</legend>
         <div className="mt-1.5 flex flex-col gap-1.5 sm:flex-row">
           {URGENCY.map((u) => {
             const active = urgency === u.id;
@@ -240,14 +242,13 @@ export function ReportForm({
                     : { borderColor: "var(--border-strong)" }
                 }
               >
-                {u.label}
+                {m.urgency[u.id]}
               </button>
             );
           })}
         </div>
         <p className="mt-1 text-xs text-[var(--muted)]">
-          This helps the control room order the queue. It does not set the official
-          priority — an operator does that.
+          {t.urgencyNote}
         </p>
       </fieldset>
 
@@ -270,7 +271,7 @@ export function ReportForm({
       <PhotoInput
         value={media}
         onChange={setMedia}
-        label={`${t.photo} / video`}
+        label={`${t.photo} / ${t.video}`}
         addLabel={t.addPhoto}
         removeLabel={t.removePhoto}
         errorLabel={t.photoError}
@@ -300,23 +301,21 @@ export function ReportForm({
 
       {/* People affected */}
       <label className="block">
-        <span className="text-sm font-semibold">How many people are affected?</span>
+        <span className="text-sm font-semibold">{t.peopleQuestion}</span>
         <input
           type="number"
           inputMode="numeric"
           min={0}
           value={people}
           onChange={(e) => setPeople(e.target.value)}
-          placeholder="Leave blank if you are not sure"
+          placeholder={t.peopleHint}
           className="mt-1.5 min-h-12 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-base"
         />
       </label>
 
       {/* Special assistance */}
       <fieldset>
-        <legend className="text-sm font-semibold">
-          Does anyone need special assistance?
-        </legend>
+        <legend className="text-sm font-semibold">{t.assistanceQuestion}</legend>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {SPECIAL_ASSISTANCE.map((option) => {
             const active = assistance.includes(option.id);
@@ -332,7 +331,7 @@ export function ReportForm({
                     : "border-[var(--border-strong)]"
                 }`}
               >
-                {option.label}
+                {t[option.key]}
               </button>
             );
           })}
@@ -377,7 +376,7 @@ export function ReportForm({
           simulator on /dashboard, which has real readings to send. */}
       <details className="border border-dashed border-[var(--border)]">
         <summary className="min-h-11 cursor-pointer px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Demo — submit as
+          {t.demoSubmitAs}
         </summary>
         <div className="flex flex-wrap gap-1.5 px-3 pb-3">
           {(["citizen", "call", "field"] as ReportSource[]).map((option) => (

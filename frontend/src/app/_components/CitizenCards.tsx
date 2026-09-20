@@ -9,7 +9,7 @@
  * what the browser answered. Neither ever claims a success it did not get.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   Check,
@@ -22,7 +22,10 @@ import {
   Users,
 } from "lucide-react";
 import type { Lang } from "@/types";
+import type { Relationship } from "@/lib/pageStrings";
+import { pageStrings } from "@/lib/pageStrings";
 import { isSecureContext } from "@/lib/secureContext";
+import { useLang } from "@/components/layout/LangProvider";
 
 const CLOSE_ONES_KEY = "resqnet.closeOnes";
 const CONTACTS_KEY = "resqnet.closeOnes.contacts";
@@ -48,26 +51,20 @@ export type ContactChannel = "sms" | "call" | "whatsapp";
 export type CloseOne = {
   id: string;
   name: string;
-  relationship: string;
+  relationship: Relationship;
   phone: string;
   channel: ContactChannel;
 };
 
-const CHANNEL_LABEL: Record<ContactChannel, string> = {
-  sms: "SMS",
-  call: "Voice call",
-  whatsapp: "WhatsApp",
-};
-
-const RELATIONSHIPS = [
-  "Spouse",
-  "Parent",
-  "Child",
-  "Sibling",
-  "Relative",
-  "Neighbour",
-  "Friend",
-  "Carer",
+const RELATIONSHIPS: Relationship[] = [
+  "spouse",
+  "parent",
+  "child",
+  "sibling",
+  "relative",
+  "neighbour",
+  "friend",
+  "carer",
 ];
 
 /**
@@ -139,6 +136,7 @@ const EMPTY_DRAFT: Omit<CloseOne, "id"> = {
  * claims a message reached a phone.
  */
 export function CloseOnesCard({ lang }: { lang: Lang }) {
+  const t = pageStrings(lang).closeOnes;
   const [on, setOn] = useState(true);
   const [contacts, setContacts] = useState<CloseOne[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -158,7 +156,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
     return () => clearTimeout(t);
   }, []);
 
-  const toggle = useCallback(() => {
+  const toggle = () => {
     setOn((prev) => {
       const next = !prev;
       try {
@@ -168,31 +166,34 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
       }
       return next;
     });
-  }, []);
+  };
 
-  const commit = useCallback((list: CloseOne[]) => {
+  const commit = (list: CloseOne[]) => {
     setContacts(list);
     writeCloseOneContacts(list);
-  }, []);
+  };
 
-  const startAdd = useCallback(() => {
+  const startAdd = () => {
     setEditingId(null);
     setDraft(EMPTY_DRAFT);
     setError(null);
     setFormOpen(true);
-  }, []);
+  };
 
   // Sent here from the I'm Safe dialog, which has nowhere of its own to add a
   // contact. Bring the card into view as well as opening the form: arriving at
   // a focused field somewhere off-screen is its own kind of lost.
   useEffect(() => {
     const open = () => {
-      startAdd();
+      setEditingId(null);
+      setDraft(EMPTY_DRAFT);
+      setError(null);
+      setFormOpen(true);
       sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     };
     window.addEventListener(ADD_CLOSE_ONE_EVENT, open);
     return () => window.removeEventListener(ADD_CLOSE_ONE_EVENT, open);
-  }, [startAdd]);
+  }, []);
 
   // The form is the point of the trip, so put the cursor in it. Deferred until
   // after the form has rendered, and only for a fresh add — grabbing focus
@@ -228,16 +229,16 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
     e.preventDefault();
     const name = draft.name.trim();
     if (!name) {
-      setError("Enter a name.");
+      setError(t.errName);
       return;
     }
     const phone = normalisePhone(draft.phone);
     if (!phone) {
-      setError("Enter a 10-digit Indian mobile number.");
+      setError(t.errPhone);
       return;
     }
     if (contacts.some((c) => c.phone === phone && c.id !== editingId)) {
-      setError("That number is already saved.");
+      setError(t.errDuplicate);
       return;
     }
 
@@ -262,7 +263,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
     <section className="panel" ref={sectionRef} id="close-ones">
       <div className="panel-head">
         <Users className="size-3.5 shrink-0 text-[var(--navy-600)]" aria-hidden />
-        <h2 className="cmd text-[11.5px]">Close Ones Notification</h2>
+        <h2 className="cmd text-[11.5px]">{t.title}</h2>
         <span className="mono ml-auto text-[10px] text-[var(--muted)]">
           {contacts.length}
         </span>
@@ -274,7 +275,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
           role="switch"
           aria-checked={on}
           onClick={toggle}
-          aria-label="Notify close ones when I check in as safe"
+          aria-label={t.toggleLabel}
           className={`relative mt-0.5 h-[22px] w-[42px] shrink-0 rounded-full transition-colors ${
             on ? "bg-[var(--green)]" : "bg-[var(--border-strong)]"
           }`}
@@ -287,16 +288,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
           />
         </button>
         <p className="text-[11.5px] leading-snug text-[var(--muted)]">
-          {on ? (
-            <>
-              When you check in as safe, the people below hear about it too.
-            </>
-          ) : (
-            <>
-              Right now only the control room sees your check-in. Turn this on
-              to let your people know as well.
-            </>
-          )}
+          {on ? t.lead : t.offNote}
         </p>
       </div>
 
@@ -304,7 +296,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
       <ul className="border-t border-[var(--hairline)]">
         {contacts.length === 0 && !formOpen && (
           <li className="px-2.5 py-2 text-[11px] leading-snug text-[var(--muted)]">
-            Nobody added yet. Start with whoever should hear from you first.
+            {t.empty}
           </li>
         )}
         {contacts.map((c) => (
@@ -317,17 +309,17 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
                 {c.name}
                 <span className="font-normal text-[var(--muted)]">
                   {" "}
-                  &middot; {c.relationship}
+                  &middot; {t.relationship[c.relationship]}
                 </span>
               </span>
               <span className="telemetry">
-                +91 {c.phone} &middot; {CHANNEL_LABEL[c.channel]}
+                +91 {c.phone} &middot; {t.channel[c.channel]}
               </span>
             </span>
             <button
               type="button"
               onClick={() => startEdit(c)}
-              aria-label={`Edit ${c.name}`}
+              aria-label={t.edit(c.name)}
               className="rounded p-1 text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--navy-700)]"
             >
               <Pencil className="size-3.5" aria-hidden />
@@ -335,7 +327,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
             <button
               type="button"
               onClick={() => remove(c.id)}
-              aria-label={`Remove ${c.name}`}
+              aria-label={t.removeNamed(c.name)}
               className="rounded p-1 text-[var(--muted)] hover:bg-[var(--critical-bg)] hover:text-[var(--crimson)]"
             >
               <Trash2 className="size-3.5" aria-hidden />
@@ -350,7 +342,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
           className="grid gap-1.5 border-t border-[var(--hairline)] bg-[var(--surface-2)] p-2.5"
         >
           <label className="block">
-            <span className="eyebrow text-[var(--muted)]">Name</span>
+            <span className="eyebrow text-[var(--muted)]">{t.name}</span>
             <input
               ref={nameRef}
               value={draft.name}
@@ -362,22 +354,27 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
 
           <div className="grid grid-cols-2 gap-1.5">
             <label className="block">
-              <span className="eyebrow text-[var(--muted)]">Relationship</span>
+              <span className="eyebrow text-[var(--muted)]">{t.relation}</span>
               <select
                 value={draft.relationship}
                 onChange={(e) =>
-                  setDraft((d) => ({ ...d, relationship: e.target.value }))
+                  setDraft((d) => ({
+                    ...d,
+                    relationship: e.target.value as Relationship,
+                  }))
                 }
                 className="mt-0.5 h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-[var(--surface)] px-1.5 text-[12px]"
               >
                 {RELATIONSHIPS.map((r) => (
-                  <option key={r}>{r}</option>
+                  <option key={r} value={r}>
+                    {t.relationship[r]}
+                  </option>
                 ))}
               </select>
             </label>
 
             <label className="block">
-              <span className="eyebrow text-[var(--muted)]">Notify by</span>
+              <span className="eyebrow text-[var(--muted)]">{t.notifyBy}</span>
               <select
                 value={draft.channel}
                 onChange={(e) =>
@@ -388,9 +385,9 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
                 }
                 className="mt-0.5 h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-[var(--surface)] px-1.5 text-[12px]"
               >
-                {(Object.keys(CHANNEL_LABEL) as ContactChannel[]).map((ch) => (
+                {(Object.keys(t.channel) as ContactChannel[]).map((ch) => (
                   <option key={ch} value={ch}>
-                    {CHANNEL_LABEL[ch]}
+                    {t.channel[ch]}
                   </option>
                 ))}
               </select>
@@ -398,7 +395,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
           </div>
 
           <label className="block">
-            <span className="eyebrow text-[var(--muted)]">Mobile number</span>
+            <span className="eyebrow text-[var(--muted)]">{t.mobileNumber}</span>
             <input
               value={draft.phone}
               onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
@@ -420,7 +417,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
               type="submit"
               className="cmd h-8 flex-1 rounded-[4px] border border-[var(--navy-600)] bg-[var(--navy-600)] text-[11px] text-white hover:bg-[var(--navy-700)]"
             >
-              {editingId ? "Save changes" : "Add contact"}
+              {editingId ? t.saveChanges : t.addContact}
             </button>
             <button
               type="button"
@@ -431,7 +428,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
               }}
               className="cmd h-8 rounded-[4px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[11px] hover:bg-[var(--surface-3)]"
             >
-              Cancel
+              {t.cancel}
             </button>
           </div>
         </form>
@@ -442,18 +439,14 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
           className="cmd flex w-full items-center justify-center gap-1.5 border-t border-[var(--hairline)] py-1.5 text-[11px] text-[var(--navy-700)] hover:bg-[var(--surface-2)]"
         >
           <UserPlus className="size-3.5" aria-hidden />
-          Add close one
+          {t.add}
         </button>
       )}
 
       <p className="flex items-start gap-1.5 border-t border-[var(--hairline)] px-2.5 py-1.5 text-[10px] leading-snug text-[var(--faint)]">
         <Info className="mt-px size-3 shrink-0" aria-hidden />
-        Saved on this device only. There&apos;s no SMS gateway in this build,
-        so nothing actually reaches a phone yet.
+        {t.deviceOnly}
       </p>
-      {/* Language is accepted for parity with the other cards; the copy here is
-          deliberately English-only until it has been reviewed by a translator. */}
-      <span hidden>{lang}</span>
     </section>
   );
 }
@@ -461,6 +454,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
 type PermState = "unknown" | "prompt" | "granted" | "denied" | "unsupported" | "asking";
 
 export function LocationPermissionCard() {
+  const t = pageStrings(useLang().lang).misc.location;
   const [state, setState] = useState<PermState>("unknown");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -515,8 +509,8 @@ export function LocationPermissionCard() {
         setState(err.code === err.PERMISSION_DENIED ? "denied" : "prompt");
         setError(
           err.code === err.PERMISSION_DENIED
-            ? "Permission denied. You can still report an emergency by typing a landmark."
-            : "Location unavailable right now. You can still report by typing a landmark.",
+            ? t.denied
+            : t.unavailable,
         );
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
@@ -527,7 +521,7 @@ export function LocationPermissionCard() {
     <section className="panel">
       <div className="panel-head">
         <LocateFixed className="size-3.5 shrink-0 text-[var(--navy-600)]" aria-hidden />
-        <h2 className="cmd text-[11.5px]">Location Access</h2>
+        <h2 className="cmd text-[11.5px]">{t.title}</h2>
       </div>
 
       <div className="px-2.5 py-2.5">
@@ -538,7 +532,7 @@ export function LocationPermissionCard() {
           <p className="flex items-center gap-1.5 text-[12px] leading-snug text-[var(--foreground)]">
             <Check className="size-4 shrink-0 text-[var(--green)]" aria-hidden />
             <span>
-              Location is on. You&apos;ll see what&apos;s happening near you.
+              {t.on}
               {coords && (
                 <span className="telemetry ml-1">
                   {coords.lat.toFixed(3)}°N / {coords.lng.toFixed(3)}°E
@@ -549,18 +543,15 @@ export function LocationPermissionCard() {
         ) : (
           <>
             <p className="text-center text-[13px] font-bold leading-snug text-[var(--foreground)]">
-              Share your location so we can show you what&apos;s happening
-              around you.
+              {t.share}
             </p>
             <p className="mt-1.5 text-center text-[11px] leading-snug text-[var(--muted)]">
-              Used for nearby shelters, safe routes and local alerts. We never
-              track where you go.
+              {t.usedFor}
             </p>
 
             {state === "unsupported" ? (
               <p className="mt-2 rounded-[4px] bg-[var(--medium-bg)] px-2 py-1.5 text-[11px]">
-                This browser can&apos;t share location. Reporting still works —
-                just type the nearest landmark.
+                {t.unsupported}
               </p>
             ) : (
               <button
@@ -574,7 +565,7 @@ export function LocationPermissionCard() {
                 className="mx-auto mt-3 flex h-10 items-center justify-center gap-1.5 rounded-[4px] border-2 border-[var(--navy-600)] bg-white px-4 text-[12.5px] font-bold text-[var(--navy-700)] hover:bg-[var(--info-bg)] disabled:opacity-60"
               >
                 <LocateFixed className="size-4" aria-hidden />
-                {state === "asking" ? "Asking…" : "Share my location"}
+                {state === "asking" ? t.asking : t.shareButton}
               </button>
             )}
 
@@ -585,8 +576,7 @@ export function LocationPermissionCard() {
                   aria-hidden
                 />
                 <span>
-                  Your browser is blocking this. You can turn it back on in
-                  site settings — reporting works fine without it.
+                  {t.blocked}
                 </span>
               </p>
             )}

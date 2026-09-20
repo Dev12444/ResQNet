@@ -22,6 +22,9 @@ import {
   GUJARAT_DISTRICTS,
 } from "@/lib/constants";
 import { getGroundTruth } from "@/lib/api";
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 import { useEnvelope } from "@/components/layout/useEnvelope";
 import {
   EmptyState,
@@ -45,6 +48,9 @@ const MEDIA_ICON: Record<MediaKind, typeof ImageIcon> = {
 };
 
 export default function IncidentsPage() {
+  const { lang } = useLang();
+  const t = pageStrings(lang);
+  const enums = labels(lang);
   const reports = useEnvelope(useCallback(() => getGroundTruth(), []));
 
   const [query, setQuery] = useState("");
@@ -86,12 +92,12 @@ export default function IncidentsPage() {
     return out;
   }, [reports.data]);
 
-  if (reports.loading && !reports.data) return <LoadingState label="Loading incidents…" />;
+  if (reports.loading && !reports.data) return <LoadingState label={t.incidents.loading} />;
   if (reports.error && !reports.data) {
     return (
       <div className="p-4">
         <ErrorState
-          title="Could not load incidents"
+          title={t.incidents.loadError}
           detail={reports.error}
           onRetry={reports.reload}
         />
@@ -103,10 +109,8 @@ export default function IncidentsPage() {
     <div className="p-3 sm:p-4">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="cmd text-[24px] leading-none">Incidents</h1>
-          <p className="text-sm text-[var(--muted)]">
-            Citizen and authority reports, with their verification state.
-          </p>
+          <h1 className="cmd text-[24px] leading-none">{t.incidents.title}</h1>
+          <p className="text-sm text-[var(--muted)]">{t.incidents.lead}</p>
         </div>
         <DataModeBadge mode={reports.mode} note={reports.error} />
       </header>
@@ -135,10 +139,10 @@ export default function IncidentsPage() {
                 {counts[level]}
               </span>
               <span className="block text-[11px] font-bold uppercase tracking-wide">
-                {meta.label}
+                {enums.groundTruth[level]}
               </span>
               <span className="mt-0.5 block text-[11px] leading-snug text-[var(--muted)]">
-                {meta.note}
+                {enums.groundTruthNote[level]}
               </span>
             </button>
           );
@@ -148,7 +152,7 @@ export default function IncidentsPage() {
       {/* Filters */}
       <div className="panel mb-3 flex flex-wrap items-center gap-2 px-3 py-2.5">
         <label className="relative min-w-56 flex-1">
-          <span className="sr-only">Search incidents</span>
+          <span className="sr-only">{t.incidents.searchLabel}</span>
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--muted)]"
             aria-hidden
@@ -157,19 +161,19 @@ export default function IncidentsPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search location, description or reference..."
+            placeholder={t.incidents.searchPlaceholder}
             className="h-10 w-full border border-[var(--border-strong)] bg-[var(--surface)] pl-8 pr-2 text-sm"
           />
         </label>
 
         <label>
-          <span className="sr-only">District</span>
+          <span className="sr-only">{t.common.district}</span>
           <select
             value={district}
             onChange={(e) => setDistrict(e.target.value)}
             className="h-10 border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm"
           >
-            <option value="">All districts</option>
+            <option value="">{t.common.allDistricts}</option>
             {GUJARAT_DISTRICTS.map((d) => (
               <option key={d.id} value={d.name}>
                 {d.name}
@@ -179,16 +183,16 @@ export default function IncidentsPage() {
         </label>
 
         <div className="flex flex-wrap gap-1.5">
-          {availableTypes.map((t) => {
-            const meta = DISASTER_META[t];
-            const active = types.includes(t);
+          {availableTypes.map((type) => {
+            const meta = DISASTER_META[type];
+            const active = types.includes(type);
             return (
               <button
-                key={t}
+                key={type}
                 type="button"
                 onClick={() =>
                   setTypes((prev) =>
-                    prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
+                    prev.includes(type) ? prev.filter((x) => x !== type) : [...prev, type],
                   )
                 }
                 aria-pressed={active}
@@ -204,7 +208,7 @@ export default function IncidentsPage() {
                   className="inline-block size-2 rounded-full"
                   style={{ background: meta.color }}
                 />
-                {meta.label}
+                {t.disaster[type]}
               </button>
             );
           })}
@@ -215,14 +219,14 @@ export default function IncidentsPage() {
         {/* Register */}
         <section className="panel">
           <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
-            <h2 className="cmd text-[13px]">Register</h2>
+            <h2 className="cmd text-[13px]">{t.incidents.register}</h2>
             <span className="mono text-[11px] text-[var(--muted)]">
-              {filtered.length} of {reports.data?.length ?? 0}
+              {t.common.of(filtered.length, reports.data?.length ?? 0)}
             </span>
           </div>
 
           {filtered.length === 0 ? (
-            <EmptyState title="No incidents match these filters" />
+            <EmptyState title={t.incidents.noMatches} />
           ) : (
             <ul className="divide-y divide-[var(--border)]">
               {filtered.map((r) => {
@@ -246,7 +250,7 @@ export default function IncidentsPage() {
                           className="px-1 text-[10px] font-bold uppercase"
                           style={{ background: `${meta.color}14`, color: meta.color }}
                         >
-                          {meta.label}
+                          {t.disaster[r.disaster]}
                         </span>
                         <GroundTruthBadge level={r.level} />
                         <span className="ml-auto flex gap-1 text-[var(--muted)]">
@@ -279,7 +283,7 @@ export default function IncidentsPage() {
         {/* Chain detail */}
         <section className="panel min-w-0">
           <h2 className="border-b border-[var(--border)] px-3 py-2 text-[13px] font-bold uppercase tracking-wide">
-            ResQ Chain
+            {t.incidents.chain}
           </h2>
           {selected ? (
             <>
@@ -293,7 +297,7 @@ export default function IncidentsPage() {
               <IncidentTimeline chain={selected.chain} />
             </>
           ) : (
-            <EmptyState title="Select an incident to see its chain" />
+            <EmptyState title={t.incidents.selectOne} />
           )}
         </section>
       </div>

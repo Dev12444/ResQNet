@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { Check, ShieldCheck, UserPlus, X } from "lucide-react";
 import type { Lang, SafeCheckIn } from "@/types";
 import { GUJARAT_DISTRICTS, PLATFORM_STRINGS } from "@/lib/constants";
+import { pageStrings } from "@/lib/pageStrings";
 import { submitSafeCheckIn } from "@/lib/api";
 import { openAddCloseOne, readCloseOneContacts, readCloseOnes } from "./CitizenCards";
 
@@ -50,6 +51,7 @@ export function ImSafeCard({ lang }: { lang: Lang }) {
 
 function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
   const t = PLATFORM_STRINGS[lang];
+  const m = pageStrings(lang).misc.imSafe;
   const [name, setName] = useState("");
   const [district, setDistrict] = useState("Ahmedabad");
   const [note, setNote] = useState("");
@@ -103,7 +105,7 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
           <h2 id="imsafe-title" className="text-sm font-bold uppercase tracking-wide">
             {t.imSafe}
           </h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-[var(--muted)]">
+          <button type="button" onClick={onClose} aria-label={m.close} className="text-[var(--muted)]">
             <X className="size-5" />
           </button>
         </div>
@@ -124,24 +126,22 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
               />
               <div>
                 <p className="text-sm font-semibold">
-                  {result.synced
-                    ? "Check-in recorded"
-                    : "Saved on this device only"}
+                  {result.synced ? m.recorded : m.savedLocally}
                 </p>
                 <p className="mt-1 text-xs text-[var(--muted)]">
                   {result.synced
                     ? notify
-                      ? "Your listed contacts will be notified that you are safe."
-                      : "Your status is recorded. No contacts were notified."
-                    : "There is no connection right now, so this has NOT reached the control room or your contacts. It will be sent automatically when you are back online."}
+                      ? m.contactsNotified
+                      : m.noContactsNotified
+                    : m.offlineNote}
                 </p>
               </div>
             </div>
 
             <dl className="mono mt-3 space-y-1 text-xs">
-              <Row label="Name" value={result.name} />
-              <Row label="District" value={result.district} />
-              <Row label="Recorded" value={new Date(result.at).toTimeString().slice(0, 8)} />
+              <Row label={m.name} value={result.name} />
+              <Row label={m.district} value={result.district} />
+              <Row label={m.recordedAt} value={new Date(result.at).toTimeString().slice(0, 8)} />
             </dl>
 
             <button
@@ -149,13 +149,13 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
               onClick={onClose}
               className="mt-4 h-11 w-full border border-[var(--border-strong)] font-semibold"
             >
-              Close
+              {m.close}
             </button>
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-3 px-4 py-4">
             <label className="block">
-              <span className="text-xs font-semibold">Your name</span>
+              <span className="text-xs font-semibold">{m.yourName}</span>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -166,7 +166,7 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
             </label>
 
             <label className="block">
-              <span className="text-xs font-semibold">District you are in</span>
+              <span className="text-xs font-semibold">{m.districtYouAreIn}</span>
               <select
                 value={district}
                 onChange={(e) => setDistrict(e.target.value)}
@@ -181,12 +181,12 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
             </label>
 
             <label className="block">
-              <span className="text-xs font-semibold">Message (optional)</span>
+              <span className="text-xs font-semibold">{m.message}</span>
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
-                placeholder="At the shelter with my family"
+                placeholder={m.messagePlaceholder}
                 className="mt-1 w-full border border-[var(--border-strong)] px-2 py-1.5 text-base"
               />
             </label>
@@ -200,7 +200,7 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
                   className="size-4"
                 />
                 <span className="text-sm">
-                  Notify my close ones
+                  {m.notifyCloseOnes}
                   <span className="text-[var(--muted)]">
                     {" "}
                     &mdash; {contacts.map((c) => c.name).join(", ")}
@@ -218,8 +218,7 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
                */
               <div className="border border-dashed border-[var(--border-strong)] px-3 py-2.5">
                 <p className="text-sm text-[var(--muted)]">
-                  No close ones saved yet, so this check-in will reach the control
-                  room only.
+                  {m.noneSaved}
                 </p>
                 <button
                   type="button"
@@ -230,7 +229,7 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
                   className="mt-1.5 flex min-h-11 w-full items-center justify-center gap-1.5 border border-[var(--navy-600)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--navy-700)] hover:bg-[var(--info-bg)]"
                 >
                   <UserPlus className="size-4" aria-hidden />
-                  Add close ones
+                  {m.addCloseOnes}
                 </button>
               </div>
             )}
@@ -246,7 +245,7 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
               disabled={submitting}
               className="h-12 w-full border-2 border-[#0f7a37] bg-[var(--ok)] font-bold uppercase tracking-wide text-white disabled:opacity-70"
             >
-              {submitting ? "Recording…" : "Mark me safe"}
+              {submitting ? m.recording : m.markMeSafe}
             </button>
           </form>
         )}

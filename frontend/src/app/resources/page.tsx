@@ -6,13 +6,14 @@
  * Owner: FE2.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 import { useCallback, useMemo, useState } from "react";
 import type { ResourceKind } from "@/types";
 import {
   DISTRICTS,
-  RESOURCE_KIND_META,
   RESOURCE_VIEW_STATUSES,
-  RESOURCE_VIEW_STATUS_LABEL,
   type ResourceViewStatus,
 } from "@/lib/constants";
 import {
@@ -45,6 +46,10 @@ const KINDS: ResourceKind[] = [
 ];
 
 export default function ResourcesPage() {
+  const { lang } = useLang();
+  const t = pageStrings(lang).resources;
+  const enums = labels(lang);
+  const tc = pageStrings(lang).common;
   const units = useEnvelope(useCallback(() => getResourceViews(), []));
   const facilities = useEnvelope(useCallback(() => getFacilityViews(), []));
   const sensors = useEnvelope(useCallback(() => getSensors(), []));
@@ -105,15 +110,15 @@ export default function ResourcesPage() {
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
   }
 
-  if (units.loading && !units.data) return <LoadingState label="Loading resources…" />;
+  if (units.loading && !units.data) return <LoadingState label={t.loading} />;
 
   return (
     <div className="mx-auto w-full max-w-7xl px-3 py-4">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="cmd text-[24px] leading-none">Resources</h1>
+          <h1 className="cmd text-[24px] leading-none">{t.title}</h1>
           <p className="text-sm text-[var(--muted)]">
-            Units, facilities and sensors across the state.
+            {t.lead}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -128,7 +133,7 @@ export default function ResourcesPage() {
             }}
             className="min-h-9 border border-[var(--border-strong)] px-2.5 text-xs font-semibold hover:bg-[var(--surface-2)]"
           >
-            {units.refreshing ? "Refreshing…" : "Refresh"}
+            {units.refreshing ? t.refreshing : t.refresh}
           </button>
         </div>
       </header>
@@ -139,14 +144,14 @@ export default function ResourcesPage() {
         </div>
       )}
       {units.error && !units.data && (
-        <ErrorState title="Could not load units" detail={units.error} onRetry={units.reload} />
+        <ErrorState title={t.loadErrorTitle} detail={units.error} onRetry={units.reload} />
       )}
 
       {/* Shortages — demand from open incidents against what is actually free. */}
       {shortages.length > 0 && (
         <Panel
-          title="Capability demand"
-          subtitle="Required counts each open incident's needed unit types against units currently available."
+          title={t.capabilityDemand}
+          subtitle={t.demandNote}
           className="mb-3"
         >
           <ul className="grid gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-3">
@@ -154,12 +159,12 @@ export default function ResourcesPage() {
               <li key={s.kind} className="bg-[var(--surface)] px-3 py-2">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-semibold">
-                    {RESOURCE_KIND_META[s.kind].label}
+                    {enums.resourceKind[s.kind]}
                   </span>
                   {s.shortage > 0 ? (
                     <Badge label={`SHORTAGE ${s.shortage}`} color="var(--critical)" />
                   ) : (
-                    <Badge label="COVERED" color="var(--ok)" variant="tint" />
+                    <Badge label={t.covered} color="var(--ok)" variant="tint" />
                   )}
                 </div>
                 <p className="mono mt-1 text-sm text-[var(--muted)]">
@@ -178,27 +183,27 @@ export default function ResourcesPage() {
       )}
 
       {/* Filters — all of these actually apply to the lists below. */}
-      <Panel title="Filter" className="mb-3">
+      <Panel title={t.filter} className="mb-3">
         <div className="space-y-2.5 px-3 py-2.5">
           <div className="flex flex-wrap gap-2">
             <label className="min-w-56 flex-1">
-              <span className="sr-only">Search units, facilities and sensors</span>
+              <span className="sr-only">{t.searchLabel}</span>
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search callsign, base, capability, facility…"
+                placeholder={t.searchPlaceholder}
                 className="min-h-10 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm"
               />
             </label>
             <label>
-              <span className="sr-only">District</span>
+              <span className="sr-only">{tc.district}</span>
               <select
                 value={district}
                 onChange={(e) => setDistrict(e.target.value)}
                 className="min-h-10 border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm"
               >
-                <option value="">All districts</option>
+                <option value="">{tc.allDistricts}</option>
                 {DISTRICTS.map((d) => (
                   <option key={d} value={d}>
                     {d}
@@ -217,7 +222,7 @@ export default function ResourcesPage() {
                 }}
                 className="min-h-10 border border-[var(--border-strong)] px-2.5 text-sm font-semibold"
               >
-                Clear filters
+                {t.clearFilters}
               </button>
             )}
           </div>
@@ -226,7 +231,7 @@ export default function ResourcesPage() {
             {KINDS.map((k) => (
               <FilterChip
                 key={k}
-                label={RESOURCE_KIND_META[k].label}
+                label={enums.resourceKind[k]}
                 active={kinds.includes(k)}
                 onClick={() => toggle(kinds, k, setKinds)}
               />
@@ -237,7 +242,7 @@ export default function ResourcesPage() {
             {RESOURCE_VIEW_STATUSES.map((s) => (
               <FilterChip
                 key={s}
-                label={RESOURCE_VIEW_STATUS_LABEL[s]}
+                label={enums.resourceViewStatus[s]}
                 active={statuses.includes(s)}
                 onClick={() => toggle(statuses, s, setStatuses)}
               />
@@ -247,8 +252,8 @@ export default function ResourcesPage() {
       </Panel>
 
       <Panel
-        title="Units"
-        subtitle={`${filteredUnits.length} of ${units.data?.length ?? 0} shown`}
+        title={t.units}
+        subtitle={tc.of(filteredUnits.length, units.data?.length ?? 0)}
         className="mb-3"
       >
         <UnitsTable units={filteredUnits} />
@@ -256,8 +261,8 @@ export default function ResourcesPage() {
 
       <div className="grid gap-3 lg:grid-cols-2">
         <Panel
-          title="Hospitals & shelters"
-          subtitle="Bed counts are last-reported figures, not reservations."
+          title={t.facilities}
+          subtitle={t.facilitiesNote}
           actions={<DataModeBadge mode={facilities.mode} note={facilities.error} />}
         >
           {facilities.loading && !facilities.data ? (
@@ -267,7 +272,7 @@ export default function ResourcesPage() {
                which is an answer nobody should act on. Say the endpoint did
                not answer instead. */
             <UnavailableState
-              what="hospitals and shelters"
+              what={pageStrings(lang).primitives.what.facilities}
               note={facilities.error}
               onRetry={facilities.reload}
             />
@@ -277,8 +282,8 @@ export default function ResourcesPage() {
         </Panel>
 
         <Panel
-          title="Sensors"
-          subtitle="Reading, heartbeat and health are tracked separately."
+          title={t.sensors}
+          subtitle={t.sensorsNote}
           actions={<DataModeBadge mode={sensors.mode} note={sensors.error} />}
         >
           {sensors.loading && !sensors.data ? (

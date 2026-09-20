@@ -36,6 +36,8 @@ import {
   tooltipProps,
 } from "./chartTheme";
 import { EmptyState } from "@/components/layout/primitives";
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 
 /* ------------------------------------------------------------------ */
 /* Incident trend                                                      */
@@ -46,7 +48,8 @@ export function IncidentTrend({
 }: {
   data: { label: string; incidents: number; reports: number }[];
 }) {
-  if (data.length === 0) return <EmptyState title="No activity in this window" />;
+  const t = pageStrings(useLang().lang).charts;
+  if (data.length === 0) return <EmptyState title={t.noActivity} />;
   return (
     <ResponsiveContainer width="100%" height={220}>
       <AreaChart data={data} margin={{ top: 8, right: 10, bottom: 0, left: -16 }}>
@@ -68,7 +71,7 @@ export function IncidentTrend({
         <Area
           type="monotone"
           dataKey="reports"
-          name="Reports"
+          name={t.reports}
           stroke={SERIES_PAIR[0]}
           strokeWidth={2}
           fill="url(#trendReports)"
@@ -76,7 +79,7 @@ export function IncidentTrend({
         <Area
           type="monotone"
           dataKey="incidents"
-          name="Incidents"
+          name={t.incidents}
           stroke={SERIES_PAIR[1]}
           strokeWidth={2}
           fill="url(#trendIncidents)"
@@ -95,7 +98,8 @@ export function ResponseTimeChart({
 }: {
   data: { label: string; dispatch: number | null; resolve: number | null }[];
 }) {
-  if (data.length === 0) return <EmptyState title="No completed responses in this window" />;
+  const t = pageStrings(useLang().lang).charts;
+  if (data.length === 0) return <EmptyState title={t.noCompleted} />;
   return (
     <ResponsiveContainer width="100%" height={Math.max(200, data.length * 38 + 40)}>
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 56, bottom: 4, left: 4 }}>
@@ -106,7 +110,7 @@ export function ResponseTimeChart({
         <Legend wrapperStyle={{ fontSize: 11, color: "var(--muted)" }} />
         <Bar
           dataKey="dispatch"
-          name="Report → dispatch"
+          name={t.reportToDispatch}
           fill={SERIES_PAIR[0]}
           radius={[0, 4, 4, 0]}
           maxBarSize={11}
@@ -123,7 +127,7 @@ export function ResponseTimeChart({
         </Bar>
         <Bar
           dataKey="resolve"
-          name="Report → resolved"
+          name={t.reportToResolved}
           fill={SERIES_PAIR[1]}
           radius={[0, 4, 4, 0]}
           maxBarSize={11}
@@ -152,7 +156,8 @@ export function ShelterCapacity({
 }: {
   data: { label: string; occupancy: number; free: number; capacity: number }[];
 }) {
-  if (data.length === 0) return <EmptyState title="No shelters in this selection" />;
+  const t = pageStrings(useLang().lang).charts;
+  if (data.length === 0) return <EmptyState title={t.noShelters} />;
   return (
     <ResponsiveContainer width="100%" height={Math.max(200, data.length * 30 + 40)}>
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 44, bottom: 4, left: 4 }}>
@@ -164,14 +169,14 @@ export function ShelterCapacity({
         {/* Stacked to capacity, so the free remainder is visible at a glance. */}
         <Bar
           dataKey="occupancy"
-          name="In use"
+          name={t.inUse}
           stackId="cap"
           fill={SERIES_PAIR[0]}
           maxBarSize={16}
         />
         <Bar
           dataKey="free"
-          name="Free"
+          name={t.free}
           stackId="cap"
           fill="var(--border-strong)"
           radius={[0, 4, 4, 0]}
@@ -203,7 +208,8 @@ export function DistrictRisk({
 }: {
   data: { district: string; risk: RiskLevel; incidents: number }[];
 }) {
-  if (data.length === 0) return <EmptyState title="No districts in this selection" />;
+  const t = pageStrings(useLang().lang).charts;
+  if (data.length === 0) return <EmptyState title={t.noDistricts} />;
   const rows = data.map((d) => ({ ...d, riskLabel: RISK_META[d.risk].label }));
 
   return (
@@ -214,7 +220,7 @@ export function DistrictRisk({
         <YAxis type="category" dataKey="district" width={94} {...axisProps} axisLine={false} />
         <Tooltip
           {...tooltipProps}
-          formatter={(v: unknown) => [Number(v), "Active incidents"]}
+          formatter={(v: unknown) => [Number(v), t.activeIncidents]}
         />
         <Bar dataKey="incidents" radius={[0, 4, 4, 0]} maxBarSize={16}>
           {rows.map((row) => (
@@ -241,7 +247,8 @@ export function ResourceUtilization({
 }: {
   data: { label: string; committed: number; available: number }[];
 }) {
-  if (data.length === 0) return <EmptyState title="No units in this selection" />;
+  const t = pageStrings(useLang().lang).charts;
+  if (data.length === 0) return <EmptyState title={t.noUnits} />;
   return (
     <ResponsiveContainer width="100%" height={Math.max(200, data.length * 32 + 40)}>
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 28, bottom: 4, left: 4 }}>
@@ -252,14 +259,14 @@ export function ResourceUtilization({
         <Legend wrapperStyle={{ fontSize: 11, color: "var(--muted)" }} />
         <Bar
           dataKey="committed"
-          name="Committed"
+          name={t.committed}
           stackId="u"
           fill={HUE_PRIMARY}
           maxBarSize={16}
         />
         <Bar
           dataKey="available"
-          name="Available"
+          name={t.available}
           stackId="u"
           fill="var(--ok)"
           radius={[0, 4, 4, 0]}
@@ -279,8 +286,9 @@ export function PulseDistribution({
 }: {
   data: { risk: RiskLevel; districts: number }[];
 }) {
+  const t = pageStrings(useLang().lang).charts;
   const rows = data.filter((d) => d.districts > 0);
-  if (rows.length === 0) return <EmptyState title="No districts in this selection" />;
+  if (rows.length === 0) return <EmptyState title={t.noDistricts} />;
 
   return (
     <ResponsiveContainer width="100%" height={190}>
@@ -291,8 +299,8 @@ export function PulseDistribution({
         <CartesianGrid {...gridProps} />
         <XAxis dataKey="label" {...axisProps} tick={{ fill: "var(--muted)", fontSize: 9 }} />
         <YAxis {...axisProps} width={30} allowDecimals={false} />
-        <Tooltip {...tooltipProps} formatter={(v: unknown) => [Number(v), "Districts"]} />
-        <Bar dataKey="districts" name="Districts" radius={[4, 4, 0, 0]} maxBarSize={44}>
+        <Tooltip {...tooltipProps} formatter={(v: unknown) => [Number(v), t.districts]} />
+        <Bar dataKey="districts" name={t.districts} radius={[4, 4, 0, 0]} maxBarSize={44}>
           {data.map((d) => (
             <Cell key={d.risk} fill={RISK_META[d.risk].color} />
           ))}

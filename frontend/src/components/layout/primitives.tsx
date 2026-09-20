@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Small display primitives shared across the FE2 surfaces.
  *
@@ -6,6 +8,8 @@
  */
 
 import type { ReactNode } from "react";
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "./LangProvider";
 
 /* ------------------------------------------------------------------ */
 /* Badge                                                               */
@@ -145,7 +149,8 @@ export function DataRow({
 /* Page states                                                         */
 /* ------------------------------------------------------------------ */
 
-export function LoadingState({ label = "Loading…" }: { label?: string }) {
+export function LoadingState({ label }: { label?: string }) {
+  const t = pageStrings(useLang().lang).primitives;
   return (
     <div
       role="status"
@@ -156,7 +161,7 @@ export function LoadingState({ label = "Loading…" }: { label?: string }) {
         aria-hidden
         className="inline-block size-3 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-transparent"
       />
-      {label}
+      {label ?? t.loading}
     </div>
   );
 }
@@ -184,32 +189,28 @@ export function UnavailableState({
   note,
   onRetry,
 }: {
-  /** What could not be loaded, as a noun phrase: "the incident feed". */
+  /** What could not be loaded, as a noun phrase, already translated. */
   what: string;
   note?: string | null;
   onRetry?: () => void;
 }) {
+  const t = pageStrings(useLang().lang).primitives;
   return (
     <div
       role="alert"
       className="border-l-4 px-3 py-3"
       style={{ borderColor: "var(--high)", background: "var(--high-bg)" }}
     >
-      <p className="text-sm font-semibold">Could not load {what}</p>
-      <p className="mt-1 text-xs text-[var(--muted)]">
-        {note ?? "The server did not answer."}
-      </p>
-      <p className="mt-1 text-xs text-[var(--muted)]">
-        This is not the same as there being nothing to show — treat it as unknown,
-        not as clear.
-      </p>
+      <p className="text-sm font-semibold">{t.couldNotLoad(what)}</p>
+      <p className="mt-1 text-xs text-[var(--muted)]">{note ?? t.noAnswer}</p>
+      <p className="mt-1 text-xs text-[var(--muted)]">{t.unknownNotClear}</p>
       {onRetry && (
         <button
           type="button"
           onClick={onRetry}
           className="mt-2 border border-[var(--border-strong)] bg-[var(--surface)] px-2 py-1 text-xs font-semibold hover:bg-[var(--surface-2)]"
         >
-          Retry
+          {t.retry}
         </button>
       )}
     </div>
@@ -225,6 +226,7 @@ export function ErrorState({
   detail?: string | null;
   onRetry?: () => void;
 }) {
+  const t = pageStrings(useLang().lang).primitives;
   return (
     <div
       role="alert"
@@ -239,7 +241,7 @@ export function ErrorState({
           onClick={onRetry}
           className="mt-2 border border-[var(--border-strong)] bg-[var(--surface)] px-2 py-1 text-xs font-semibold hover:bg-[var(--surface-2)]"
         >
-          Retry
+          {t.retry}
         </button>
       )}
     </div>
@@ -251,12 +253,13 @@ export function ErrorState({
  * blank panel: the operator learns exactly which part is missing.
  */
 export function PartialDataNote({ what }: { what: string }) {
+  const t = pageStrings(useLang().lang).primitives;
   return (
     <p
       className="border-l-4 px-3 py-2 text-xs"
       style={{ borderColor: "var(--high)", background: "var(--high-bg)" }}
     >
-      <strong className="font-semibold">Partial data.</strong> {what}
+      <strong className="font-semibold">{t.partialData}</strong> {what}
     </p>
   );
 }

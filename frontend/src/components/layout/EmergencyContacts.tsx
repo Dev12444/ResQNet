@@ -7,7 +7,12 @@
  * calling emergency services.
  */
 
-import { EMERGENCY_NUMBERS, PRIMARY_EMERGENCY_NUMBER } from "@/lib/constants";
+import {
+  EMERGENCY_NUMBER_LABEL_I18N,
+  EMERGENCY_NUMBERS,
+  PRIMARY_EMERGENCY_NUMBER,
+} from "@/lib/constants";
+import type { Lang } from "@/types";
 
 /**
  * The primary action. A real `tel:` link, so it dials on a phone and is still
@@ -16,12 +21,14 @@ import { EMERGENCY_NUMBERS, PRIMARY_EMERGENCY_NUMBER } from "@/lib/constants";
 export function Call112Button({
   size = "md",
   className = "",
-  label = "CALL 112",
+  label,
 }: {
   size?: "md" | "lg";
   className?: string;
+  /** Translated by the caller; falls back to English when omitted. */
   label?: string;
 }) {
+  const text = label ?? "CALL 112";
   const sizing =
     size === "lg"
       ? "min-h-14 px-5 text-lg"
@@ -32,7 +39,7 @@ export function Call112Button({
       className={`inline-flex items-center justify-center gap-2 border-2 border-[#8f2417] bg-[var(--critical)] font-bold uppercase tracking-wide text-white hover:bg-[#b91c1c] ${sizing} ${className}`}
     >
       <PhoneGlyph />
-      {label}
+      {text}
     </a>
   );
 }
@@ -49,20 +56,41 @@ function PhoneGlyph() {
  * The advisory that must accompany citizen reporting: ResQNet coordinates,
  * it does not replace an emergency call.
  */
-export function EmergencyCallBanner({ text }: { text: string }) {
+export function EmergencyCallBanner({
+  text,
+  callLabel,
+}: {
+  text: string;
+  callLabel?: string;
+}) {
   return (
     <div
       className="flex flex-wrap items-center gap-3 border-l-4 px-3 py-2.5"
       style={{ borderColor: "var(--critical)", background: "var(--critical-bg)" }}
     >
       <p className="min-w-0 flex-1 text-sm font-medium text-[var(--foreground)]">{text}</p>
-      <Call112Button />
+      <Call112Button label={callLabel} />
     </div>
   );
 }
 
 /** Full directory. 112 is visually and structurally separated from the rest. */
-export function EmergencyDirectory({ compact = false }: { compact?: boolean }) {
+/**
+ * `lang` and `note` arrive as props rather than from `useLang()` so this file
+ * stays renderable from a server component; the two other exports here take
+ * their text the same way.
+ */
+export function EmergencyDirectory({
+  compact = false,
+  lang = "en",
+  note,
+}: {
+  compact?: boolean;
+  lang?: Lang;
+  note?: string;
+}) {
+  const label = (number: string, fallback: string) =>
+    EMERGENCY_NUMBER_LABEL_I18N[lang]?.[number] ?? fallback;
   const [primary, ...rest] = EMERGENCY_NUMBERS;
   return (
     <div>
@@ -73,14 +101,14 @@ export function EmergencyDirectory({ compact = false }: { compact?: boolean }) {
         <span>
           <span className="mono block text-2xl font-bold leading-none">{primary.number}</span>
           <span className="mt-1 block text-xs uppercase tracking-wide opacity-90">
-            {primary.label}
+            {label(primary.number, primary.label)}
           </span>
         </span>
         <PhoneGlyph />
       </a>
       <p className="px-1 py-2 text-xs text-[var(--muted)]">
-        112 reaches all services. The lines below are specialised — use them only when you
-        already know which service you need.
+        {note ??
+          "112 reaches all services. The lines below are specialised — use them only when you already know which service you need."}
       </p>
       <ul
         className={`grid gap-px border border-[var(--border)] bg-[var(--border)] ${
@@ -95,7 +123,7 @@ export function EmergencyDirectory({ compact = false }: { compact?: boolean }) {
             >
               <span className="mono text-base font-semibold leading-none">{entry.number}</span>
               <span className="mt-1 text-xs leading-tight text-[var(--muted)]">
-                {entry.label}
+                {label(entry.number, entry.label)}
               </span>
             </a>
           </li>

@@ -1,4 +1,6 @@
 'use client';
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import { AlertTriangle, Check, Hospital, Loader2, RefreshCw, Send } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { getRecommendations } from '@/lib/api';
@@ -11,12 +13,14 @@ const label = (k: string) => k.replace(/_/g, ' ');
 export function RecommendationPanel({ incidentId, version, dispatched, onDispatched }: {
   incidentId: number; version: number; dispatched: boolean; onDispatched: () => void;
 }) {
+  const { lang } = useLang();
+  const t = pageStrings(lang).recommendation;
   const [rec, setRec] = useState<RecommendationsResponse | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState('');
   // Provenance of what is on screen. Without it a failed call left this panel
-  // spinning "Ranking units…" indefinitely, which reads as "the AI is thinking"
+  // spinning "{t.ranking}" indefinitely, which reads as "the AI is thinking"
   // rather than "the AI never answered".
   const [mode, setMode] = useState<DataMode | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -42,17 +46,17 @@ export function RecommendationPanel({ incidentId, version, dispatched, onDispatc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incidentId, version, attempt]);
 
-  if (!rec && mode === null) return <div style={{ fontSize: 10, color: 'var(--muted)', display: 'flex', gap: 6, alignItems: 'center' }}><Loader2 size={12} className="spin" /> Ranking units…</div>;
+  if (!rec && mode === null) return <div style={{ fontSize: 10, color: 'var(--muted)', display: 'flex', gap: 6, alignItems: 'center' }}><Loader2 size={12} className="spin" /> {t.ranking}</div>;
 
   // The recommender returned nothing and there is no cached answer. Say so,
   // and leave a way to ask again — the API sleeps, and the retry usually wins.
   if (!rec) return <div style={{ padding: '9px 10px', borderRadius: 6, background: 'var(--soft-bg)', border: '1px solid var(--line-strong)' }}>
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, fontWeight: 800, color: 'var(--danger-text)' }}><AlertTriangle size={12} /> NO RECOMMENDATION AVAILABLE</div>
-    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>{note ?? 'The recommender did not answer.'}</div>
-    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>Dispatch from the unit list instead — this panel only ranks, it is not required to send anybody.</div>
-    <button type="button" onClick={retry} style={{ marginTop: 8, display: 'flex', gap: 5, alignItems: 'center', padding: '5px 9px', borderRadius: 5, border: '1px solid var(--line-strong)', background: 'var(--input)', color: 'var(--body-text)', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}><RefreshCw size={11} /> Try again</button>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, fontWeight: 800, color: 'var(--danger-text)' }}><AlertTriangle size={12} /> {t.none}</div>
+    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>{note ?? t.noAnswer}</div>
+    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>{t.noneNote}</div>
+    <button type="button" onClick={retry} style={{ marginTop: 8, display: 'flex', gap: 5, alignItems: 'center', padding: '5px 9px', borderRadius: 5, border: '1px solid var(--line-strong)', background: 'var(--input)', color: 'var(--body-text)', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}><RefreshCw size={11} /> {t.tryAgain}</button>
   </div>;
-  if (dispatched && state !== 'sent') return <div style={{ fontSize: 10, color: 'var(--accent)', display: 'flex', gap: 6, alignItems: 'center' }}><Check size={13} /> Units dispatched. Track them in the timeline.</div>;
+  if (dispatched && state !== 'sent') return <div style={{ fontSize: 10, color: 'var(--accent)', display: 'flex', gap: 6, alignItems: 'center' }}><Check size={13} /> {t.dispatched}</div>;
 
   const toggle = (id: number) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const approve = async () => {
@@ -64,14 +68,14 @@ export function RecommendationPanel({ incidentId, version, dispatched, onDispatc
       onDispatched();
     } catch (e) {
       setState('error');
-      setError(e instanceof Error ? e.message : 'Dispatch failed');
+      setError(e instanceof Error ? e.message : t.failed);
     }
   };
 
   return <div>
     {mode !== null && mode !== 'live' && <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', padding: '6px 8px', marginBottom: 8, borderRadius: 6, background: 'var(--soft-bg)', border: '1px solid var(--line-strong)', fontSize: 9, color: 'var(--muted)', lineHeight: 1.5 }}>
       <AlertTriangle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
-      <span><b style={{ color: 'var(--body-text)' }}>{mode === 'simulated' ? 'DEMO RANKING' : 'NOT LIVE'}</b> — {note ?? (mode === 'simulated' ? 'These units are demo data, not the live fleet.' : 'Showing the last answer the recommender gave, not the current fleet.')} Confirm availability before dispatching.</span>
+      <span><b style={{ color: 'var(--body-text)' }}>{mode === 'simulated' ? t.demoRanking : t.notLive}</b> — {note ?? (mode === 'simulated' ? t.demoNote : t.staleNote)} {t.confirm}</span>
     </div>}
     {rec.shortages.length > 0 && <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '7px 8px', marginBottom: 8, borderRadius: 6, background: 'var(--danger-soft)', color: 'var(--danger-text)', fontSize: 9, fontWeight: 800 }}><AlertTriangle size={12} /> NO AVAILABLE {rec.shortages.map(label).join(', ').toUpperCase()}</div>}
     {rec.needed_kinds.map((kind) => {
@@ -99,9 +103,9 @@ export function RecommendationPanel({ incidentId, version, dispatched, onDispatc
       <div style={{ fontSize: 8.5, color: 'var(--muted)', marginTop: 2 }}>{rec.facility.reason} · {rec.facility.distance_km} km</div>
     </div>}
     <button disabled={!selected.length || state === 'sending' || state === 'sent'} onClick={approve} style={{ width: '100%', height: 34, marginTop: 8, borderRadius: 6, border: '1px solid var(--accent-border)', background: state === 'sent' ? 'var(--action-bg)' : 'var(--action-strong)', color: 'var(--text)', fontSize: 9, fontWeight: 900, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, opacity: (!selected.length && state !== 'sent') ? .45 : 1 }}>
-      {state === 'sent' ? <><Check size={13} /> DISPATCH APPROVED</> : state === 'sending' ? <><Loader2 size={13} className="spin" /> DISPATCHING…</> : <><Send size={13} /> APPROVE DISPATCH ({selected.length})</>}
+      {state === 'sent' ? <><Check size={13} /> {t.approved}</> : state === 'sending' ? <><Loader2 size={13} className="spin" /> {t.dispatching}</> : <><Send size={13} /> APPROVE DISPATCH ({selected.length})</>}
     </button>
     {state === 'error' && <div style={{ marginTop: 6, fontSize: 9, color: 'var(--danger-text)' }}>{error}</div>}
-    <div style={{ marginTop: 6, textAlign: 'center', fontSize: 8, color: 'var(--muted)' }}>AI recommends · dispatcher approves</div>
+    <div style={{ marginTop: 6, textAlign: 'center', fontSize: 8, color: 'var(--muted)' }}>{t.aiRecommends}</div>
   </div>;
 }

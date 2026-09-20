@@ -23,14 +23,15 @@ import type {
 import {
   DISASTER_META,
   GUJARAT_DISTRICTS,
-  INCIDENT_STATUS_LABEL,
   INCIDENT_TYPE_META,
+  PLATFORM_STRINGS,
   RESOURCE_KIND_META,
   RISK_META,
   RISK_ORDER,
-  SEVERITY_LABEL,
+  TYPE_LABEL_I18N,
   confidenceBand,
 } from "@/lib/constants";
+import { labels } from "@/lib/i18n";
 import {
   computeShortages,
   getDistrictSituations,
@@ -41,6 +42,8 @@ import {
   getResourceViews,
   getShelters,
 } from "@/lib/api";
+import { pageStrings, type PageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import { useEnvelope } from "@/components/layout/useEnvelope";
 import {
   Badge,
@@ -72,6 +75,14 @@ const WINDOWS = [
 ] as const;
 
 type WindowId = (typeof WINDOWS)[number]["id"];
+
+/** The period chips, in the interface language (`WINDOWS` keeps the English fallback). */
+const WINDOW_LABEL = (t: PageStrings["analytics"]): Record<WindowId, string> => ({
+  today: t.today,
+  "7d": t.days7,
+  "30d": t.days30,
+  custom: t.custom,
+});
 
 const STATUSES: IncidentStatus[] = [
   "new",
@@ -123,6 +134,11 @@ function nearestDistrict(lat: number, lng: number): string {
 }
 
 export default function AnalyticsPage() {
+  const { lang } = useLang();
+  const t = pageStrings(lang).analytics;
+  const tc = pageStrings(lang).common;
+  // Incident types come from BE2's enum; `TYPE_LABEL_I18N` is the translated map.
+  const incidentTypeLabel = TYPE_LABEL_I18N[lang];
   const paired = useEnvelope(useCallback(() => getIncidentsWithTrust(), []));
   const situations = useEnvelope(useCallback(() => getDistrictSituations(), []));
   const shelters = useEnvelope(useCallback(() => getShelters(), []));
@@ -152,9 +168,17 @@ export default function AnalyticsPage() {
       ? customDays * 24
       : WINDOWS.find((w) => w.id === windowId)!.hours!;
 
+  /*
+   * `address` is nullable on the API — a sensor-raised incident has none — so
+   * an incident without one is placed by its coordinates rather than dropped
+   * into Ahmedabad. Reading `.includes` off the null was crashing this whole
+   * route in production whenever the live feed held one such incident.
+   */
   const districtOf = useCallback((incident: Incident): string => {
-    const m = GUJARAT_DISTRICTS.find((d) => incident.address.includes(d.name));
-    return m?.name ?? "Ahmedabad";
+    const m = incident.address
+      ? GUJARAT_DISTRICTS.find((d) => incident.address!.includes(d.name))
+      : undefined;
+    return m?.name ?? nearestDistrict(incident.lat, incident.lng);
   }, []);
 
   /* ---------------- filtering ---------------- */
@@ -276,12 +300,12 @@ export default function AnalyticsPage() {
     () =>
       Object.keys(INCIDENT_TYPE_META)
         .map((type) => ({
-          label: INCIDENT_TYPE_META[type as keyof typeof INCIDENT_TYPE_META].label,
+          label: incidentTypeLabel[type as keyof typeof INCIDENT_TYPE_META],
           value: incidents.filter((i) => i.type === type).length,
         }))
         .filter((d) => d.value > 0)
         .sort((a, b) => b.value - a.value),
-    [incidents],
+    [incidents, incidentTypeLabel],
   );
 
   const responseByType = useMemo(() => {
@@ -295,12 +319,12 @@ export default function AnalyticsPage() {
     }
     return [...groups.entries()]
       .map(([type, v]) => ({
-        label: INCIDENT_TYPE_META[type as keyof typeof INCIDENT_TYPE_META].label,
+        label: incidentTypeLabel[type as keyof typeof INCIDENT_TYPE_META],
         dispatch: v.d.length ? avg(v.d) : null,
         resolve: v.r.length ? avg(v.r) : null,
       }))
       .filter((d) => d.dispatch !== null || d.resolve !== null);
-  }, [incidents]);
+  }, [incidents, incidentTypeLabel]);
 
   const shelterSeries = useMemo(
     () =>
@@ -336,12 +360,12 @@ export default function AnalyticsPage() {
       const list = scopedUnits.filter((u) => u.kind === kind);
       const available = list.filter((u) => u.status === "available").length;
       return {
-        label: RESOURCE_KIND_META[kind].label,
+        label: labels(lang).resourceKind[kind],
         committed: list.length - available,
         available,
       };
     });
-  }, [scopedUnits]);
+  }, [scopedUnits, lang]);
 
   const pulseSeries = useMemo(
     () =>
@@ -377,8 +401,8 @@ export default function AnalyticsPage() {
   );
 
   const insights = useMemo(
-    () => deriveInsights(rows, scopedSituations, scopedUnits, scopedShelters, now),
-    [rows, scopedSituations, scopedUnits, scopedShelters, now],
+    () => deriveInsights(rows, scopedSituations, scopedUnits, scopedShelters, now, t, labels(lang).resourceKind),
+    [rows, scopedSituations, scopedUnits, scopedShelters, now, t, lang],
   );
 
   const filtersActive =
@@ -388,12 +412,12 @@ export default function AnalyticsPage() {
     statuses.length > 0 ||
     windowId !== "30d";
 
-  if (paired.loading && !paired.data) return <LoadingState label="Loading analytics…" />;
+  if (paired.loading && !paired.data) return <LoadingState label={t.loading} />;
   if (paired.error && !paired.data) {
     return (
       <div className="p-4">
         <ErrorState
-          title="Could not load analytics"
+          title={t.loadError}
           detail={paired.error}
           onRetry={paired.reload}
         />
@@ -405,11 +429,10 @@ export default function AnalyticsPage() {
     <div className="p-3 sm:p-4">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <p className="eyebrow mb-1 text-[var(--teal)]">ResQNet · State Operations</p>
-          <h1 className="cmd text-[24px] leading-none">Emergency Intelligence Centre</h1>
+          <p className="eyebrow mb-1 text-[var(--teal)]">{pageStrings(lang).misc.stateOperations}</p>
+          <h1 className="cmd text-[24px] leading-none">{t.title}</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            {incidents.length} of {paired.data?.length ?? 0} incidents ·{" "}
-            {scopedSituations.length} districts in view
+            {t.scope(incidents.length, paired.data?.length ?? 0, scopedSituations.length)}
           </p>
         </div>
         <DataModeBadge mode={paired.mode} note={paired.error} />
@@ -417,38 +440,38 @@ export default function AnalyticsPage() {
 
       {/* KPIs */}
       <div className="mb-3 grid gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <Kpi label="Active incidents" value={kpis.active} tone="var(--critical)" />
-        <Kpi label="Resolved" value={kpis.resolved} tone="var(--ok)" />
+        <Kpi label={t.activeIncidents} value={kpis.active} tone="var(--critical)" />
+        <Kpi label={t.resolved} value={kpis.resolved} tone="var(--ok)" />
         <Kpi
-          label="People affected"
+          label={t.peopleAffected}
           value={kpis.affected.toLocaleString("en-IN")}
           tone="var(--foreground)"
         />
         <Kpi
-          label="Avg response"
+          label={t.avgResponse}
           value={kpis.avgDispatch === null ? "—" : formatDuration(kpis.avgDispatch)}
           tone="var(--info)"
-          note={kpis.avgDispatch === null ? "No dispatches in window" : "Report → dispatch"}
+          note={kpis.avgDispatch === null ? t.noDispatches : t.reportToDispatch}
         />
-        <Kpi label="Teams deployed" value={kpis.teams} tone="var(--info)" />
+        <Kpi label={t.teamsDeployed} value={kpis.teams} tone="var(--info)" />
         {/* These two read like measurements but are computed from fixtures,
             so the caption says so in the tile rather than only in a badge
             further down the page — a KPI is the thing people screenshot. */}
         <Kpi
-          label="Shelter occupancy"
+          label={t.shelterOccupancy}
           value={kpis.shelterPct === null ? "—" : `${kpis.shelterPct}%`}
           tone={kpis.shelterPct !== null && kpis.shelterPct >= 85 ? "var(--high)" : "var(--ok)"}
           note={`${kpis.occupancy.toLocaleString("en-IN")} of ${kpis.capacity.toLocaleString(
             "en-IN",
-          )}${shelters.mode === "live" ? "" : " — demo figures"}`}
+          )}${shelters.mode === "live" ? "" : t.demoFigures}`}
         />
         <Kpi
-          label="Highest district risk"
-          value={RISK_META[kpis.worstRisk].label}
+          label={t.highestRisk}
+          value={PLATFORM_STRINGS[lang].risk[kpis.worstRisk]}
           tone={RISK_META[kpis.worstRisk].color}
           note={[
             kpis.utilisation === null ? null : `Units committed: ${kpis.utilisation}%`,
-            situations.mode === "live" ? null : "Demo district risk",
+            situations.mode === "live" ? null : t.demoDistrictRisk,
           ]
             .filter(Boolean)
             .join(" · ") || undefined}
@@ -462,13 +485,13 @@ export default function AnalyticsPage() {
       */}
       <div className="mb-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Panel
-          title="AI classification accuracy"
-          subtitle="Measured by BE2 against a labelled evaluation set — not a live figure."
+          title={t.accuracyTitle}
+          subtitle={t.accuracyNote}
           actions={<DataModeBadge mode={evaluation.mode} note={evaluation.error} />}
         >
           {evaluation.mode === "unavailable" || !evaluation.data ? (
             <UnavailableState
-              what="the evaluation run"
+              what={pageStrings(lang).primitives.what.evaluationRun}
               note={evaluation.error}
               onRetry={evaluation.reload}
             />
@@ -476,19 +499,19 @@ export default function AnalyticsPage() {
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4">
                 <EvalStat
-                  label="Type accuracy"
+                  label={t.typeAccuracy}
                   value={`${Math.round(evaluation.data.type_accuracy * 100)}%`}
                 />
                 <EvalStat
-                  label="Severity ±1"
+                  label={t.severityWithin1}
                   value={`${Math.round(evaluation.data.severity_within_1 * 100)}%`}
                 />
                 <EvalStat
-                  label="Dedup precision"
+                  label={t.dedupPrecision}
                   value={`${Math.round(evaluation.data.dedup_precision * 100)}%`}
                 />
                 <EvalStat
-                  label="Dedup recall"
+                  label={t.dedupRecall}
                   value={`${Math.round(evaluation.data.dedup_recall * 100)}%`}
                 />
               </div>
@@ -507,26 +530,26 @@ export default function AnalyticsPage() {
         </Panel>
 
         <Panel
-          title="Reporting hotspots"
-          subtitle="Where reports cluster. Density of reports — not confirmed risk."
+          title={t.hotspots}
+          subtitle={t.hotspotsNote}
           actions={<DataModeBadge mode={hotspots.mode} note={hotspots.error} />}
         >
           {hotspots.mode === "unavailable" ? (
             <UnavailableState
-              what="the hotspot clusters"
+              what={pageStrings(lang).primitives.what.hotspotClusters}
               note={hotspots.error}
               onRetry={hotspots.reload}
             />
           ) : !hotspots.data || hotspots.data.length === 0 ? (
-            <EmptyState title="No clusters in the current corpus" />
+            <EmptyState title={t.noClusters} />
           ) : (
             <ul className="divide-y divide-[var(--border)]">
               {[...hotspots.data]
                 .sort((a, b) => b.count - a.count)
                 .slice(0, 6)
                 .map((h) => {
-                  const meta =
-                    DISASTER_META[INCIDENT_TO_DISASTER[h.top_type] ?? "other"];
+                  const disaster = INCIDENT_TO_DISASTER[h.top_type] ?? "other";
+                  const meta = DISASTER_META[disaster];
                   const share = h.count / Math.max(...hotspots.data!.map((x) => x.count));
                   return (
                     <li
@@ -537,7 +560,7 @@ export default function AnalyticsPage() {
                         {nearestDistrict(h.lat, h.lng)}
                       </span>
                       <span className="w-24 shrink-0 text-[11px] text-[var(--muted)]">
-                        {meta.label}
+                        {pageStrings(lang).disaster[disaster]}
                       </span>
                       <span
                         className="h-2.5 min-w-[2px]"
@@ -559,20 +582,20 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Filters */}
-      <Panel title="Filters" className="mb-3">
+      <Panel title={t.filters} className="mb-3">
         <div className="space-y-2 px-3 py-2.5">
-          <FilterRow label="Period">
+          <FilterRow label={t.period}>
             {WINDOWS.map((w) => (
               <Chip
                 key={w.id}
-                label={w.label}
+                label={WINDOW_LABEL(t)[w.id]}
                 active={windowId === w.id}
                 onClick={() => setWindowId(w.id)}
               />
             ))}
             {windowId === "custom" && (
               <label className="flex items-center gap-1.5 text-xs">
-                <span className="sr-only">Custom period in days</span>
+                <span className="sr-only">{t.customDays}</span>
                 <input
                   type="number"
                   min={1}
@@ -586,7 +609,7 @@ export default function AnalyticsPage() {
             )}
           </FilterRow>
 
-          <FilterRow label="District">
+          <FilterRow label={tc.district}>
             {GUJARAT_DISTRICTS.map((d) => (
               <Chip
                 key={d.id}
@@ -597,35 +620,35 @@ export default function AnalyticsPage() {
             ))}
           </FilterRow>
 
-          <FilterRow label="Disaster">
+          <FilterRow label={t.disaster}>
             {(Object.keys(DISASTER_META) as DisasterType[])
               .filter((d) => d !== "heavy_rainfall" && d !== "missing_person")
               .map((d) => (
                 <Chip
                   key={d}
-                  label={DISASTER_META[d].label}
+                  label={pageStrings(lang).disaster[d]}
                   active={disasters.includes(d)}
                   onClick={() => toggle(disasters, d, setDisasters)}
                 />
               ))}
           </FilterRow>
 
-          <FilterRow label="Severity">
+          <FilterRow label={t.severity}>
             {SEVERITIES.map((s) => (
               <Chip
                 key={s}
-                label={`SEV ${s} · ${SEVERITY_LABEL[s]}`}
+                label={`SEV ${s} · ${labels(lang).severity[s]}`}
                 active={severities.includes(s)}
                 onClick={() => toggle(severities, s, setSeverities)}
               />
             ))}
           </FilterRow>
 
-          <FilterRow label="Status">
+          <FilterRow label={t.status}>
             {STATUSES.map((s) => (
               <Chip
                 key={s}
-                label={INCIDENT_STATUS_LABEL[s]}
+                label={labels(lang).incidentStatus[s]}
                 active={statuses.includes(s)}
                 onClick={() => toggle(statuses, s, setStatuses)}
               />
@@ -652,18 +675,18 @@ export default function AnalyticsPage() {
 
       {/* Observations */}
       <Panel
-        title="Observations"
-        subtitle="Computed from the rows currently in view."
+        title={t.observations}
+        subtitle={t.observationsNote}
         className="mb-3"
       >
         {insights.length === 0 ? (
-          <EmptyState title="Nothing notable in this selection" />
+          <EmptyState title={t.nothingNotable} />
         ) : (
           <ul className="divide-y divide-[var(--border)]">
             {insights.map((i) => (
               <li key={i.id} className="flex flex-wrap gap-x-3 gap-y-1 px-3 py-2">
                 <Badge
-                  label={i.severity}
+                  label={t.insightSeverity[i.severity]}
                   color={
                     i.severity === "critical"
                       ? "var(--critical)"
@@ -686,21 +709,21 @@ export default function AnalyticsPage() {
 
       {/* Charts */}
       <div className="grid gap-3 lg:grid-cols-2">
-        <Panel title="Incident trend" subtitle="Incidents and reports opened per bucket.">
+        <Panel title={t.trend} subtitle={t.trendNote}>
           <div className="px-2 py-2">
             <IncidentTrend data={trend} />
           </div>
         </Panel>
 
-        <Panel title="Incident type" subtitle="Count of incidents by type.">
+        <Panel title={t.incidentType} subtitle={t.incidentTypeNote}>
           <div className="px-2 py-2">
-            <CategoryBars data={byType} valueLabel="Incidents" />
+            <CategoryBars data={byType} valueLabel={t.table.incidents} />
           </div>
         </Panel>
 
         <Panel
-          title="District risk"
-          subtitle="Active incidents per district; risk level printed beside each bar."
+          title={t.districtRisk}
+          subtitle={t.districtRiskNote}
         >
           <div className="px-2 py-2">
             <DistrictRisk data={riskSeries} />
@@ -708,14 +731,13 @@ export default function AnalyticsPage() {
         </Panel>
 
         <Panel
-          title="Response time"
-          subtitle="Report → dispatch and report → resolved, from incident timestamps."
+          title={t.responseTime}
+          subtitle={t.responseTimeNote}
         >
           <div className="px-2 py-2">
             <ResponseTimeChart data={responseByType} />
             <p className="px-1 pt-1 text-[11px] text-[var(--muted)]">
-              Report → triage is not shown: the incident contract has no `triaged_at`
-              timestamp, so it cannot be derived.
+              {t.noTriageNote}
             </p>
           </div>
         </Panel>
@@ -727,8 +749,8 @@ export default function AnalyticsPage() {
             live panels do — a chart that cannot say where its numbers came
             from is a chart nobody should quote. */}
         <Panel
-          title="Shelter capacity"
-          subtitle="Places in use against total capacity."
+          title={t.shelterCapacity}
+          subtitle={t.shelterCapacityNote}
           actions={<DataModeBadge mode={shelters.mode} note={shelters.error} />}
         >
           <div className="px-2 py-2">
@@ -736,15 +758,15 @@ export default function AnalyticsPage() {
           </div>
         </Panel>
 
-        <Panel title="Resource utilisation" subtitle="Units committed against available.">
+        <Panel title={t.utilisation} subtitle={t.utilisationNote}>
           <div className="px-2 py-2">
             <ResourceUtilization data={utilisationSeries} />
           </div>
         </Panel>
 
         <Panel
-          title="ResQ Pulse distribution"
-          subtitle="How many districts sit at each risk level."
+          title={t.pulseDistribution}
+          subtitle={t.pulseDistributionNote}
           actions={<DataModeBadge mode={pulse.mode} note={pulse.error} />}
         >
           <div className="px-2 py-2">
@@ -753,17 +775,16 @@ export default function AnalyticsPage() {
         </Panel>
 
         <Panel
-          title="District comparison"
+          title={t.districtComparison}
           actions={<DataModeBadge mode={situations.mode} note={situations.error} />}
         >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] border-collapse text-sm">
-              <caption className="sr-only">
-                Risk, incidents, shelters, teams and dispatch time per district
-              </caption>
+              <caption className="sr-only">{t.districtTableCaption}</caption>
               <thead>
                 <tr className="border-b-2 border-[var(--border-strong)] text-left">
-                  {["District", "Risk", "Incidents", "Shelters", "Teams", "Affected", "Avg dispatch"].map(
+                  {[t.table.district, t.table.risk, t.table.incidents, t.table.shelters,
+                    t.table.teams, t.table.affected, t.table.avgDispatch].map(
                     (h) => (
                       <th
                         key={h}
@@ -788,7 +809,7 @@ export default function AnalyticsPage() {
                           color: RISK_META[d.risk].color,
                         }}
                       >
-                        {RISK_META[d.risk].label}
+                        {PLATFORM_STRINGS[lang].risk[d.risk]}
                       </span>
                     </td>
                     <td className="mono px-2 py-1.5">{d.incidents}</td>
@@ -834,6 +855,8 @@ function deriveInsights(
   units: { kind: keyof typeof RESOURCE_KIND_META; status: string }[],
   shelters: { name: string; occupancy: number; capacity: number; district: string }[],
   now: number | null,
+  t: PageStrings["analytics"],
+  kindLabel: Record<keyof typeof RESOURCE_KIND_META, string>,
 ): Insight[] {
   const out: Insight[] = [];
   const clock = now ?? 0;
@@ -848,9 +871,9 @@ function deriveInsights(
     out.push({
       id: "sla",
       severity: "critical",
-      headline: `${undispatchedP1.length} P1 incident${undispatchedP1.length === 1 ? "" : "s"} not yet dispatched`,
-      detail: `${oldest.incident.code} has been waiting longest.`,
-      evidence: `${oldest.incident.code} · ${Math.round((clock - Date.parse(oldest.incident.created_at)) / 60000)} min · ${oldest.incident.address}`,
+      headline: t.insight.p1NotDispatched(undispatchedP1.length),
+      detail: t.insight.waitingLongest(oldest.incident.code),
+      evidence: `${oldest.incident.code} · ${t.insight.minutes(Math.round((clock - Date.parse(oldest.incident.created_at)) / 60000))} · ${oldest.incident.address}`,
     });
   }
 
@@ -862,12 +885,9 @@ function deriveInsights(
     out.push({
       id: `shortage-${s.kind}`,
       severity: s.available === 0 ? "critical" : "warning",
-      headline: `${RESOURCE_KIND_META[s.kind].label} shortage`,
-      detail:
-        s.available === 0
-          ? "No units of this type are available anywhere in view."
-          : "Open incidents need more units of this type than are free.",
-      evidence: `Required ${s.required} · Available ${s.available} · Shortage ${s.shortage}`,
+      headline: t.insight.shortage(kindLabel[s.kind]),
+      detail: s.available === 0 ? t.insight.shortageNone : t.insight.shortageSome,
+      evidence: t.insight.shortageEvidence(s.required, s.available, s.shortage),
     });
   }
 
@@ -876,9 +896,11 @@ function deriveInsights(
     out.push({
       id: "critical-districts",
       severity: "critical",
-      headline: `${critical.length} district${critical.length === 1 ? "" : "s"} at CRITICAL risk`,
-      detail: "These districts carry the highest combination of hazard and exposure.",
-      evidence: critical.map((s) => `${s.district} (${s.sheltersOpen} shelters open)`).join(", "),
+      headline: t.insight.criticalDistricts(critical.length),
+      detail: t.insight.criticalDistrictsNote,
+      evidence: critical
+        .map((s) => `${s.district} (${t.insight.sheltersOpen(s.sheltersOpen)})`)
+        .join(", "),
     });
   }
 
@@ -890,8 +912,8 @@ function deriveInsights(
     out.push({
       id: "shelter-capacity",
       severity: full.length > 0 ? "critical" : "warning",
-      headline: `${full.length} shelter${full.length === 1 ? "" : "s"} full, ${nearFull.length} near capacity`,
-      detail: "Arrivals should be redirected before these are overwhelmed.",
+      headline: t.insight.sheltersFull(full.length, nearFull.length),
+      detail: t.insight.sheltersFullNote,
       evidence: [...full, ...nearFull]
         .map((s) => `${s.name} ${s.occupancy}/${s.capacity}`)
         .join(", "),
@@ -903,8 +925,8 @@ function deriveInsights(
     out.push({
       id: "conflicts",
       severity: "warning",
-      headline: `${conflicting.length} incident${conflicting.length === 1 ? "" : "s"} with conflicting reports`,
-      detail: "Sources disagree on scale or location. Confirm before scaling the response.",
+      headline: t.insight.conflicting(conflicting.length),
+      detail: t.insight.conflictingNote,
       evidence: conflicting.map((r) => r.incident.code).join(", "),
     });
   }
@@ -916,8 +938,8 @@ function deriveInsights(
     out.push({
       id: "low-confidence",
       severity: "warning",
-      headline: `${lowConfidence.length} report${lowConfidence.length === 1 ? "" : "s"} below the manual-verification threshold`,
-      detail: "The classifier could not read these with confidence. A person should call back.",
+      headline: t.insight.lowConfidence(lowConfidence.length),
+      detail: t.insight.lowConfidenceNote,
       evidence: lowConfidence
         .map((r) => `${r.incident.code} ${Math.round(r.incident.confidence * 100)}%`)
         .join(", "),
@@ -931,8 +953,8 @@ function deriveInsights(
     out.push({
       id: "unverified-severe",
       severity: "info",
-      headline: `${unverifiedSevere.length} severe incident${unverifiedSevere.length === 1 ? "" : "s"} resting on a single source`,
-      detail: "Severity is high but nothing has corroborated the report yet.",
+      headline: t.insight.unverifiedSevere(unverifiedSevere.length),
+      detail: t.insight.unverifiedSevereNote,
       evidence: unverifiedSevere
         .map((r) => `${r.incident.code} SEV ${r.incident.severity}`)
         .join(", "),

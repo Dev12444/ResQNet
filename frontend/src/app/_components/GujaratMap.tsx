@@ -15,6 +15,7 @@
  * coastline stays readable.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Map as MapLibreMap, Marker, NavigationControl } from "maplibre-gl";
 import type { StyleSpecification } from "maplibre-gl";
@@ -279,6 +280,7 @@ export function GujaratMap({
      inside AppShell, and the map's legend is the only thing here that changes
      with language. */
   const { lang } = useLang();
+  const m = pageStrings(lang).misc;
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markerObjects = useRef<Marker[]>([]);
@@ -547,8 +549,8 @@ export function GujaratMap({
       const extra = countByDistrict.get(s.district);
       el.setAttribute(
         "aria-label",
-        `${s.district}, ${RISK_META[s.risk].label} risk, ${s.activeIncidents} active incidents` +
-          (extra ? `, ${extra} markers in district` : ""),
+        m.districtAria(s.district, riskLabel(s.risk, lang), s.activeIncidents) +
+          (extra ? m.markersInDistrict(extra) : ""),
       );
       el.className = "resq-district";
       /* 18px at normal risk up to 30px at critical. The old scale started at
@@ -743,6 +745,8 @@ export function GujaratMap({
     zoom,
     base,
     showGrid,
+    lang,
+    m,
   ]);
 
   /* ---------------- controls ---------------- */
@@ -783,7 +787,7 @@ export function GujaratMap({
               aria-hidden
               className="size-3 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--navy-600)]"
             />
-            LOADING MAP…
+            {m.loadingMap}
           </p>
         </div>
       )}
@@ -839,7 +843,7 @@ export function GujaratMap({
         type="button"
         onClick={() => setShowGrid((g) => !g)}
         aria-pressed={showGrid}
-        title="Toggle the map grid reference overlay"
+        title={m.toggleGrid}
         className={`cmd absolute left-14 top-[54px] z-10 flex items-center gap-1.5 border border-[var(--carbon)] px-2 py-1 text-[11px] shadow-sm ${
           showGrid
             ? "bg-[var(--carbon)] text-white"
@@ -855,8 +859,8 @@ export function GujaratMap({
       <button
         type="button"
         onClick={recenter}
-        aria-label="Reset the map view"
-        title="Reset the map view"
+        aria-label={m.resetView}
+        title={m.resetView}
         className="absolute left-3 top-[76px] z-10 flex size-[29px] items-center justify-center rounded-[4px] border border-[var(--border-strong)] bg-white shadow-sm hover:bg-[var(--surface-2)]"
       >
         <Crosshair className="size-4" aria-hidden />
@@ -877,7 +881,7 @@ export function GujaratMap({
           </button>
           {layersOpen && (
             <fieldset className="absolute right-0 top-full z-20 mt-1 w-56 border border-[var(--carbon)] bg-[var(--surface)] shadow-lg">
-              <legend className="sr-only">Map layers</legend>
+              <legend className="sr-only">{m.mapLayers}</legend>
               <p className="eyebrow border-b border-[var(--hairline)] bg-[var(--surface-2)] px-2 py-1.5 text-[var(--muted)]">
                 Operational Layers
               </p>
@@ -946,7 +950,7 @@ export function GujaratMap({
             <button
               type="button"
               onClick={() => onSelectDistrict(null)}
-              aria-label="Close district panel"
+              aria-label={m.closeDistrictPanel}
               className="shrink-0 text-[var(--rail-muted)] hover:text-white"
             >
               <X className="size-4" />
@@ -970,7 +974,7 @@ export function GujaratMap({
               signature reads identically wherever it appears. */}
           <div className="border-b border-[var(--hairline)] px-3 py-2">
             <div className="flex items-baseline justify-between">
-              <span className="eyebrow text-[var(--muted)]">ResQ Pulse</span>
+              <span className="eyebrow text-[var(--muted)]">{m.resqPulse}</span>
               <span
                 className="cmd text-[12px]"
                 style={{ color: RISK_META[selected.risk].color }}
@@ -1075,20 +1079,19 @@ export function GujaratMap({
           ))}
         </ul>
         <p className="border-t border-[var(--hairline)] px-2.5 py-1 text-[9px] leading-tight text-[var(--faint)]">
-          Discs mark district centroids and show risk posture — they are not
-          administrative boundaries.
+          {m.centroidNote}
         </p>
         {/* On a narrow map the marker count rides inside the legend rather
             than as a second floating chip that would overlap it. */}
         <p className="mono border-t border-[var(--hairline)] bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-semibold sm:hidden">
-          {visibleMarkers.length} MARKERS · OVERLAPS GROUPED
+          {m.markersGrouped(visibleMarkers.length)}
         </p>
       </div>
 
       {/* Live stamp */}
       <MapLiveStamp
         mode={mode}
-        detail={`${visibleMarkers.length} MARKERS · OVERLAPS GROUPED`}
+        detail={m.markersGrouped(visibleMarkers.length)}
       />
     </div>
   );
@@ -1114,6 +1117,7 @@ const LEGEND_LAYERS: MapLayer[] = ["cyclone", "flood", "fire", "warning", "shelt
  * was actually drawn.
  */
 function MapLiveStamp({ detail, mode }: { detail: string; mode: DataMode }) {
+  const m = pageStrings(useLang().lang).misc;
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -1143,17 +1147,15 @@ function MapLiveStamp({ detail, mode }: { detail: string; mode: DataMode }) {
         className="cmd text-[10px]"
         style={{ color: meta.color }}
         title={
-          live
-            ? "Every layer on this map came from the API."
-            : `Weakest layer on this map: ${meta.label.toLowerCase()}.`
+          live ? m.allLayersFromApi : m.weakestLayer(meta.label.toLowerCase())
         }
       >
         {live
-          ? "Live"
+          ? m.mapLive
           : mode === "simulated"
-            ? "Demo data"
+            ? m.mapDemoData
             : mode === "unavailable"
-              ? "Layer missing"
+              ? m.mapLayerMissing
               : meta.label}
       </span>
       <span aria-hidden className="h-3 w-px bg-[var(--hairline)]" />

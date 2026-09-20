@@ -14,6 +14,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Phone, RefreshCw, WifiOff } from "lucide-react";
 import type { ConnectivityState, QueuedSubmission } from "@/types";
 import type { FlushResult } from "@/lib/api";
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import { CONNECTIVITY_META } from "@/lib/constants";
 import { flushQueue, ping, readQueue } from "@/lib/api";
 
@@ -127,11 +129,12 @@ export function useConnectivity(): ConnectivityInfo {
 }
 
 export function StatusIndicator({ info }: { info: ConnectivityInfo }) {
+  const t = pageStrings(useLang().lang).connectivity;
   const meta = CONNECTIVITY_META[info.state];
   return (
     <span
       className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide"
-      title={meta.note}
+      title={t.note[info.state]}
       role="status"
       aria-live="polite"
     >
@@ -142,7 +145,7 @@ export function StatusIndicator({ info }: { info: ConnectivityInfo }) {
         }`}
         style={{ background: meta.color }}
       />
-      <span style={{ color: meta.color }}>{meta.label}</span>
+      <span style={{ color: meta.color }}>{t.label[info.state]}</span>
     </span>
   );
 }
@@ -152,6 +155,8 @@ export function StatusIndicator({ info }: { info: ConnectivityInfo }) {
  * words and points at the phone, which still works when the network does not.
  */
 export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
+  // The hook runs before the early return so the hook order never changes.
+  const t = pageStrings(useLang().lang).connectivity;
   if (info.state === "online" && info.queue.length === 0) return null;
   const meta = CONNECTIVITY_META[info.state];
   const queued = info.queue.length;
@@ -171,18 +176,15 @@ export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
     >
       <span className="flex items-center gap-2 font-semibold" style={{ color: meta.color }}>
         <WifiOff className="size-4" aria-hidden />
-        {meta.label}
+        {t.label[info.state]}
       </span>
 
       <span className="min-w-56 flex-1 text-[var(--foreground)]">
-        {meta.note}
+        {t.note[info.state]}
         {queued > 0 && (
           <>
             {" "}
-            <strong className="font-semibold">
-              {queued} submission{queued === 1 ? "" : "s"} still on this device —
-              not yet received by the control room.
-            </strong>
+            <strong className="font-semibold">{t.queued(queued)}</strong>
           </>
         )}
       </span>
@@ -192,7 +194,7 @@ export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
         className="inline-flex min-h-9 items-center gap-1.5 border border-[var(--coral-deep)] bg-[var(--coral)] px-3 cmd text-xs text-white"
       >
         <Phone className="size-3.5" aria-hidden />
-        Call 112 instead
+        {t.call112}
       </a>
 
       {queued > 0 && (
@@ -203,7 +205,7 @@ export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
           className="inline-flex min-h-9 items-center gap-1.5 border border-[var(--carbon)] bg-[var(--surface)] px-3 text-xs font-semibold disabled:opacity-60"
         >
           <RefreshCw className={`size-3.5 ${info.flushing ? "animate-spin" : ""}`} aria-hidden />
-          {info.flushing ? "Sending…" : "Send now"}
+          {info.flushing ? t.sending : t.sendNow}
         </button>
       )}
 
@@ -212,16 +214,11 @@ export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
       {info.lastFlush && (
         <span className="w-full text-xs text-[var(--foreground)]">
           {info.lastFlush.sent > 0 && (
-            <strong className="font-semibold">
-              {info.lastFlush.sent} sent to the control room.
-            </strong>
+            <strong className="font-semibold">{t.sent(info.lastFlush.sent)}</strong>
           )}{" "}
-          {info.lastFlush.failed > 0 &&
-            `${info.lastFlush.failed} could not be sent and are still waiting. `}
+          {info.lastFlush.failed > 0 && t.failed(info.lastFlush.failed)}
           {info.lastFlush.undeliverable > 0 &&
-            `${info.lastFlush.undeliverable} cannot be sent automatically — please submit ${
-              info.lastFlush.undeliverable === 1 ? "it" : "them"
-            } again.`}
+            t.undeliverable(info.lastFlush.undeliverable)}
           {/* A refusal is not a network problem, and repeating it changes
               nothing, so these stop riding every reconnection. The text is
               still on the device and the server's reason is shown with it —
@@ -230,16 +227,15 @@ export function ConnectivityBanner({ info }: { info: ConnectivityInfo }) {
           {info.lastFlush.rejected > 0 && (
             <>
               {" "}
-              {info.lastFlush.rejected} {info.lastFlush.rejected === 1 ? "was" : "were"} refused
-              by the control room and will not be resent on their own.{" "}
-              {rejectedReason && <em className="not-italic">Reason: {rejectedReason}. </em>}
+              {t.refused(info.lastFlush.rejected)}{" "}
+              {rejectedReason && <em className="not-italic">{t.reason(rejectedReason)}</em>}
               <button
                 type="button"
                 onClick={() => info.flush({ force: true })}
                 disabled={info.flushing}
                 className="underline underline-offset-2 disabled:opacity-60"
               >
-                Try {info.lastFlush.rejected === 1 ? "it" : "them"} again anyway
+                {t.tryAgain(info.lastFlush.rejected)}
               </button>
             </>
           )}

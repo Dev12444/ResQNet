@@ -10,6 +10,7 @@
  * Owner: FE2.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import { useCallback, useMemo, useState } from "react";
 import type { MapMarkerInput } from "../_components/GujaratMap";
 import { GujaratMap } from "../_components/GujaratMap";
@@ -29,7 +30,13 @@ import {
   getWeatherAlerts,
   worstMode,
 } from "@/lib/api";
-import { GUJARAT_CENTER, RISK_META, districtByName } from "@/lib/constants";
+import {
+  districtByName,
+  GUJARAT_CENTER,
+  nearestDistrict,
+  RISK_META,
+  riskLabel,
+} from "@/lib/constants";
 
 export default function LiveMapPage() {
   const situations = useEnvelope(useCallback(() => getDistrictSituations(), []));
@@ -42,6 +49,7 @@ export default function LiveMapPage() {
 
   const [district, setDistrict] = useState<string | null>(null);
   const { lang } = useLang();
+  const m = pageStrings(lang).misc;
 
   /* Shelters closest to whatever the operator has selected, so the list below
      the map always describes the area on screen. */
@@ -71,7 +79,7 @@ export default function LiveMapPage() {
         lng: i.lng,
         label: i.title,
         sublabel: i.code,
-        district: districtOf(i.address),
+        district: districtOf(i.address, i.lat, i.lng),
       });
     for (const g of groundTruth.data ?? [])
       out.push({
@@ -126,9 +134,9 @@ export default function LiveMapPage() {
     <div className="p-3 sm:p-4">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="cmd text-[24px] leading-none">Live Map</h1>
+          <h1 className="cmd text-[24px] leading-none">{m.liveMap}</h1>
           <p className="text-sm text-[var(--muted)]">
-            District risk posture and operational markers across the state.
+            {m.liveMapIntro}
           </p>
         </div>
         <DataModeBadge mode={situations.mode} note={situations.error} />
@@ -158,8 +166,8 @@ export default function LiveMapPage() {
 
         <section className="panel flex min-h-0 flex-col">
           <div className="panel-head">
-            <h2 className="cmd text-[12px]">Districts by risk</h2>
-            <span className="telemetry ml-auto">{ranked.length} in view</span>
+            <h2 className="cmd text-[12px]">{m.districtsByRisk}</h2>
+            <span className="telemetry ml-auto">{m.inView(ranked.length)}</span>
           </div>
           <ul className="thin-scroll flex-1 divide-y divide-[var(--border)] overflow-y-auto">
             {ranked.map((s) => {
@@ -182,14 +190,14 @@ export default function LiveMapPage() {
                         className="text-[10px] font-bold uppercase tracking-wide"
                         style={{ color: meta.color }}
                       >
-                        {meta.label}
+                        {riskLabel(s.risk, lang)}
                       </span>
                     </span>
                     <span className="mono shrink-0 text-right text-[11px] text-[var(--muted)]">
                       <span className="block font-bold text-[var(--foreground)]">
                         {s.activeIncidents}
                       </span>
-                      incidents
+                      {m.incidentsLabel}
                     </span>
                   </button>
                 </li>
@@ -205,9 +213,25 @@ export default function LiveMapPage() {
   );
 }
 
-function districtOf(text: string): string {
-  const m = /(Ahmedabad|Gandhinagar|Surat|Vadodara|Bharuch|Rajkot|Jamnagar|Kutch|Narmada|Navsari|Valsad|Bhavnagar|Junagadh|Amreli|Patan|Mehsana|Banaskantha)/.exec(
-    text,
-  );
-  return m ? m[1] : "Ahmedabad";
+/**
+ * Best-effort district from a free-text address or base name.
+ *
+ * `text` is nullable because `Incident.address` is: an incident raised from a
+ * sensor reading, or from a caller who never named a landmark, has no address
+ * at all. When there is no usable text the district is taken from the marker's
+ * own coordinates instead of defaulting to Ahmedabad, which would file a Kutch
+ * incident under the wrong district on a map whose whole job is where things
+ * are.
+ */
+function districtOf(text: string | null, lat?: number, lng?: number): string {
+  const m = text
+    ? /(Ahmedabad|Gandhinagar|Surat|Vadodara|Bharuch|Rajkot|Jamnagar|Kutch|Narmada|Navsari|Valsad|Bhavnagar|Junagadh|Amreli|Patan|Mehsana|Banaskantha)/.exec(
+        text,
+      )
+    : null;
+  if (m) return m[1];
+  if (lat !== undefined && lng !== undefined) {
+    return nearestDistrict(lat, lng)?.name ?? "Ahmedabad";
+  }
+  return "Ahmedabad";
 }

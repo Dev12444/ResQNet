@@ -114,7 +114,14 @@ export interface Incident {
   title: string;
   lat: number;
   lng: number;
-  address: string;
+  /**
+   * Nullable, matching `IncidentOut.address` on the API and the `Text` column
+   * behind it: an incident raised from a sensor reading or a caller who never
+   * gave a landmark has no address at all. This was typed `string` and the
+   * analytics page took it at its word, so one address-less incident in the
+   * live feed crashed the whole route.
+   */
+  address: string | null;
   ai_summary: string;
   ai_reasoning: string;
   ai_actions: string[];
