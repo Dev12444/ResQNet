@@ -279,7 +279,21 @@ async function withFallback<T>(
     return envelope(data, "live");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Request failed";
-    const note = isProbablyWaking(err) ? apiNotes().serverWaking : message;
+    /*
+     * A 404 here is not a failure, it is an absence. Several of these feeds
+     * (weather warnings, shelters, district situation, ground truth) are not
+     * in the API contract at all, so the endpoint is missing on every
+     * deployment rather than broken on this one. FastAPI answers those with
+     * `{"detail": "Not Found"}`, and that string was being rendered verbatim
+     * under "Could not load the warning feed" on a citizen-facing page, which
+     * reads as a fault someone should be chasing. Name the real situation
+     * instead; the caller still decides whether to show fixtures or nothing.
+     */
+    const note = isProbablyWaking(err)
+      ? apiNotes().serverWaking
+      : err instanceof ApiError && err.status === 404
+        ? apiNotes().notOnThisDeployment
+        : message;
     const cached = cache.get(key) as T | undefined;
     if (cached !== undefined) {
       return envelope(cached, "stale", `${note} — showing last known data`);

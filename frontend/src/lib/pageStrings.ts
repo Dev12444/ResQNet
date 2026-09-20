@@ -864,6 +864,8 @@ interface MiscStrings {
     showingDemoData: (note: string) => string;
     /** No sensor-sourced report has arrived, so there is nothing to rebuild a sensor from. */
     noSensorReports: string;
+    /** The endpoint answered 404: this deployment simply does not carry that feed. */
+    notOnThisDeployment: string;
   };
   freshness: {
     offline: string;
@@ -2004,6 +2006,7 @@ const en: PageStrings = {
       timedOut: "Request timed out",
       showingDemoData: (note) => `${note} — showing demo data`,
       noSensorReports: "No sensor readings have reached the control room yet",
+      notOnThisDeployment: "This deployment does not carry that feed",
     },
     freshness: {
       offline: "OFFLINE",
@@ -2970,6 +2973,7 @@ const gu: PageStrings = {
       timedOut: "વિનંતીનો સમય પૂરો થયો",
       showingDemoData: (note) => `${note} — ડેમો માહિતી બતાવાય છે`,
       noSensorReports: "હજુ સુધી કંટ્રોલ રૂમ સુધી કોઈ સેન્સર રીડિંગ પહોંચ્યું નથી",
+      notOnThisDeployment: "આ ડિપ્લોયમેન્ટ પર આ ફીડ ઉપલબ્ધ નથી",
     },
     freshness: {
       offline: "ઓફલાઇન",
@@ -3934,6 +3938,7 @@ const hi: PageStrings = {
       timedOut: "अनुरोध का समय समाप्त",
       showingDemoData: (note) => `${note} — डेमो डेटा दिखाया जा रहा है`,
       noSensorReports: "अभी तक कंट्रोल रूम तक कोई सेंसर रीडिंग नहीं पहुँची है",
+      notOnThisDeployment: "इस डिप्लॉयमेंट पर यह फ़ीड उपलब्ध नहीं है",
     },
     freshness: {
       offline: "ऑफ़लाइन",
