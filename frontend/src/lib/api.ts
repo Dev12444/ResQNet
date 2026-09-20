@@ -1196,11 +1196,26 @@ export async function getReliefRequests(): Promise<Envelope<ReliefRequest[]>> {
   );
 }
 
+/** The API's own shape for a warning: snake_case, like every other endpoint. */
+interface WeatherAlertPayload {
+  id: string;
+  disaster: WeatherAlert["disaster"];
+  severity: WeatherAlert["severity"];
+  district: string;
+  headline: string;
+  detail: string;
+  issued_at: string;
+  source: string;
+}
+
 export async function getWeatherAlerts(): Promise<Envelope<WeatherAlert[]>> {
   return withFallback(
     "weather-alerts",
     () => mock.MOCK_WEATHER_ALERTS,
-    () => request<WeatherAlert[]>("/api/weather/alerts"),
+    async () => {
+      const rows = await request<WeatherAlertPayload[]>("/api/weather/alerts");
+      return rows.map(({ issued_at, ...rest }) => ({ ...rest, issuedAt: issued_at }));
+    },
     // A fabricated CRITICAL cyclone warning, attributed to IMD, raised the
     // emergency banner on every page of a live build. Nothing invented may
     // carry an authority's name.

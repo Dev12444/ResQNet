@@ -207,6 +207,34 @@ class AlertOut(ORMModel):
     created_at: UTCDatetime
 
 
+# ------------------------------------------------------------ warnings
+
+DisasterType = Literal[
+    "cyclone", "flood", "fire", "earthquake", "medical",
+    "road_block", "infrastructure", "missing_person", "heavy_rainfall", "other",
+]
+RiskLevel = Literal["normal", "watch", "moderate", "high", "critical"]
+
+
+class WeatherAlertOut(BaseModel):
+    """An active warning on the citizen pages.
+
+    Derived from incidents and sensor readings the platform already holds, never
+    from a forecast. `source` always names ResQNet and the evidence behind the
+    warning: attributing generated text to IMD or any other authority is the one
+    thing this surface must never do.
+    """
+
+    id: str
+    disaster: DisasterType
+    severity: RiskLevel
+    district: str
+    headline: str
+    detail: str
+    issued_at: UTCDatetime
+    source: str
+
+
 # ---------------------------------------------------------------- incidents
 
 

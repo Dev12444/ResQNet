@@ -18,7 +18,18 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import SessionLocal, get_db, init_db
 from app.pipeline import cancel_trailing_refreshes
-from app.routers import ai, alerts, analytics, dispatch, incidents, reports, resources, simulator, ws
+from app.routers import (
+    ai,
+    alerts,
+    analytics,
+    dispatch,
+    incidents,
+    reports,
+    resources,
+    simulator,
+    weather,
+    ws,
+)
 from app.schemas import HealthOut
 from app.seed import seed_if_empty
 from app.services.escalation import loop as escalation_loop
@@ -108,3 +119,4 @@ app.include_router(ws.router)
 # BE2 routers (contract §3 AI + Analytics).
 app.include_router(ai.router)
 app.include_router(analytics.router)
+app.include_router(weather.router)
