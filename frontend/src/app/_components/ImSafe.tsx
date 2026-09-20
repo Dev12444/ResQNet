@@ -9,11 +9,11 @@
  */
 
 import { useEffect, useState } from "react";
-import { Check, ShieldCheck, X } from "lucide-react";
+import { Check, ShieldCheck, UserPlus, X } from "lucide-react";
 import type { Lang, SafeCheckIn } from "@/types";
 import { GUJARAT_DISTRICTS, PLATFORM_STRINGS } from "@/lib/constants";
 import { submitSafeCheckIn } from "@/lib/api";
-import { readCloseOneContacts, readCloseOnes } from "./CitizenCards";
+import { openAddCloseOne, readCloseOneContacts, readCloseOnes } from "./CitizenCards";
 
 export function ImSafeCard({ lang }: { lang: Lang }) {
   const t = PLATFORM_STRINGS[lang];
@@ -191,30 +191,49 @@ function ImSafeDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
               />
             </label>
 
-            <label className="flex min-h-11 items-center gap-2.5 border border-[var(--border-strong)] px-3">
-              <input
-                type="checkbox"
-                checked={notify && contacts.length > 0}
-                disabled={contacts.length === 0}
-                onChange={(e) => setNotify(e.target.checked)}
-                className="size-4"
-              />
-              <span className="text-sm">
-                {contacts.length > 0 ? (
-                  <>
-                    Notify my close ones
-                    <span className="text-[var(--muted)]">
-                      {" "}
-                      &mdash; {contacts.map((c) => c.name).join(", ")}
-                    </span>
-                  </>
-                ) : (
+            {contacts.length > 0 ? (
+              <label className="flex min-h-11 items-center gap-2.5 border border-[var(--border-strong)] px-3">
+                <input
+                  type="checkbox"
+                  checked={notify}
+                  onChange={(e) => setNotify(e.target.checked)}
+                  className="size-4"
+                />
+                <span className="text-sm">
+                  Notify my close ones
                   <span className="text-[var(--muted)]">
-                    No close ones saved. Add them on the home screen first.
+                    {" "}
+                    &mdash; {contacts.map((c) => c.name).join(", ")}
                   </span>
-                )}
-              </span>
-            </label>
+                </span>
+              </label>
+            ) : (
+              /*
+               * An empty list used to be a disabled checkbox next to "add them
+               * on the home screen first" — a dead end. The card that adds them
+               * sits below the map, a screen and a half down on a phone, so
+               * that sentence was an instruction with nowhere to follow it to.
+               * Close the dialog and take them there instead; the check-in
+               * itself still works without a single contact saved.
+               */
+              <div className="border border-dashed border-[var(--border-strong)] px-3 py-2.5">
+                <p className="text-sm text-[var(--muted)]">
+                  No close ones saved yet, so this check-in will reach the control
+                  room only.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    openAddCloseOne();
+                  }}
+                  className="mt-1.5 flex min-h-11 w-full items-center justify-center gap-1.5 border border-[var(--navy-600)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--navy-700)] hover:bg-[var(--info-bg)]"
+                >
+                  <UserPlus className="size-4" aria-hidden />
+                  Add close ones
+                </button>
+              </div>
+            )}
 
             {error && (
               <p role="alert" className="text-xs" style={{ color: "var(--critical)" }}>
