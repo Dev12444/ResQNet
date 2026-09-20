@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * ResQ Chain — Report → Verify → Respond → Resolve.
  *
@@ -8,8 +10,12 @@
 
 import type { ChainEvent } from "@/types";
 import { CHAIN_STAGES, CHAIN_STATUS_META } from "@/lib/constants";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 
 export function IncidentTimeline({ chain }: { chain: ChainEvent[] }) {
+  const { lang } = useLang();
+  const t = labels(lang);
   const reachedStages = new Set(chain.map((e) => CHAIN_STATUS_META[e.status].stage));
 
   return (
@@ -36,7 +42,7 @@ export function IncidentTimeline({ chain }: { chain: ChainEvent[] }) {
                   done ? "" : "text-[var(--muted)]"
                 }`}
               >
-                {stage.label}
+                {t.chainStage[stage.id]}
               </span>
             </li>
           );
@@ -59,7 +65,7 @@ export function IncidentTimeline({ chain }: { chain: ChainEvent[] }) {
               />
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-semibold" style={{ color: meta.color }}>
-                  {meta.label}
+                  {t.chainStatus[event.status]}
                 </p>
                 <p className="text-xs text-[var(--muted)]">{event.actor}</p>
                 {event.note && (
