@@ -5,6 +5,16 @@ import { useEffect, useRef } from 'react';
 import type { MapRef } from 'react-map-gl/maplibre';
 import type { StyleSpecification } from 'maplibre-gl';
 import { Ambulance, Flame, HeartPulse, House, LifeBuoy, Plus, Shield, Siren, Waves, X } from 'lucide-react';
+import { ensureMapLibreWorker } from '@/components/layout/maplibreWorker';
+
+// At module scope, not in an effect: react-map-gl constructs the MapLibre map
+// inside <Map>'s own effect, and a parent's effect runs after its children's,
+// so by then the worker URL is already fixed. Without this the console center
+// map falls back to MapLibre's bundled worker chunk, which the static export
+// does not emit — the request 404s to index.html and the browser refuses it
+// for its MIME type. See maplibreWorker.ts; the other two maps call it
+// directly before `new MapLibreMap(...)`, which this one never gets to do.
+ensureMapLibreWorker();
 
 const severityColor=['#22c55e','#84cc16','#f59e0b','#f97316','#7f1d1d'];
 function IncidentIcon({type}:{type:Incident['type']}){const p={size:15,strokeWidth:2.3}; if(type==='flood')return <Waves {...p}/>; if(type==='fire')return <Flame {...p}/>; if(type==='medical')return <HeartPulse {...p}/>; if(type==='road_accident')return <Siren {...p}/>; if(type==='building_collapse')return <House {...p}/>; if(type==='industrial')return <Shield {...p}/>; return <X {...p}/>}
