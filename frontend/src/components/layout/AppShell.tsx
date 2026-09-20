@@ -19,21 +19,16 @@
  * the emergency numbers belong to the whole system; only the workspace is
  * indented by the rail.
  *
- * Language lives here so the choice persists across routes, and is exposed
- * through `useLang()` rather than threaded down as props. Flash-alert state
- * lives here too, because a mass warning has to be able to reach a citizen on
- * any page — see `FlashAlertProvider`.
+ * Language is read from `LangProvider` in the root layout rather than owned
+ * here: this component hands `/dashboard` straight through, so a choice living
+ * at this level never reached the operator console. Flash-alert state does
+ * live here, because a mass warning has to be able to reach a citizen on any
+ * page — see `FlashAlertProvider`.
  */
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import type { DataMode, Lang, WeatherAlert } from "@/types";
+import type { DataMode, WeatherAlert } from "@/types";
 import { PLATFORM_STRINGS } from "@/lib/constants";
 import { getWeatherAlerts } from "@/lib/api";
 import { Sidebar } from "./Sidebar";
@@ -45,26 +40,16 @@ import { CriticalAlertBanner } from "./CriticalAlertBanner";
 import { ConnectivityBanner, useConnectivity } from "./StatusIndicator";
 import { FlashAlertProvider } from "@/components/flash/FlashAlertProvider";
 import { SiteFooter } from "./SiteFooter";
+import { useLang } from "./LangProvider";
 
-const LANG_KEY = "resqnet.lang";
-
-interface LangContextValue {
-  lang: Lang;
-  setLang: (lang: Lang) => void;
-}
-
-const LangContext = createContext<LangContextValue>({
-  lang: "en",
-  setLang: () => {},
-});
-
-/** Current interface language. Never applied to citizen-authored text. */
-export function useLang(): LangContextValue {
-  return useContext(LangContext);
-}
+/*
+ * Re-exported so the four existing call sites keep importing `useLang` from
+ * here. The hook itself now lives in `LangProvider`.
+ */
+export { useLang } from "./LangProvider";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("en");
+  const { lang, setLang } = useLang();
   const [menuOpen, setMenuOpen] = useState(false);
   const [alerts, setAlerts] = useState<WeatherAlert[]>([]);
   // Provenance travels with the alerts: the banner must not present a demo
@@ -72,21 +57,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [alertMode, setAlertMode] = useState<DataMode>("simulated");
   const connectivity = useConnectivity();
   const pathname = usePathname() ?? "";
-
-  // Restore the saved language after mount — reading storage during render
-  // would desync the server-rendered markup.
-  useEffect(() => {
-    // Deferred so the restore does not set state synchronously in the effect.
-    const timer = setTimeout(() => {
-      try {
-        const saved = window.localStorage.getItem(LANG_KEY);
-        if (saved === "en" || saved === "gu" || saved === "hi") setLangState(saved);
-      } catch {
-        /* storage blocked — English is a fine default */
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,20 +72,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const setLang = useCallback((next: Lang) => {
-    setLangState(next);
-    try {
-      window.localStorage.setItem(LANG_KEY, next);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   // The control room is a full-screen console with its own header, 112 bar and live status.
   if (pathname.startsWith("/dashboard")) return <>{children}</>;
 
   return (
-    <LangContext.Provider value={{ lang, setLang }}>
+    <>
       <FlashAlertProvider lang={lang}>
         <a href="#main" className="skip-link">
           {PLATFORM_STRINGS[lang].chrome.skipToContent}
@@ -148,6 +109,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <SiteFooter lang={lang} />
       </FlashAlertProvider>
-    </LangContext.Provider>
+    </>
   );
 }

@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Trust, corroboration and AI-confidence display.
  *
@@ -7,6 +9,10 @@
  *   2. Repeated reports from one person are not independent confirmation, so
  *      unique sources are always shown next to the raw report count.
  *   3. AI numbers are labelled confidence, never certainty or confirmation.
+ *
+ * Each badge reads the interface language itself. These are rendered from
+ * dozens of call sites across every page, and the ones that had no language in
+ * scope are exactly why a Gujarati page still showed UNVERIFIED in English.
  */
 
 import type {
@@ -22,35 +28,42 @@ import type {
 import {
   CONFIDENCE_META,
   DUPLICATE_STATE_META,
-  HAZARD_LABEL,
-  INCIDENT_TYPE_META,
   PRIORITY_COLOR,
-  PRIORITY_LABEL,
   SEVERITY_COLOR,
-  SEVERITY_LABEL,
-  SOURCE_META,
+  TYPE_LABEL_I18N,
   VERIFICATION_META,
   confidenceBand,
 } from "@/lib/constants";
+import { labels, strings } from "@/lib/i18n";
 import { Badge } from "./primitives";
+import { useLang } from "./LangProvider";
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
+  const { lang } = useLang();
   return (
     <Badge
-      label={`SEV ${severity} · ${SEVERITY_LABEL[severity].toUpperCase()}`}
+      label={`SEV ${severity} · ${labels(lang).severity[severity].toUpperCase()}`}
       color={SEVERITY_COLOR[severity]}
     />
   );
 }
 
 export function PriorityBadge({ priority }: { priority: Priority }) {
-  return <Badge label={PRIORITY_LABEL[priority]} color={PRIORITY_COLOR[priority]} variant="tint" />;
+  const { lang } = useLang();
+  return (
+    <Badge
+      label={labels(lang).priority[priority]}
+      color={PRIORITY_COLOR[priority]}
+      variant="tint"
+    />
+  );
 }
 
 export function TypeBadge({ type }: { type: IncidentType }) {
+  const { lang } = useLang();
   return (
     <Badge
-      label={INCIDENT_TYPE_META[type].label}
+      label={TYPE_LABEL_I18N[lang][type]}
       color="var(--muted)"
       variant="outline"
     />
@@ -58,24 +71,41 @@ export function TypeBadge({ type }: { type: IncidentType }) {
 }
 
 export function VerificationBadge({ status }: { status: VerificationStatus }) {
-  const meta = VERIFICATION_META[status];
-  return <Badge label={meta.label} color={meta.color} variant="tint" title={meta.note} />;
+  const { lang } = useLang();
+  const t = labels(lang);
+  return (
+    <Badge
+      label={t.verification[status]}
+      color={VERIFICATION_META[status].color}
+      variant="tint"
+      title={t.verificationNote[status]}
+    />
+  );
 }
 
 export function DuplicateBadge({ state }: { state: DuplicateState }) {
-  const meta = DUPLICATE_STATE_META[state];
-  return <Badge label={meta.label} color={meta.color} variant="tint" />;
+  const { lang } = useLang();
+  return (
+    <Badge
+      label={labels(lang).duplicate[state]}
+      color={DUPLICATE_STATE_META[state].color}
+      variant="tint"
+    />
+  );
 }
 
 export function HazardList({ hazards, label }: { hazards: Hazard[]; label?: string }) {
+  const { lang } = useLang();
   if (hazards.length === 0) {
-    return <span className="text-sm text-[var(--muted)]">None recorded</span>;
+    return (
+      <span className="text-sm text-[var(--muted)]">{strings(lang).trust.noneRecorded}</span>
+    );
   }
   return (
     <div className="flex flex-wrap gap-1">
       {label && <span className="sr-only">{label}</span>}
       {hazards.map((h) => (
-        <Badge key={h} label={HAZARD_LABEL[h]} color="var(--high)" variant="tint" />
+        <Badge key={h} label={labels(lang).hazard[h]} color="var(--high)" variant="tint" />
       ))}
     </div>
   );
@@ -92,6 +122,8 @@ export function ConfidenceMeter({
   confidence: number;
   compact?: boolean;
 }) {
+  const { lang } = useLang();
+  const t = strings(lang).trust;
   const band = confidenceBand(confidence);
   const meta = CONFIDENCE_META[band];
   const pct = Math.round(confidence * 100);
@@ -101,7 +133,7 @@ export function ConfidenceMeter({
         <span className="mono text-sm font-semibold" style={{ color: meta.color }}>
           {pct}%
         </span>
-        <Badge label={meta.label} color={meta.color} variant="tint" />
+        <Badge label={labels(lang).confidence[band]} color={meta.color} variant="tint" />
       </div>
       {!compact && (
         <>
@@ -111,14 +143,11 @@ export function ConfidenceMeter({
             aria-valuenow={pct}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label="AI confidence"
+            aria-label={t.aiConfidence}
           >
             <div className="h-full" style={{ width: `${pct}%`, background: meta.color }} />
           </div>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            AI confidence in this classification — not a confirmation that the emergency
-            occurred.
-          </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{t.aiConfidenceNote}</p>
         </>
       )}
     </div>
@@ -130,28 +159,26 @@ export function ConfidenceMeter({
  * The gap between the first two numbers is the point of this component.
  */
 export function SourceEvidence({ sources }: { sources: SourceBreakdown }) {
+  const { lang } = useLang();
+  const t = strings(lang).trust;
+  const source = labels(lang).source;
+
   const parts: string[] = [];
-  if (sources.citizen) parts.push(`${SOURCE_META.citizen.short} ${sources.citizen}`);
-  if (sources.call) parts.push(`${SOURCE_META.call.short} ${sources.call}`);
-  if (sources.sensor) parts.push(`${SOURCE_META.sensor.short} ${sources.sensor}`);
-  if (sources.field) parts.push(`${SOURCE_META.field.short} ${sources.field}`);
+  if (sources.citizen) parts.push(`${source.citizen} ${sources.citizen}`);
+  if (sources.call) parts.push(`${source.call} ${sources.call}`);
+  if (sources.sensor) parts.push(`${source.sensor} ${sources.sensor}`);
+  if (sources.field) parts.push(`${source.field} ${sources.field}`);
 
   const repeated = sources.reports - sources.unique_sources;
 
   return (
     <div>
       <p className="mono text-sm">
-        <strong className="font-semibold">{sources.reports}</strong> report
-        {sources.reports === 1 ? "" : "s"} ·{" "}
-        <strong className="font-semibold">{sources.unique_sources}</strong> unique source
-        {sources.unique_sources === 1 ? "" : "s"}
+        {t.evidence(sources.reports, sources.unique_sources)}
         {parts.length > 0 && <> · {parts.join(" · ")}</>}
       </p>
       {repeated > 0 && (
-        <p className="mt-1 text-xs text-[var(--muted)]">
-          {repeated} repeat report{repeated === 1 ? "" : "s"} from an already-counted reporter —
-          not independent confirmation.
-        </p>
+        <p className="mt-1 text-xs text-[var(--muted)]">{t.repeats(repeated)}</p>
       )}
     </div>
   );
@@ -159,16 +186,16 @@ export function SourceEvidence({ sources }: { sources: SourceBreakdown }) {
 
 /** Disagreements between sources, shown rather than resolved silently. */
 export function ConflictPanel({ conflicts }: { conflicts: ConflictNote[] }) {
+  const { lang } = useLang();
+  const t = strings(lang).trust;
   if (conflicts.length === 0) return null;
   return (
     <div
       className="border-l-4 px-3 py-2"
       style={{ borderColor: "var(--high)", background: "var(--high-bg)" }}
     >
-      <p className="text-sm font-semibold uppercase tracking-wide">Conflicting information</p>
-      <p className="mt-0.5 text-xs text-[var(--muted)]">
-        Sources disagree. Both accounts are kept until a responder confirms on scene.
-      </p>
+      <p className="text-sm font-semibold uppercase tracking-wide">{t.conflictTitle}</p>
+      <p className="mt-0.5 text-xs text-[var(--muted)]">{t.conflictNote}</p>
       <dl className="mt-2 space-y-2">
         {conflicts.map((conflict) => (
           <div key={conflict.field}>
@@ -181,7 +208,7 @@ export function ConflictPanel({ conflicts }: { conflicts: ConflictNote[] }) {
                   <li key={`${claim.report_id}-${claim.value}`} className="text-sm">
                     <span>{claim.value}</span>{" "}
                     <span className="mono text-xs text-[var(--muted)]">
-                      — {SOURCE_META[claim.source].short}, report #{claim.report_id}
+                      — {labels(lang).source[claim.source]}, #{claim.report_id}
                     </span>
                   </li>
                 ))}

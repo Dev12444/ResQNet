@@ -8,6 +8,7 @@ import {
 } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout/AppShell";
+import { LangProvider } from "@/components/layout/LangProvider";
 
 /**
  * Two Latin faces, deliberately.
@@ -95,8 +96,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
+      {/* `lang` above is the server's best guess; LangProvider corrects the
+          live document once the saved preference is known. */}
       <body className="flex min-h-full flex-col">
-        <AppShell>{children}</AppShell>
+        <LangProvider>
+          <AppShell>{children}</AppShell>
+        </LangProvider>
       </body>
     </html>
   );

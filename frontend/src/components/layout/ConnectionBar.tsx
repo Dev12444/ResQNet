@@ -12,7 +12,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConnectionStatus, DataMode } from "@/types";
 import { DATA_MODE_META, STALE_AFTER_SEC } from "@/lib/constants";
+import { labels } from "@/lib/i18n";
 import { ping, USE_MOCK } from "@/lib/api";
+import { useLang } from "./LangProvider";
 
 /** Poll interval for the reachability probe. */
 const PROBE_MS = 20000;
@@ -123,16 +125,24 @@ export function clockTime(d: Date): string {
     .join(":");
 }
 
-/** LIVE / CACHED / STALE / SIMULATED, for a single panel's data. */
+/**
+ * LIVE / CACHED / STALE / SIMULATED, for a single panel's data.
+ *
+ * Reads the language itself rather than taking it as a prop: this badge sits
+ * in eleven different pages, most of which had no language in scope, and
+ * threading one through each of them is how it stayed English for so long.
+ */
 export function DataModeBadge({ mode, note }: { mode: DataMode; note?: string | null }) {
+  const { lang } = useLang();
   const meta = DATA_MODE_META[mode];
+  const label = labels(lang).dataMode[mode];
   return (
     <span
       className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
       style={{ background: `${meta.color}1a`, color: meta.color, border: `1px solid ${meta.color}55` }}
       title={note ?? undefined}
     >
-      {meta.label}
+      {label}
     </span>
   );
 }
