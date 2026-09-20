@@ -87,6 +87,8 @@ export function VoiceInput({
   /** True while the citizen has dictation open, across Chrome's pause-restarts. */
   const wantListening = useRef(false);
   const restarts = useRef(0);
+  /** Interim text the engine has not marked final, so ending can still keep it. */
+  const pendingUncommitted = useRef("");
 
   useEffect(() => {
     // Deferred: detection must not set state synchronously in the effect body,
@@ -119,15 +121,19 @@ export function VoiceInput({
 
     rec.onresult = (event) => {
       let finalText = "";
-      let pending = "";
+      let pendingText = "";
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i];
         if (result.isFinal) finalText += result[0].transcript;
-        else pending += result[0].transcript;
+        else pendingText += result[0].transcript;
       }
-      setInterim(pending);
+      // Mirrored into a ref so a session ending from anywhere — a stop, a
+      // pause-restart, an unmount — still knows what was left uncommitted.
+      pendingUncommitted.current = pendingText;
+      setInterim(pendingText);
       if (finalText.trim()) {
         onTranscript(finalText.trim());
+        pendingUncommitted.current = "";
         setInterim("");
       }
     };
@@ -154,6 +160,19 @@ export function VoiceInput({
     };
 
     rec.onend = () => {
+      /*
+       * Commit whatever the engine never marked final.
+       *
+       * Interim text is shown live under the button, so the citizen watches
+       * their words appear — and then watched them vanish, because ending the
+       * session simply cleared them. Anything not finalised at that moment was
+       * silently discarded, which is the whole of "it doesn't save what I
+       * said". Committing here loses nothing: when Chrome does finalise
+       * (its usual behaviour on stop), `onresult` has already emptied this.
+       */
+      const leftover = pendingUncommitted.current.trim();
+      pendingUncommitted.current = "";
+      if (leftover) onTranscript(leftover);
       setInterim("");
       /*
        * Chrome ends the session on each natural pause even with `continuous`.
