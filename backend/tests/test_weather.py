@@ -150,6 +150,25 @@ def test_sensor_below_threshold_is_not_a_warning(client, db):
     assert client.get("/api/weather/alerts").json() == []
 
 
+def test_district_from_coordinates_when_address_names_none(db, client):
+    # Live incidents read "Akhbarnagar Underpass" or "Maninagar" with no
+    # district in the text at all; four of five warnings were filing under a
+    # literal "Gujarat" before the coordinates were consulted.
+    _incident(db, code="INC-9100", address="Akhbarnagar Underpass", lat=23.05, lng=72.57)
+    assert client.get("/api/weather/alerts").json()[0]["district"] == "Ahmedabad"
+
+
+def test_district_is_gujarat_only_when_nothing_locates_it(db, client):
+    _incident(db, code="INC-9101", address=None, lat=None, lng=None)
+    assert client.get("/api/weather/alerts").json()[0]["district"] == "Gujarat"
+
+
+def test_address_name_wins_over_coordinates(db, client):
+    # A Kutch address with Ahmedabad coordinates must follow what was written.
+    _incident(db, code="INC-9102", address="Jakhau Port Road, Kutch", lat=23.05, lng=72.57)
+    assert client.get("/api/weather/alerts").json()[0]["district"] == "Kutch"
+
+
 def test_district_filter(client, db):
     _incident(db, code="INC-9004")
     _incident(db, code="INC-9005", address="Jakhau Port Road, Kutch", title="Coastal surge")

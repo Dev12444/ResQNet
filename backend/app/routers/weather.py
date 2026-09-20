@@ -45,12 +45,29 @@ _DISASTER_BY_TYPE = {
 # Severity 1-5 onto the five-step risk ladder the warning cards colour by.
 _RISK_BY_SEVERITY = {5: "critical", 4: "critical", 3: "high", 2: "moderate", 1: "watch"}
 
-# Districts are read out of the incident's own address. Ordered longest-first
-# so "North Gujarat" style prefixes cannot shadow a more specific name.
-_DISTRICTS = [
-    "Banaskantha", "Gandhinagar", "Bhavnagar", "Jamnagar", "Junagadh", "Ahmedabad",
-    "Vadodara", "Bharuch", "Narmada", "Navsari", "Mehsana", "Amreli", "Rajkot",
-    "Valsad", "Kutch", "Patan", "Surat",
+# District centroids, mirroring GUJARAT_DISTRICTS on the frontend. The name is
+# matched against the incident's address first; where the address names no
+# district — "Akhbarnagar Underpass", "Maninagar", or nothing at all — the
+# coordinates decide, because filing four warnings out of five under a literal
+# "Gujarat" makes the district filter on /weather useless.
+_DISTRICTS: list[tuple[str, float, float]] = [
+    ("Kutch", 23.7337, 69.8597),
+    ("Banaskantha", 24.1722, 72.4383),
+    ("Patan", 23.8493, 72.1266),
+    ("Mehsana", 23.5880, 72.3693),
+    ("Gandhinagar", 23.2156, 72.6369),
+    ("Ahmedabad", 23.0225, 72.5714),
+    ("Jamnagar", 22.4707, 70.0577),
+    ("Rajkot", 22.3039, 70.8022),
+    ("Junagadh", 21.5222, 70.4579),
+    ("Amreli", 21.6032, 71.2221),
+    ("Bhavnagar", 21.7645, 72.1519),
+    ("Vadodara", 22.3072, 73.1812),
+    ("Bharuch", 21.7051, 72.9959),
+    ("Narmada", 21.8700, 73.5000),
+    ("Surat", 21.1702, 72.8311),
+    ("Navsari", 20.9467, 72.9520),
+    ("Valsad", 20.5992, 72.9342),
 ]
 
 # Incidents below this are ordinary operational traffic, not something a
@@ -58,11 +75,18 @@ _DISTRICTS = [
 _MIN_SEVERITY = 3
 
 
-def _district_of(address: str | None) -> str:
+def _district_of(address: str | None, lat: float | None = None, lng: float | None = None) -> str:
+    """District by name in the address, else the nearest centroid, else Gujarat."""
     if address:
-        for name in _DISTRICTS:
-            if name.lower() in address.lower():
+        low = address.lower()
+        # Longest name first, so "Banaskantha" cannot lose to a shorter substring.
+        for name, _, _ in sorted(_DISTRICTS, key=lambda d: -len(d[0])):
+            if name.lower() in low:
                 return name
+    if lat is not None and lng is not None:
+        # Plane geometry is accurate enough at this scale to pick a neighbour,
+        # the same approximation the analytics hotspots use.
+        return min(_DISTRICTS, key=lambda d: (d[1] - lat) ** 2 + (d[2] - lng) ** 2)[0]
     return "Gujarat"
 
 
@@ -86,7 +110,7 @@ def list_weather_alerts(
                 "id": f"WA-INC-{inc.id}",
                 "disaster": _DISASTER_BY_TYPE.get(inc.type, "other"),
                 "severity": _RISK_BY_SEVERITY.get(inc.severity, "watch"),
-                "district": _district_of(inc.address),
+                "district": _district_of(inc.address, inc.lat, inc.lng),
                 "headline": inc.title,
                 # The AI summary is already a plain-language account of what was
                 # reported. Where it has not been written yet, say what is known
@@ -130,7 +154,7 @@ def list_weather_alerts(
                 "id": f"WA-SEN-{sid}",
                 "disaster": "flood" if "water" in metric or "rain" in metric else "infrastructure",
                 "severity": "critical" if value >= threshold * 1.15 else "high",
-                "district": _district_of(rep.address),
+                "district": _district_of(rep.address, rep.lat, rep.lng),
                 "headline": f"{sid} above threshold",
                 "detail": (
                     f"{metric.replace('_', ' ')} at {value}{unit} against a "
