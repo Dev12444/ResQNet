@@ -256,6 +256,7 @@ export function ReportForm({
           useMyLocation: t.useMyLocation,
           locating: t.locating,
           locationDenied: t.locationDenied,
+          locationUnavailable: t.locationUnavailable,
           locationInsecure: t.locationInsecure,
           adjustLocation: t.adjustLocation,
           landmarkLabel: t.landmarkLabel,

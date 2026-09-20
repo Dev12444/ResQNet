@@ -142,19 +142,55 @@ async function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/**
+ * Decode a picked image to something canvas can draw.
+ *
+ * `createImageBitmap` is the fast path, but it throws outright on HEIC/HEIF —
+ * which is what an iPhone shoots by default — and on a few other formats a
+ * given engine will happily render in an `<img>`. Relying on it alone meant a
+ * photo straight off an iPhone hit the catch in `handleFile`, the attachment
+ * was dropped, and the citizen was told their file was unreadable.
+ *
+ * So: try the fast path, then fall back to decoding through an `<img>`, which
+ * uses the browser's full image pipeline (Safari decodes HEIC there). If both
+ * refuse, the format genuinely cannot be read on this device.
+ */
+async function decode(file: File): Promise<CanvasImageSource & { width: number; height: number }> {
+  try {
+    return await createImageBitmap(file);
+  } catch {
+    // Fall through to the <img> path.
+  }
+
+  const url = URL.createObjectURL(file);
+  try {
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Unsupported image format"));
+      img.src = url;
+    });
+  } finally {
+    // Revoking immediately is safe: decoding has finished or failed by here.
+    URL.revokeObjectURL(url);
+  }
+}
+
 /** Resize to fit `MAX_EDGE` and re-encode as JPEG. */
 async function downscale(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
+  const source = await decode(file);
+  const scale = Math.min(1, MAX_EDGE / Math.max(source.width, source.height));
+  const width = Math.round(source.width * scale);
+  const height = Math.round(source.height * scale);
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas unavailable");
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close?.();
+  ctx.drawImage(source, 0, 0, width, height);
+  if (source instanceof ImageBitmap) source.close?.();
+  // Re-encoding to JPEG also normalises HEIC and anything else exotic into a
+  // format the operator console can actually display.
   return canvas.toDataURL("image/jpeg", 0.75);
 }

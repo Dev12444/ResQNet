@@ -496,7 +496,12 @@ export const UI_STRINGS = {
     useMyLocation: "Use My Location",
     locating: "Finding your location…",
     locationDenied:
-      "Location unavailable. Type the nearest landmark instead — your report still works.",
+      "Your browser is blocking location for this site. Allow it in the address-bar icon, or type the nearest landmark instead — your report still works.",
+    /* A timeout or no fix at all, after the coarse retry. Distinct from a
+       refusal: telling someone who granted permission that they denied it
+       sends them to the one setting that is already correct. */
+    locationUnavailable:
+      "Could not get a location fix. Drop a pin on the map, or type the nearest landmark — your report still works.",
     /* Shown instead of locationDenied when the browser refused before it ever
        asked, because the page is not on HTTPS. Naming the real cause is the
        only way the person running it knows what to change. */
@@ -545,9 +550,11 @@ export const UI_STRINGS = {
     useMyLocation: "મારું સ્થાન વાપરો",
     locating: "તમારું સ્થાન શોધી રહ્યા છીએ…",
     locationDenied:
-      "સ્થાન ઉપલબ્ધ નથી. નજીકનું સ્થળ લખો — તમારો રિપોર્ટ તો પણ કામ કરશે.",
+      "તમારું બ્રાઉઝર આ સાઇટ માટે સ્થાન બ્લૉક કરે છે. એડ્રેસ-બારના આઇકનમાંથી મંજૂરી આપો, અથવા નજીકનું સ્થળ લખો — તમારો રિપોર્ટ તો પણ કામ કરશે.",
+    locationUnavailable:
+      "સ્થાન મળી શક્યું નહીં. નકશા પર પિન મૂકો, અથવા નજીકનું સ્થળ લખો — તમારો રિપોર્ટ તો પણ કામ કરશે.",
     locationInsecure:
-      "આ પેજ સુરક્ષિત (HTTPS) કનેક્શન પર નથી, તેથી બ્રાઉઝર સ્થાન બ્લ્ોક કરે છે. નજીકનું સ્થળ લખો — તમારો રિપોર્ટ તો પણ કામ કરશે.",
+      "આ પેજ સુરક્ષિત (HTTPS) કનેક્શન પર નથી, તેથી બ્રાઉઝર સ્થાન બ્લૉક કરે છે. નજીકનું સ્થળ લખો — તમારો રિપોર્ટ તો પણ કામ કરશે.",
     voiceInsecure:
       "વોઇસ ઇનપુટ માટે સુરક્ષિત (HTTPS) કનેક્શન જરૂરી છે. તેને બદલે લખો.",
     adjustLocation: "સ્થાન સુધારો",
@@ -591,7 +598,9 @@ export const UI_STRINGS = {
     useMyLocation: "मेरा स्थान उपयोग करें",
     locating: "आपका स्थान खोजा जा रहा है…",
     locationDenied:
-      "स्थान उपलब्ध नहीं है। पास का लैंडमार्क लिखें — आपकी रिपोर्ट फिर भी जाएगी।",
+      "आपका ब्राउज़र इस साइट के लिए स्थान ब्लॉक कर रहा है। एड्रेस-बार के आइकन से अनुमति दें, या पास का लैंडमार्क लिखें — आपकी रिपोर्ट फिर भी जाएगी।",
+    locationUnavailable:
+      "स्थान का पता नहीं चल सका। मानचित्र पर पिन लगाएँ, या पास का लैंडमार्क लिखें — आपकी रिपोर्ट फिर भी जाएगी।",
     locationInsecure:
       "यह पेज सुरक्षित (HTTPS) कनेक्शन पर नहीं है, इसलिए ब्राउज़र स्थान ब्लॉक कर रहा है। पास का लैंडमार्क लिखें — रिपोर्ट फिर भी जाएगी।",
     voiceInsecure:

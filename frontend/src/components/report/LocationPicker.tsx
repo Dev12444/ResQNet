@@ -46,13 +46,15 @@ export function LocationPicker({
     locating: string;
     locationDenied: string;
     locationInsecure: string;
+    /** No fix available (timeout / position unavailable) — not a refusal. */
+    locationUnavailable: string;
     adjustLocation: string;
     landmarkLabel: string;
     landmarkPlaceholder: string;
   };
 }) {
   const [status, setStatus] = useState<
-    "idle" | "locating" | "denied" | "insecure"
+    "idle" | "locating" | "denied" | "insecure" | "unavailable"
   >("idle");
   const [showMap, setShowMap] = useState(false);
 
@@ -69,21 +71,48 @@ export function LocationPicker({
       return;
     }
     setStatus("locating");
+
+    const accept = (pos: GeolocationPosition) => {
+      setStatus("idle");
+      onChange({
+        ...value,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        source: "gps",
+        accuracy_m: Math.round(pos.coords.accuracy),
+      });
+    };
+
+    /*
+     * Two attempts, because one is wrong on a desktop.
+     *
+     * `enableHighAccuracy` asks for GNSS. A phone answers in seconds; a laptop
+     * has no GPS radio and often just runs out the clock, so a single
+     * high-accuracy call is the common way this button "does nothing" for
+     * someone who granted permission. On timeout or an unavailable position we
+     * retry coarse — a Wi-Fi/IP fix is typically instant, and a few hundred
+     * metres still puts the incident in the right neighbourhood, which the
+     * citizen can then correct on the pin map.
+     *
+     * A denial is never retried: the browser will not re-prompt, and asking
+     * again just stalls for another timeout.
+     */
+    const coarse = () =>
+      navigator.geolocation.getCurrentPosition(
+        accept,
+        () => setStatus("unavailable"),
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 },
+      );
+
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setStatus("idle");
-        onChange({
-          ...value,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          source: "gps",
-          accuracy_m: Math.round(pos.coords.accuracy),
-        });
+      accept,
+      (err) => {
+        // Tell the truth about which one happened: "you denied this" is both
+        // wrong and unactionable for someone whose laptop simply has no fix.
+        if (err.code === err.PERMISSION_DENIED) setStatus("denied");
+        else coarse();
       },
-      // Covers denial, position-unavailable and timeout alike: the citizen
-      // does not need to know which, only that typing still works.
-      () => setStatus("denied"),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
     );
   }
 
@@ -110,13 +139,17 @@ export function LocationPicker({
         </p>
       )}
 
-      {(status === "denied" || status === "insecure") && (
+      {(status === "denied" || status === "insecure" || status === "unavailable") && (
         <p
           role="status"
           className="mt-2 border-l-4 px-2 py-1.5 text-xs"
           style={{ borderColor: "var(--high)", background: "var(--high-bg)" }}
         >
-          {status === "insecure" ? labels.locationInsecure : labels.locationDenied}
+          {status === "insecure"
+            ? labels.locationInsecure
+            : status === "unavailable"
+              ? labels.locationUnavailable
+              : labels.locationDenied}
         </p>
       )}
 
