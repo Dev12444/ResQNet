@@ -13,7 +13,7 @@
  * is told plainly that it has NOT reached the control room.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type {
   CitizenUrgency,
   DisasterType,
@@ -79,6 +79,8 @@ export function ReportForm({
   const p = PLATFORM_STRINGS[lang];
 
   const [text, setText] = useState("");
+  /** So dictation can send the citizen back to the field it wrote into. */
+  const textRef = useRef<HTMLTextAreaElement>(null);
   const [disaster, setDisaster] = useState<DisasterType | null>(null);
   const [urgency, setUrgency] = useState<CitizenUrgency | null>(null);
   const [people, setPeople] = useState("");
@@ -163,6 +165,7 @@ export function ReportForm({
           {t.whatHappening} <span style={{ color: "var(--critical)" }}>*</span>
         </label>
         <textarea
+          ref={textRef}
           id="report-text"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -282,6 +285,17 @@ export function ReportForm({
         unsupportedLabel={t.voiceUnsupported}
         insecureLabel={t.voiceInsecure}
         hintLabel={t.voiceHint}
+        capturedLabel={t.voiceCaptured}
+        reviewLabel={t.voiceReview}
+        nothingHeardLabel={t.voiceNothingHeard}
+        onReview={() => {
+          const el = textRef.current;
+          if (!el) return;
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus({ preventScroll: true });
+          // Caret at the end, so editing continues where dictation left off.
+          el.setSelectionRange(el.value.length, el.value.length);
+        }}
       />
 
       {/* People affected */}

@@ -66,6 +66,10 @@ export function VoiceInput({
   unsupportedLabel,
   insecureLabel,
   hintLabel,
+  capturedLabel,
+  reviewLabel,
+  nothingHeardLabel,
+  onReview,
 }: {
   lang: Lang;
   /** Receives the final transcript, to be appended to the editable text. */
@@ -77,12 +81,21 @@ export function VoiceInput({
   /** Shown when the engine exists but the origin is not HTTPS. */
   insecureLabel: string;
   hintLabel: string;
+  capturedLabel: string;
+  reviewLabel: string;
+  nothingHeardLabel: string;
+  /** Sends the citizen to the description field this writes into. */
+  onReview: () => void;
 }) {
   const [supported, setSupported] = useState(false);
   const [insecure, setInsecure] = useState(false);
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
+  /** What this dictation session put into the description, echoed back below. */
+  const [captured, setCaptured] = useState("");
+  /** Has a dictation session run yet? Distinguishes "heard nothing" from "not tried". */
+  const [attempted, setAttempted] = useState(false);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
   /** True while the citizen has dictation open, across Chrome's pause-restarts. */
   const wantListening = useRef(false);
@@ -110,10 +123,18 @@ export function VoiceInput({
     };
   }, []);
 
+  /** Send a chunk to the form and keep a copy to show back to the citizen. */
+  function commit(chunk: string) {
+    onTranscript(chunk);
+    setCaptured((prev) => (prev ? `${prev} ${chunk}` : chunk));
+  }
+
   function start() {
     const Ctor = getRecognitionCtor();
     if (!Ctor) return;
     setError(null);
+    setCaptured("");
+    setAttempted(true);
     const rec = new Ctor();
     rec.lang = LANGS.find((l) => l.code === lang)?.speech ?? "en-IN";
     rec.continuous = true;
@@ -132,7 +153,7 @@ export function VoiceInput({
       pendingUncommitted.current = pendingText;
       setInterim(pendingText);
       if (finalText.trim()) {
-        onTranscript(finalText.trim());
+        commit(finalText.trim());
         pendingUncommitted.current = "";
         setInterim("");
       }
@@ -172,7 +193,7 @@ export function VoiceInput({
        */
       const leftover = pendingUncommitted.current.trim();
       pendingUncommitted.current = "";
-      if (leftover) onTranscript(leftover);
+      if (leftover) commit(leftover);
       setInterim("");
       /*
        * Chrome ends the session on each natural pause even with `continuous`.
@@ -248,6 +269,44 @@ export function VoiceInput({
           {interim}
         </p>
       )}
+
+      {/*
+        Echo the transcript back once dictation stops.
+
+        The description field this writes into sits ~760px up the form, which
+        on a phone is off-screen from the Speak button. Someone dictating saw
+        their words appear as interim text and then apparently vanish — the
+        text had in fact been added, to a field they could not see. Showing
+        what was captured, next to the button they just pressed, is the
+        confirmation that was missing; "Review it" jumps to the field to edit.
+      */}
+      {!listening && captured && (
+        <div
+          className="mt-1.5 border-l-4 px-2 py-1.5"
+          style={{ borderColor: "var(--green)", background: "var(--surface-2)" }}
+          aria-live="polite"
+        >
+          <p className="text-xs font-semibold text-[var(--muted)]">{capturedLabel}</p>
+          <p className="mt-0.5 text-sm">{captured}</p>
+          <button
+            type="button"
+            onClick={onReview}
+            className="mt-1 text-xs font-semibold underline"
+            style={{ color: "var(--navy-700)" }}
+          >
+            {reviewLabel}
+          </button>
+        </div>
+      )}
+
+      {/* A session that heard nothing must say so, or it looks identical to a
+          session whose text was silently dropped — the old bug's symptom. */}
+      {!listening && !captured && attempted && !error && (
+        <p className="mt-1.5 text-xs" style={{ color: "var(--high)" }} aria-live="polite">
+          {nothingHeardLabel}
+        </p>
+      )}
+
       <p className="mt-1 text-xs text-[var(--muted)]">{hintLabel}</p>
       {error && (
         <p role="alert" className="mt-1 text-xs" style={{ color: "var(--critical)" }}>
