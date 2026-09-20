@@ -36,36 +36,42 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ComponentType } from "react";
+import type { Lang } from "@/types";
+import { PLATFORM_STRINGS, type HazardKey } from "@/lib/constants";
 
 interface Hazard {
-  key: string;
-  label: string;
+  /** Indexes PLATFORM_STRINGS[lang].hazards — the label is resolved at render. */
+  key: HazardKey;
   href: Route;
   Icon: ComponentType<{ className?: string }>;
   color: string;
 }
 
 const HAZARDS: Hazard[] = [
-  { key: "cyclone", label: "Cyclone", href: "/weather" as Route, Icon: Tornado, color: "var(--violet)" },
-  { key: "flood", label: "Flood", href: "/weather" as Route, Icon: Waves, color: "var(--blue)" },
-  { key: "fire", label: "Fire", href: "/incidents" as Route, Icon: Flame, color: "var(--high)" },
-  { key: "rainfall", label: "Heavy Rainfall", href: "/weather" as Route, Icon: CloudRain, color: "var(--blue)" },
-  { key: "landslide", label: "Landslide", href: "/incidents" as Route, Icon: Mountain, color: "var(--amber-600)" },
-  { key: "medical", label: "Medical", href: "/incidents" as Route, Icon: Ambulance, color: "var(--crimson)" },
-  { key: "industrial", label: "Industrial", href: "/incidents" as Route, Icon: Factory, color: "var(--high)" },
-  { key: "road", label: "Road Accident", href: "/incidents" as Route, Icon: CarFront, color: "var(--amber)" },
-  { key: "collapse", label: "Building Collapse", href: "/incidents" as Route, Icon: Building2, color: "var(--muted)" },
-  { key: "shelter", label: "Shelters", href: "/shelters" as Route, Icon: Home, color: "var(--green)" },
-  { key: "response", label: "Emergency Response", href: "/resources" as Route, Icon: Siren, color: "var(--crimson)" },
-  { key: "infra", label: "Infrastructure", href: "/resources" as Route, Icon: Wrench, color: "var(--navy-600)" },
+  { key: "cyclone", href: "/weather" as Route, Icon: Tornado, color: "var(--violet)" },
+  { key: "flood", href: "/weather" as Route, Icon: Waves, color: "var(--blue)" },
+  { key: "fire", href: "/incidents" as Route, Icon: Flame, color: "var(--high)" },
+  { key: "rainfall", href: "/weather" as Route, Icon: CloudRain, color: "var(--blue)" },
+  { key: "landslide", href: "/incidents" as Route, Icon: Mountain, color: "var(--amber-600)" },
+  { key: "medical", href: "/incidents" as Route, Icon: Ambulance, color: "var(--crimson)" },
+  { key: "industrial", href: "/incidents" as Route, Icon: Factory, color: "var(--high)" },
+  { key: "road", href: "/incidents" as Route, Icon: CarFront, color: "var(--amber)" },
+  { key: "collapse", href: "/incidents" as Route, Icon: Building2, color: "var(--muted)" },
+  { key: "shelter", href: "/shelters" as Route, Icon: Home, color: "var(--green)" },
+  { key: "response", href: "/resources" as Route, Icon: Siren, color: "var(--crimson)" },
+  { key: "infra", href: "/resources" as Route, Icon: Wrench, color: "var(--navy-600)" },
 ];
 
-export function DisasterStrip() {
+export function DisasterStrip({ lang }: { lang: Lang }) {
+  const t = PLATFORM_STRINGS[lang];
+
   return (
     <div className="border-b border-[var(--border)] bg-[var(--surface-2)]">
       <div className="flex items-center">
         <ul className="no-scrollbar flex flex-1 items-center gap-[3px] overflow-x-auto px-2 py-[5px]">
-          {HAZARDS.map(({ key, label, href, Icon, color }) => (
+          {HAZARDS.map(({ key, href, Icon, color }) => {
+            const label = t.hazards[key];
+            return (
             <li key={key} className="shrink-0">
               <Link
                 href={href}
@@ -77,17 +83,18 @@ export function DisasterStrip() {
                 <span className="sr-only">{label}</span>
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ul>
 
         <Link
           href="/live-map"
-          title="Search the state picture"
+          title={t.chrome.searchStatePicture}
           className="mr-2 flex h-[24px] shrink-0 items-center gap-1.5 rounded-[3px] border border-[var(--border-strong)] bg-white px-2 text-[11px] font-semibold text-[var(--navy-700)] no-underline hover:bg-[var(--info-bg)]"
         >
           <Search className="size-[13px]" aria-hidden />
-          <span className="hidden sm:inline">Search map</span>
-          <span className="sr-only sm:hidden">Search the map</span>
+          <span className="hidden sm:inline">{t.chrome.searchMap}</span>
+          <span className="sr-only sm:hidden">{t.chrome.searchTheMap}</span>
         </Link>
       </div>
     </div>

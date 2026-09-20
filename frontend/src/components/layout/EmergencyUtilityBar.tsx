@@ -24,17 +24,20 @@
  * Every entry is a real `tel:` link, so on a phone these dial.
  */
 
-import { UTILITY_NUMBERS } from "@/lib/constants";
+import type { Lang } from "@/types";
+import { PLATFORM_STRINGS, UTILITY_NUMBERS } from "@/lib/constants";
 
-export function EmergencyUtilityBar() {
+export function EmergencyUtilityBar({ lang }: { lang: Lang }) {
+  const t = PLATFORM_STRINGS[lang].helplines;
+
   return (
-    <div className="ticker" role="region" aria-label="Emergency helpline numbers">
+    <div className="ticker" role="region" aria-label={t.regionLabel}>
       <div className="ticker-track">
         {UTILITY_NUMBERS.map((e) => (
-          <TickerItem key={e.number} number={e.number} label={e.label} />
+          <TickerItem key={e.number} number={e.number} label={t[e.key]} lang={lang} />
         ))}
         {UTILITY_NUMBERS.map((e) => (
-          <TickerItem key={`echo-${e.number}`} number={e.number} label={e.label} echo />
+          <TickerItem key={`echo-${e.number}`} number={e.number} label={t[e.key]} lang={lang} echo />
         ))}
       </div>
     </div>
@@ -44,20 +47,23 @@ export function EmergencyUtilityBar() {
 function TickerItem({
   number,
   label,
+  lang,
   echo = false,
 }: {
   number: string;
   label: string;
+  lang: Lang;
   /** The duplicated copy that makes the loop seamless — hidden from AT. */
   echo?: boolean;
 }) {
+  const t = PLATFORM_STRINGS[lang].helplines;
   return (
     <a
       href={`tel:${number}`}
       className="ticker-item"
       aria-hidden={echo || undefined}
       tabIndex={echo ? -1 : undefined}
-      aria-label={`Call ${label} on ${number}`}
+      aria-label={`${t.call} ${label} ${t.on} ${number}`}
     >
       <strong>{number}</strong>
       <span className="ticker-sep" aria-hidden>

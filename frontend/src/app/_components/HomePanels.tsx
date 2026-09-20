@@ -59,6 +59,7 @@ import type {
 } from "@/types";
 import {
   DISASTER_META,
+  riskLabel,
   PLATFORM_STRINGS,
   RISK_META,
   SHELTER_STATUS_META,
@@ -167,7 +168,7 @@ export function LiveAlerts({ alerts, lang }: { alerts: WeatherAlert[]; lang: Lan
                     {a.headline}
                   </p>
                   <p className="mt-0.5 text-[11px] text-[var(--muted)]">
-                    {a.district} · {risk.label}
+                    {a.district} · {riskLabel(a.severity, lang)}
                   </p>
                 </div>
                 <span className="telemetry shrink-0">{relativeTime(a.issuedAt)}</span>
@@ -328,7 +329,7 @@ export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) 
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-[15px] font-bold">{current.district}</span>
           <span className="cmd text-[12px]" style={{ color: meta.color }}>
-            {meta.label}
+            {riskLabel(current.level, lang)}
           </span>
         </div>
 

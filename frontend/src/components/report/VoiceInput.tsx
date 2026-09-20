@@ -44,6 +44,10 @@ interface SpeechRecognitionLike {
 }
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
+/* Enough to cover the pauses in a long spoken report, while still bounding a
+   recogniser that ends the instant it starts. */
+const MAX_RESTARTS = 50;
+
 function getRecognitionCtor(): SpeechRecognitionCtor | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as {
@@ -80,6 +84,9 @@ export function VoiceInput({
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
+  /** True while the citizen has dictation open, across Chrome's pause-restarts. */
+  const wantListening = useRef(false);
+  const restarts = useRef(0);
 
   useEffect(() => {
     // Deferred: detection must not set state synchronously in the effect body,
@@ -94,6 +101,9 @@ export function VoiceInput({
     }, 0);
     return () => {
       clearTimeout(timer);
+      // Unmounting is a deliberate stop: do not let `onend` restart into a
+      // recogniser whose component is gone.
+      wantListening.current = false;
       recognition.current?.stop();
     };
   }, []);
@@ -122,28 +132,63 @@ export function VoiceInput({
       }
     };
     rec.onerror = (event) => {
+      /*
+       * `no-speech` is not a failure. Chrome raises it after a few seconds of
+       * silence — which happens constantly to someone describing an emergency
+       * in pauses — and follows it with `onend`. Treating it as an error put
+       * "voice input stopped" on screen mid-sentence; `onend` below restarts
+       * instead, so the pause is invisible.
+       */
+      if (event.error === "no-speech" || event.error === "aborted") return;
+
+      // A refusal must not be retried: restarting re-throws it forever.
+      const refused =
+        event.error === "not-allowed" || event.error === "service-not-allowed";
+      if (refused) wantListening.current = false;
       setError(
-        event.error === "not-allowed"
+        refused
           ? "Microphone permission denied. You can still type your report."
           : "Voice input stopped. You can still type your report.",
       );
       setListening(false);
     };
+
     rec.onend = () => {
-      setListening(false);
       setInterim("");
+      /*
+       * Chrome ends the session on each natural pause even with `continuous`.
+       * Restart while the citizen still has the button held open, so dictation
+       * survives the gaps between sentences. The budget stops a engine that
+       * ends immediately from spinning: after that, it stays stopped.
+       */
+      if (wantListening.current && restarts.current < MAX_RESTARTS) {
+        restarts.current += 1;
+        try {
+          rec.start();
+          return;
+        } catch {
+          // Fall through to stopping cleanly.
+        }
+      }
+      wantListening.current = false;
+      setListening(false);
     };
 
     recognition.current = rec;
     try {
+      wantListening.current = true;
+      restarts.current = 0;
       rec.start();
       setListening(true);
     } catch {
+      wantListening.current = false;
       setError("Could not start voice input. You can still type your report.");
     }
   }
 
   function stop() {
+    // Cleared first: `onend` checks it, and must not restart after a deliberate stop.
+    wantListening.current = false;
     recognition.current?.stop();
     setListening(false);
   }

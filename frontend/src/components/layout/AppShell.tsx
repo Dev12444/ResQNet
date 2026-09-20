@@ -34,6 +34,7 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 import type { DataMode, Lang, WeatherAlert } from "@/types";
+import { PLATFORM_STRINGS } from "@/lib/constants";
 import { getWeatherAlerts } from "@/lib/api";
 import { Sidebar } from "./Sidebar";
 import { GovHeader } from "./GovHeader";
@@ -117,7 +118,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <LangContext.Provider value={{ lang, setLang }}>
       <FlashAlertProvider lang={lang}>
         <a href="#main" className="skip-link">
-          Skip to main content
+          {PLATFORM_STRINGS[lang].chrome.skipToContent}
         </a>
 
         <GovHeader
@@ -128,8 +129,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onMenu={() => setMenuOpen(true)}
         />
         <PrimaryNav lang={lang} />
-        <DisasterStrip />
-        <EmergencyUtilityBar />
+        <DisasterStrip lang={lang} />
+        <EmergencyUtilityBar lang={lang} />
         {/* Full width and above the rail: a critical warning belongs to the
             whole system, not to one panel on one route. */}
         <CriticalAlertBanner alerts={alerts} mode={alertMode} />

@@ -221,10 +221,10 @@ export function GovHeader({
                 />
                 <span className="text-[11px] leading-none text-[var(--muted)]">
                   {connectivity.state === "online"
-                    ? "Online"
+                    ? t.connectivity.online
                     : connectivity.state === "low"
-                      ? "Weak signal"
-                      : "Offline"}
+                      ? t.connectivity.weak
+                      : t.connectivity.offline}
                 </span>
               </span>
             </span>

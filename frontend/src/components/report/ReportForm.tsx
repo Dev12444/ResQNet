@@ -25,6 +25,7 @@ import type {
 } from "@/types";
 import {
   DISASTER_META,
+  disasterLabel,
   PLATFORM_STRINGS,
   SOS_DISASTER_TYPES,
   SPECIAL_ASSISTANCE,
@@ -210,7 +211,7 @@ export function ReportForm({
                   className="inline-block size-2.5 shrink-0 rounded-full"
                   style={{ background: meta.color }}
                 />
-                <span className="truncate">{meta.label}</span>
+                <span className="truncate">{disasterLabel(option, lang)}</span>
               </button>
             );
           })}
@@ -255,6 +256,7 @@ export function ReportForm({
           useMyLocation: t.useMyLocation,
           locating: t.locating,
           locationDenied: t.locationDenied,
+          locationUnavailable: t.locationUnavailable,
           locationInsecure: t.locationInsecure,
           adjustLocation: t.adjustLocation,
           landmarkLabel: t.landmarkLabel,
