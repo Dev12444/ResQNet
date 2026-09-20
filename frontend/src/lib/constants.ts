@@ -699,16 +699,19 @@ export const CONTROL_ROOM_LABEL = "State Control Room";
  * The always-visible strip. Order matches the state portal convention:
  * the three first-responder lines, then 112, then the helplines.
  */
-export const UTILITY_NUMBERS: { number: string; label: string; icon: string }[] = [
+/* `key` indexes PLATFORM_STRINGS[lang].helplines — the label is looked up at
+   render time, because the ticker is on every route in all three languages.
+   The numbers themselves are never translated. */
+export const UTILITY_NUMBERS: { number: string; key: HelplineKey; icon: string }[] = [
   /* 112 leads. It is the single number that reaches all of the others, so it
      is the one to remember if the strip is only glanced at once. */
-  { number: "112", label: "EMERGENCY", icon: "TriangleAlert" },
-  { number: "100", label: "POLICE", icon: "Shield" },
-  { number: "101", label: "FIRE", icon: "Flame" },
-  { number: "108", label: "AMBULANCE", icon: "Ambulance" },
-  { number: "1098", label: "CHILD HELPLINE", icon: "Baby" },
-  { number: "181", label: "WOMEN HELPLINE", icon: "UserRound" },
-  { number: "1077", label: "DISASTER HELPLINE", icon: "Siren" },
+  { number: "112", key: "emergency", icon: "TriangleAlert" },
+  { number: "100", key: "police", icon: "Shield" },
+  { number: "101", key: "fire", icon: "Flame" },
+  { number: "108", key: "ambulance", icon: "Ambulance" },
+  { number: "1098", key: "child", icon: "Baby" },
+  { number: "181", key: "women", icon: "UserRound" },
+  { number: "1077", key: "disaster", icon: "Siren" },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -1082,6 +1085,81 @@ export const PLATFORM_STRINGS = {
       weather: "Weather",
       support: "Support",
     },
+    /* Frame chrome that sits on every route: the skip link, the rail's
+       heading and the hazard strip's search affordance. */
+    chrome: {
+      skipToContent: "Skip to main content",
+      menu: "Menu",
+      searchMap: "Search map",
+      searchTheMap: "Search the map",
+      searchStatePicture: "Search the state picture",
+    },
+    /* The helpline ticker. The numbers themselves never translate. */
+    helplines: {
+      emergency: "EMERGENCY",
+      police: "POLICE",
+      fire: "FIRE",
+      ambulance: "AMBULANCE",
+      child: "CHILD HELPLINE",
+      women: "WOMEN HELPLINE",
+      disaster: "DISASTER HELPLINE",
+      call: "Call",
+      on: "on",
+      regionLabel: "Emergency helpline numbers",
+    },
+    /* Hazard strip. Shown as tooltip and to screen readers, not as body text. */
+    hazards: {
+      cyclone: "Cyclone",
+      flood: "Flood",
+      fire: "Fire",
+      rainfall: "Heavy Rainfall",
+      landslide: "Landslide",
+      medical: "Medical",
+      industrial: "Industrial",
+      road: "Road Accident",
+      collapse: "Building Collapse",
+      shelter: "Shelters",
+      response: "Emergency Response",
+      infra: "Infrastructure",
+    },
+    /* Disaster types and map layers, keyed so any surface can translate them
+       without reshaping DISASTER_META / MAP_LAYER_META, which carry icons and
+       colours that never change with language. */
+    disasters: {
+      cyclone: "Cyclone",
+      flood: "Flood",
+      fire: "Fire",
+      earthquake: "Earthquake",
+      medical: "Medical",
+      road_block: "Road Block",
+      infrastructure: "Infrastructure Damage",
+      missing_person: "Missing Person",
+      heavy_rainfall: "Heavy Rainfall",
+      other: "Other",
+    },
+    mapLayers: {
+      cyclone: "Cyclone",
+      flood: "Flood",
+      fire: "Fire",
+      heavy_rainfall: "Heavy Rainfall",
+      warning: "Alerts",
+      shelter: "Shelters",
+      hospital: "Hospitals",
+      response_team: "Response Teams",
+      blocked_road: "Blocked Roads",
+      citizen_report: "Citizen Reports",
+    },
+    connectivity: { online: "Online", weak: "Weak signal", offline: "Offline" },
+    basemap: { map: "Map", satellite: "Satellite", hybrid: "Hybrid", grid: "Grid", layers: "Layers" },
+    risk: { normal: "NORMAL", watch: "WATCH", moderate: "MODERATE", high: "HIGH", critical: "CRITICAL", districtRisk: "District risk" },
+    footer: {
+      authority: "State Disaster Management Authority",
+      eoc: "Emergency Operations Centre",
+      operatorConsole: "Operator console",
+      linksLeave: "These links leave ResQNet.",
+      disclaimer:
+        "ResQNet coordinates emergency response. It does not replace calling 112. AI-assisted classification on this platform is advisory — operational decisions are made by authorised personnel.",
+    },
   },
   gu: {
     tagline: "રાજ્ય કટોકટી પ્રતિસાદ પ્લેટફોર્મ",
@@ -1118,6 +1196,74 @@ export const PLATFORM_STRINGS = {
       reports: "અહેવાલો",
       weather: "હવામાન",
       support: "સહાય",
+    },
+    chrome: {
+      skipToContent: "મુખ્ય સામગ્રી પર જાઓ",
+      menu: "મેનુ",
+      searchMap: "નકશો શોધો",
+      searchTheMap: "નકશામાં શોધો",
+      searchStatePicture: "રાજ્યનું ચિત્ર શોધો",
+    },
+    helplines: {
+      emergency: "કટોકટી",
+      police: "પોલીસ",
+      fire: "ફાયર",
+      ambulance: "એમ્બ્યુલન્સ",
+      child: "ચાઇલ્ડ હેલ્પલાઇન",
+      women: "મહિલા હેલ્પલાઇન",
+      disaster: "આપત્તિ હેલ્પલાઇન",
+      call: "કૉલ કરો",
+      on: "પર",
+      regionLabel: "કટોકટી હેલ્પલાઇન નંબર",
+    },
+    hazards: {
+      cyclone: "વાવાઝોડું",
+      flood: "પૂર",
+      fire: "આગ",
+      rainfall: "ભારે વરસાદ",
+      landslide: "ભૂસ્ખલન",
+      medical: "તબીબી",
+      industrial: "ઔદ્યોગિક",
+      road: "માર્ગ અકસ્માત",
+      collapse: "ઇમારત ધરાશાયી",
+      shelter: "આશ્રયસ્થાનો",
+      response: "કટોકટી પ્રતિસાદ",
+      infra: "માળખાકીય સુવિધા",
+    },
+    disasters: {
+      cyclone: "વાવાઝોડું",
+      flood: "પૂર",
+      fire: "આગ",
+      earthquake: "ભૂકંપ",
+      medical: "તબીબી",
+      road_block: "માર્ગ અવરોધ",
+      infrastructure: "માળખાકીય નુકસાન",
+      missing_person: "ગુમ થયેલ વ્યક્તિ",
+      heavy_rainfall: "ભારે વરસાદ",
+      other: "અન્ય",
+    },
+    mapLayers: {
+      cyclone: "વાવાઝોડું",
+      flood: "પૂર",
+      fire: "આગ",
+      heavy_rainfall: "ભારે વરસાદ",
+      warning: "ચેતવણીઓ",
+      shelter: "આશ્રયસ્થાનો",
+      hospital: "હોસ્પિટલો",
+      response_team: "પ્રતિસાદ ટીમો",
+      blocked_road: "અવરોધિત માર્ગો",
+      citizen_report: "નાગરિક અહેવાલો",
+    },
+    connectivity: { online: "ઓનલાઇન", weak: "નબળું સિગ્નલ", offline: "ઓફલાઇન" },
+    basemap: { map: "નકશો", satellite: "સેટેલાઇટ", hybrid: "હાઇબ્રિડ", grid: "ગ્રીડ", layers: "સ્તરો" },
+    risk: { normal: "સામાન્ય", watch: "નજર", moderate: "મધ્યમ", high: "ઊંચું", critical: "ગંભીર", districtRisk: "જિલ્લા જોખમ" },
+    footer: {
+      authority: "રાજ્ય આપત્તિ વ્યવસ્થાપન સત્તામંડળ",
+      eoc: "કટોકટી કામગીરી કેન્દ્ર",
+      operatorConsole: "ઓપરેટર કન્સોલ",
+      linksLeave: "આ લિંક ResQNet ની બહાર લઈ જાય છે.",
+      disclaimer:
+        "ResQNet કટોકટી પ્રતિસાદનું સંકલન કરે છે. તે 112 પર કૉલ કરવાનો વિકલ્પ નથી. આ પ્લેટફોર્મ પરનું AI-સહાયિત વર્ગીકરણ સલાહરૂપ છે — કામગીરીના નિર્ણયો અધિકૃત કર્મચારીઓ દ્વારા લેવાય છે.",
     },
   },
   hi: {
@@ -1156,7 +1302,101 @@ export const PLATFORM_STRINGS = {
       weather: "मौसम",
       support: "सहायता",
     },
+    chrome: {
+      skipToContent: "मुख्य सामग्री पर जाएँ",
+      menu: "मेनू",
+      searchMap: "मानचित्र खोजें",
+      searchTheMap: "मानचित्र में खोजें",
+      searchStatePicture: "राज्य की स्थिति खोजें",
+    },
+    helplines: {
+      emergency: "आपातकाल",
+      police: "पुलिस",
+      fire: "अग्निशमन",
+      ambulance: "एम्बुलेंस",
+      child: "चाइल्ड हेल्पलाइन",
+      women: "महिला हेल्पलाइन",
+      disaster: "आपदा हेल्पलाइन",
+      call: "कॉल करें",
+      on: "पर",
+      regionLabel: "आपातकालीन हेल्पलाइन नंबर",
+    },
+    hazards: {
+      cyclone: "चक्रवात",
+      flood: "बाढ़",
+      fire: "आग",
+      rainfall: "भारी वर्षा",
+      landslide: "भूस्खलन",
+      medical: "चिकित्सा",
+      industrial: "औद्योगिक",
+      road: "सड़क दुर्घटना",
+      collapse: "इमारत ढहना",
+      shelter: "आश्रय",
+      response: "आपातकालीन प्रतिक्रिया",
+      infra: "अवसंरचना",
+    },
+    disasters: {
+      cyclone: "चक्रवात",
+      flood: "बाढ़",
+      fire: "आग",
+      earthquake: "भूकंप",
+      medical: "चिकित्सा",
+      road_block: "मार्ग अवरोध",
+      infrastructure: "अवसंरचना क्षति",
+      missing_person: "लापता व्यक्ति",
+      heavy_rainfall: "भारी वर्षा",
+      other: "अन्य",
+    },
+    mapLayers: {
+      cyclone: "चक्रवात",
+      flood: "बाढ़",
+      fire: "आग",
+      heavy_rainfall: "भारी वर्षा",
+      warning: "चेतावनियाँ",
+      shelter: "आश्रय",
+      hospital: "अस्पताल",
+      response_team: "प्रतिक्रिया टीमें",
+      blocked_road: "अवरुद्ध मार्ग",
+      citizen_report: "नागरिक रिपोर्ट",
+    },
+    connectivity: { online: "ऑनलाइन", weak: "कमज़ोर सिग्नल", offline: "ऑफ़लाइन" },
+    basemap: { map: "मानचित्र", satellite: "सैटेलाइट", hybrid: "हाइब्रिड", grid: "ग्रिड", layers: "परतें" },
+    risk: { normal: "सामान्य", watch: "निगरानी", moderate: "मध्यम", high: "उच्च", critical: "गंभीर", districtRisk: "ज़िला जोखिम" },
+    footer: {
+      authority: "राज्य आपदा प्रबंधन प्राधिकरण",
+      eoc: "आपातकालीन संचालन केंद्र",
+      operatorConsole: "ऑपरेटर कंसोल",
+      linksLeave: "ये लिंक ResQNet से बाहर ले जाते हैं।",
+      disclaimer:
+        "ResQNet आपातकालीन प्रतिक्रिया का समन्वय करता है। यह 112 पर कॉल करने का विकल्प नहीं है। इस प्लेटफ़ॉर्म पर AI-सहायित वर्गीकरण सलाहकारी है — परिचालन निर्णय अधिकृत कर्मियों द्वारा लिए जाते हैं।",
+    },
   },
 } as const;
 
 export type NavKey = keyof (typeof PLATFORM_STRINGS)["en"]["nav"];
+export type HelplineKey = keyof Omit<
+  (typeof PLATFORM_STRINGS)["en"]["helplines"],
+  "call" | "on" | "regionLabel"
+>;
+export type HazardKey = keyof (typeof PLATFORM_STRINGS)["en"]["hazards"];
+
+/**
+ * Localised names for the two metadata tables above.
+ *
+ * DISASTER_META and MAP_LAYER_META keep their English `label` because they
+ * also carry icons and colours, which never change with language and are read
+ * by callers that have no `lang` in scope. These helpers are the translated
+ * read path: pass the language you are rendering in and you get the label for
+ * it, falling back to the English one if a key is ever missing.
+ */
+export function disasterLabel(d: DisasterType, lang: Lang): string {
+  return PLATFORM_STRINGS[lang].disasters[d] ?? DISASTER_META[d].label;
+}
+
+export function mapLayerLabel(l: MapLayer, lang: Lang): string {
+  return PLATFORM_STRINGS[lang].mapLayers[l] ?? MAP_LAYER_META[l].label;
+}
+
+export function riskLabel(r: RiskLevel, lang: Lang): string {
+  return PLATFORM_STRINGS[lang].risk[r] ?? RISK_META[r].label;
+}

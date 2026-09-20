@@ -92,7 +92,7 @@ export function Sidebar({
             <span className="flex size-6 items-center justify-center rounded-[3px] bg-white">
               <ResQLogoMark className="size-5" />
             </span>
-            <span className="cmd text-[12px] text-white">Menu</span>
+            <span className="cmd text-[12px] text-white">{t.chrome.menu}</span>
           </span>
           <button
             type="button"

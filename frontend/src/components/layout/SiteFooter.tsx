@@ -36,9 +36,9 @@ export function SiteFooter({ lang }: { lang: Lang }) {
           <CivicDevice />
           <span className="leading-tight">
             <span className="block text-[12px] font-bold text-[var(--navy-800)]">
-              State Disaster Management Authority
+              {t.footer.authority}
             </span>
-            <span className="block text-[11px] text-[var(--muted)]">Emergency Operations Centre</span>
+            <span className="block text-[11px] text-[var(--muted)]">{t.footer.eoc}</span>
           </span>
         </span>
 
@@ -67,7 +67,7 @@ export function SiteFooter({ lang }: { lang: Lang }) {
           href="/dashboard"
           className="font-semibold text-[var(--navy-700)] no-underline hover:underline"
         >
-          Operator console
+          {t.footer.operatorConsole}
         </Link>
         <span aria-hidden className="text-[var(--hairline)]">
           |
@@ -84,13 +84,11 @@ export function SiteFooter({ lang }: { lang: Lang }) {
             {x.label}
           </a>
         ))}
-        <span className="text-[var(--faint)]">These links leave ResQNet.</span>
+        <span className="text-[var(--faint)]">{t.footer.linksLeave}</span>
       </div>
 
       <p className="border-t border-[var(--hairline)] px-4 py-1.5 text-[10.5px] leading-relaxed text-[var(--faint)]">
-        ResQNet coordinates emergency response. It does not replace calling 112.
-        AI-assisted classification on this platform is advisory — operational
-        decisions are made by authorised personnel.
+        {t.footer.disclaimer}
       </p>
     </footer>
   );

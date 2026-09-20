@@ -28,12 +28,15 @@ import type {
   Shelter,
 } from "@/types";
 import { ensureMapLibreWorker } from "@/components/layout/maplibreWorker";
+import { useLang } from "@/components/layout/AppShell";
 import { Coordinates, MAP_GRID, gridRef } from "@/components/layout/Telemetry";
 import {
   DATA_MODE_META,
   DEFAULT_MAP_LAYERS,
   GUJARAT_DISTRICTS,
   MAP_LAYER_META,
+  mapLayerLabel,
+  PLATFORM_STRINGS,
   RISK_META,
 } from "@/lib/constants";
 
@@ -271,6 +274,10 @@ export function GujaratMap({
   situationsMode?: DataMode;
   className?: string;
 }) {
+  /* Read from context rather than threaded as a prop: both callers already sit
+     inside AppShell, and the map's legend is the only thing here that changes
+     with language. */
+  const { lang } = useLang();
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markerObjects = useRef<Marker[]>([]);
@@ -822,7 +829,7 @@ export function GujaratMap({
                 : "text-[var(--foreground)] hover:bg-[var(--surface-2)]"
             }`}
           >
-            {b}
+            {PLATFORM_STRINGS[lang].basemap[b]}
           </button>
         ))}
       </div>
@@ -839,7 +846,7 @@ export function GujaratMap({
         }`}
       >
         <Grid3x3 className="size-3.5" aria-hidden />
-        Grid
+        {PLATFORM_STRINGS[lang].basemap.grid}
       </button>
 
       {/* Recenter sits under MapLibre's own +/- so the three view controls read
@@ -864,7 +871,7 @@ export function GujaratMap({
             className="cmd flex items-center gap-1.5 border border-[var(--carbon)] bg-[var(--surface)] px-2 py-1.5 text-[11px] shadow-sm hover:bg-[var(--surface-2)]"
           >
             <Layers className="size-3.5" aria-hidden />
-            Layers
+            {PLATFORM_STRINGS[lang].basemap.layers}
             <span className="mono text-[var(--muted)]">{activeLayers.length}</span>
           </button>
           {layersOpen && (
@@ -890,7 +897,7 @@ export function GujaratMap({
                     className="inline-block size-2.5 shrink-0"
                     style={{ background: MAP_LAYER_META[layer].color }}
                   />
-                  {MAP_LAYER_META[layer].label}
+                  {mapLayerLabel(layer, lang)}
                 </label>
               ))}
               </div>
@@ -1049,12 +1056,12 @@ export function GujaratMap({
                   __html: markerSvg(LAYER_GLYPH[layer] ?? LAYER_GLYPH.citizen_report),
                 }}
               />
-              <span className="cmd text-[10px]">{MAP_LAYER_META[layer].label}</span>
+              <span className="cmd text-[10px]">{mapLayerLabel(layer, lang)}</span>
             </li>
           ))}
         </ul>
         <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--hairline)] bg-[var(--surface-2)] px-2.5 py-1">
-          <li className="eyebrow text-[9px] text-[var(--muted)]">District risk</li>
+          <li className="eyebrow text-[9px] text-[var(--muted)]">{PLATFORM_STRINGS[lang].risk.districtRisk}</li>
           {(Object.keys(RISK_META) as (keyof typeof RISK_META)[]).map((r) => (
             <li key={r} className="flex items-center gap-1">
               <span
