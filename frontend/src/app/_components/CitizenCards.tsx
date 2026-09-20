@@ -9,7 +9,7 @@
  * what the browser answered. Neither ever claims a success it did not get.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   Check,
@@ -26,6 +26,21 @@ import { isSecureContext } from "@/lib/secureContext";
 
 const CLOSE_ONES_KEY = "resqnet.closeOnes";
 const CONTACTS_KEY = "resqnet.closeOnes.contacts";
+
+const ADD_CLOSE_ONE_EVENT = "resqnet:add-close-one";
+
+/**
+ * Open the add-a-contact form on this page's Close Ones card.
+ *
+ * The I'm Safe dialog can only tell someone with an empty list to go and add
+ * one; on a phone the card that does it is a screen and a half below the fold,
+ * under the map, so "add them on the home screen" was a dead end. An event
+ * rather than lifted state: the two live in unrelated parts of the tree, and
+ * the dialog has to unmount before the scroll can land anywhere useful.
+ */
+export function openAddCloseOne(): void {
+  window.dispatchEvent(new Event(ADD_CLOSE_ONE_EVENT));
+}
 
 /** How a contact has asked to hear from the platform. */
 export type ContactChannel = "sms" | "call" | "whatsapp";
@@ -130,6 +145,8 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [formOpen, setFormOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   // Read after mount: touching storage during render would desync the
   // server-rendered markup.
@@ -158,12 +175,34 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
     writeCloseOneContacts(list);
   }, []);
 
-  const startAdd = () => {
+  const startAdd = useCallback(() => {
     setEditingId(null);
     setDraft(EMPTY_DRAFT);
     setError(null);
     setFormOpen(true);
-  };
+  }, []);
+
+  // Sent here from the I'm Safe dialog, which has nowhere of its own to add a
+  // contact. Bring the card into view as well as opening the form: arriving at
+  // a focused field somewhere off-screen is its own kind of lost.
+  useEffect(() => {
+    const open = () => {
+      startAdd();
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    window.addEventListener(ADD_CLOSE_ONE_EVENT, open);
+    return () => window.removeEventListener(ADD_CLOSE_ONE_EVENT, open);
+  }, [startAdd]);
+
+  // The form is the point of the trip, so put the cursor in it. Deferred until
+  // after the form has rendered, and only for a fresh add — grabbing focus
+  // while someone is part-way through editing an existing contact would be
+  // taking the keyboard off them.
+  useEffect(() => {
+    if (!formOpen || editingId) return;
+    const t = setTimeout(() => nameRef.current?.focus(), 0);
+    return () => clearTimeout(t);
+  }, [formOpen, editingId]);
 
   const startEdit = (c: CloseOne) => {
     setEditingId(c.id);
@@ -220,7 +259,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
   };
 
   return (
-    <section className="panel">
+    <section className="panel" ref={sectionRef} id="close-ones">
       <div className="panel-head">
         <Users className="size-3.5 shrink-0 text-[var(--navy-600)]" aria-hidden />
         <h2 className="cmd text-[11.5px]">Close Ones Notification</h2>
@@ -313,6 +352,7 @@ export function CloseOnesCard({ lang }: { lang: Lang }) {
           <label className="block">
             <span className="eyebrow text-[var(--muted)]">Name</span>
             <input
+              ref={nameRef}
               value={draft.name}
               onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
               autoComplete="name"
