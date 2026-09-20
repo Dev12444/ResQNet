@@ -30,7 +30,13 @@ import {
   getWeatherAlerts,
   worstMode,
 } from "@/lib/api";
-import { GUJARAT_CENTER, RISK_META, districtByName, riskLabel } from "@/lib/constants";
+import {
+  districtByName,
+  GUJARAT_CENTER,
+  nearestDistrict,
+  RISK_META,
+  riskLabel,
+} from "@/lib/constants";
 
 export default function LiveMapPage() {
   const situations = useEnvelope(useCallback(() => getDistrictSituations(), []));
@@ -73,7 +79,7 @@ export default function LiveMapPage() {
         lng: i.lng,
         label: i.title,
         sublabel: i.code,
-        district: districtOf(i.address),
+        district: districtOf(i.address, i.lat, i.lng),
       });
     for (const g of groundTruth.data ?? [])
       out.push({
@@ -207,9 +213,25 @@ export default function LiveMapPage() {
   );
 }
 
-function districtOf(text: string): string {
-  const m = /(Ahmedabad|Gandhinagar|Surat|Vadodara|Bharuch|Rajkot|Jamnagar|Kutch|Narmada|Navsari|Valsad|Bhavnagar|Junagadh|Amreli|Patan|Mehsana|Banaskantha)/.exec(
-    text,
-  );
-  return m ? m[1] : "Ahmedabad";
+/**
+ * Best-effort district from a free-text address or base name.
+ *
+ * `text` is nullable because `Incident.address` is: an incident raised from a
+ * sensor reading, or from a caller who never named a landmark, has no address
+ * at all. When there is no usable text the district is taken from the marker's
+ * own coordinates instead of defaulting to Ahmedabad, which would file a Kutch
+ * incident under the wrong district on a map whose whole job is where things
+ * are.
+ */
+function districtOf(text: string | null, lat?: number, lng?: number): string {
+  const m = text
+    ? /(Ahmedabad|Gandhinagar|Surat|Vadodara|Bharuch|Rajkot|Jamnagar|Kutch|Narmada|Navsari|Valsad|Bhavnagar|Junagadh|Amreli|Patan|Mehsana|Banaskantha)/.exec(
+        text,
+      )
+    : null;
+  if (m) return m[1];
+  if (lat !== undefined && lng !== undefined) {
+    return nearestDistrict(lat, lng)?.name ?? "Ahmedabad";
+  }
+  return "Ahmedabad";
 }

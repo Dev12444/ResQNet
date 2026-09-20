@@ -55,10 +55,11 @@ import {
   worstMode,
 } from "@/lib/api";
 import {
+  districtByName,
   GUJARAT_CENTER,
+  nearestDistrict,
   PLATFORM_STRINGS,
   RISK_META,
-  districtByName,
 } from "@/lib/constants";
 
 export default function HomePage() {
@@ -153,7 +154,7 @@ export default function HomePage() {
         lng: i.lng,
         label: i.title,
         sublabel: i.code,
-        district: districtFromAddress(i.address),
+        district: districtFromAddress(i.address, i.lat, i.lng),
       });
     }
 
@@ -177,7 +178,7 @@ export default function HomePage() {
         lng: r.lng,
         label: r.callsign,
         sublabel: r.status,
-        district: districtFromAddress(r.base),
+        district: districtFromAddress(r.base, r.lat, r.lng),
       });
     }
 
@@ -376,10 +377,29 @@ function LiveStamp() {
   );
 }
 
-/** Best-effort district from a free-text address or base name. */
-function districtFromAddress(text: string): string {
-  const match = /(Ahmedabad|Gandhinagar|Surat|Vadodara|Bharuch|Rajkot|Jamnagar|Kutch|Narmada|Navsari|Valsad|Bhavnagar|Junagadh|Amreli|Patan|Mehsana|Banaskantha)/.exec(
-    text,
-  );
-  return match ? match[1] : "Ahmedabad";
+/**
+ * Best-effort district from a free-text address or base name.
+ *
+ * `text` is nullable because `Incident.address` is: an incident raised from a
+ * sensor reading, or from a caller who never named a landmark, has no address
+ * at all. When there is no usable text the district is taken from the marker's
+ * own coordinates instead of defaulting to Ahmedabad, which would file a Kutch
+ * incident under the wrong district on a map whose whole job is where things
+ * are.
+ */
+function districtFromAddress(
+  text: string | null,
+  lat?: number,
+  lng?: number,
+): string {
+  const match = text
+    ? /(Ahmedabad|Gandhinagar|Surat|Vadodara|Bharuch|Rajkot|Jamnagar|Kutch|Narmada|Navsari|Valsad|Bhavnagar|Junagadh|Amreli|Patan|Mehsana|Banaskantha)/.exec(
+        text,
+      )
+    : null;
+  if (match) return match[1];
+  if (lat !== undefined && lng !== undefined) {
+    return nearestDistrict(lat, lng)?.name ?? "Ahmedabad";
+  }
+  return "Ahmedabad";
 }

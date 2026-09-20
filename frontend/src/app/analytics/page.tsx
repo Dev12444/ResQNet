@@ -168,9 +168,17 @@ export default function AnalyticsPage() {
       ? customDays * 24
       : WINDOWS.find((w) => w.id === windowId)!.hours!;
 
+  /*
+   * `address` is nullable on the API — a sensor-raised incident has none — so
+   * an incident without one is placed by its coordinates rather than dropped
+   * into Ahmedabad. Reading `.includes` off the null was crashing this whole
+   * route in production whenever the live feed held one such incident.
+   */
   const districtOf = useCallback((incident: Incident): string => {
-    const m = GUJARAT_DISTRICTS.find((d) => incident.address.includes(d.name));
-    return m?.name ?? "Ahmedabad";
+    const m = incident.address
+      ? GUJARAT_DISTRICTS.find((d) => incident.address!.includes(d.name))
+      : undefined;
+    return m?.name ?? nearestDistrict(incident.lat, incident.lng);
   }, []);
 
   /* ---------------- filtering ---------------- */
