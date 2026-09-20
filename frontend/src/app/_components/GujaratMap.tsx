@@ -36,6 +36,7 @@ import {
   GUJARAT_DISTRICTS,
   MAP_LAYER_META,
   mapLayerLabel,
+  riskLabel,
   PLATFORM_STRINGS,
   RISK_META,
 } from "@/lib/constants";
@@ -1069,7 +1070,7 @@ export function GujaratMap({
                 className="inline-block size-2.5 rounded-full border"
                 style={{ background: RISK_META[r].fill, borderColor: RISK_META[r].color }}
               />
-              <span className="cmd text-[10px]">{RISK_META[r].label}</span>
+              <span className="cmd text-[10px]">{riskLabel(r, lang)}</span>
             </li>
           ))}
         </ul>
