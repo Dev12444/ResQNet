@@ -794,6 +794,26 @@ export async function getSensors(): Promise<Envelope<Sensor[]>> {
       updated_at: r.created_at,
     });
   }
+  /*
+   * Nothing to show is not the same as a working sensor network with nothing
+   * to say. There is no `/api/sensors` endpoint: this list is reconstructed
+   * from `source: "sensor"` reports, and the seed creates none — only the
+   * demo scenario emits them. So a freshly seeded deployment produced an empty
+   * array that the panel rendered under a LIVE badge, which claimed live
+   * telemetry while showing no sensors at all.
+   *
+   * Out-of-contract surfaces fall back to fixtures badged DEMO everywhere else
+   * (shelters, weather, ground truth); sensors was the one adapter that did
+   * not, so it now does the same and says why.
+   */
+  if (byId.size === 0) {
+    return envelope(
+      mock.MOCK_SENSORS,
+      "simulated",
+      apiNotes().showingDemoData(apiNotes().noSensorReports),
+    );
+  }
+
   return envelope([...byId.values()], incidents.mode, incidents.error);
 }
 

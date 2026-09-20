@@ -862,6 +862,8 @@ interface MiscStrings {
     offlineLastKnown: string;
     timedOut: string;
     showingDemoData: (note: string) => string;
+    /** No sensor-sourced report has arrived, so there is nothing to rebuild a sensor from. */
+    noSensorReports: string;
   };
   freshness: {
     offline: string;
@@ -2001,6 +2003,7 @@ const en: PageStrings = {
       offlineLastKnown: "Offline — showing last known data",
       timedOut: "Request timed out",
       showingDemoData: (note) => `${note} — showing demo data`,
+      noSensorReports: "No sensor readings have reached the control room yet",
     },
     freshness: {
       offline: "OFFLINE",
@@ -2966,6 +2969,7 @@ const gu: PageStrings = {
       offlineLastKnown: "ઓફલાઇન — છેલ્લી જાણીતી માહિતી બતાવાય છે",
       timedOut: "વિનંતીનો સમય પૂરો થયો",
       showingDemoData: (note) => `${note} — ડેમો માહિતી બતાવાય છે`,
+      noSensorReports: "હજુ સુધી કંટ્રોલ રૂમ સુધી કોઈ સેન્સર રીડિંગ પહોંચ્યું નથી",
     },
     freshness: {
       offline: "ઓફલાઇન",
@@ -3929,6 +3933,7 @@ const hi: PageStrings = {
       offlineLastKnown: "ऑफ़लाइन — अंतिम ज्ञात डेटा दिखाया जा रहा है",
       timedOut: "अनुरोध का समय समाप्त",
       showingDemoData: (note) => `${note} — डेमो डेटा दिखाया जा रहा है`,
+      noSensorReports: "अभी तक कंट्रोल रूम तक कोई सेंसर रीडिंग नहीं पहुँची है",
     },
     freshness: {
       offline: "ऑफ़लाइन",
