@@ -12,6 +12,8 @@
  * the attachment dropped and the report still submittable.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import { useRef, useState } from "react";
 
 const MAX_EDGE = 1280;
@@ -32,6 +34,7 @@ export function PhotoInput({
   removeLabel: string;
   errorLabel: string;
 }) {
+  const m = pageStrings(useLang().lang).misc;
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -97,7 +100,7 @@ export function PhotoInput({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={value}
-                alt="Attached photo preview"
+                alt={m.photoPreview}
                 className="max-h-48 w-full border border-[var(--border)] object-contain"
               />
             </>

@@ -13,6 +13,7 @@
  * is told plainly that it has NOT reached the control room.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import { useRef, useState } from "react";
 import type {
   CitizenUrgency,
@@ -56,10 +57,10 @@ const DISASTER_TO_INCIDENT: Record<DisasterType, IncidentType> = {
   other: "other",
 };
 
-const URGENCY: { id: CitizenUrgency; label: string; tone: string }[] = [
-  { id: "immediate", label: "Life at risk now", tone: "var(--critical)" },
-  { id: "urgent", label: "Urgent help needed", tone: "var(--high)" },
-  { id: "standard", label: "Needs attention", tone: "var(--medium)" },
+const URGENCY: { id: CitizenUrgency; tone: string }[] = [
+  { id: "immediate", tone: "var(--critical)" },
+  { id: "urgent", tone: "var(--high)" },
+  { id: "standard", tone: "var(--medium)" },
 ];
 
 export function ReportForm({
@@ -76,6 +77,7 @@ export function ReportForm({
   ) => void;
 }) {
   const t = UI_STRINGS[lang];
+  const m = pageStrings(lang).misc;
   const p = PLATFORM_STRINGS[lang];
 
   const [text, setText] = useState("");
@@ -223,7 +225,7 @@ export function ReportForm({
 
       {/* Urgency */}
       <fieldset>
-        <legend className="text-sm font-semibold">How urgent is it?</legend>
+        <legend className="text-sm font-semibold">{m.urgencyQuestion}</legend>
         <div className="mt-1.5 flex flex-col gap-1.5 sm:flex-row">
           {URGENCY.map((u) => {
             const active = urgency === u.id;
@@ -240,7 +242,7 @@ export function ReportForm({
                     : { borderColor: "var(--border-strong)" }
                 }
               >
-                {u.label}
+                {m.urgency[u.id]}
               </button>
             );
           })}
@@ -300,23 +302,21 @@ export function ReportForm({
 
       {/* People affected */}
       <label className="block">
-        <span className="text-sm font-semibold">How many people are affected?</span>
+        <span className="text-sm font-semibold">{t.peopleQuestion}</span>
         <input
           type="number"
           inputMode="numeric"
           min={0}
           value={people}
           onChange={(e) => setPeople(e.target.value)}
-          placeholder="Leave blank if you are not sure"
+          placeholder={t.peopleHint}
           className="mt-1.5 min-h-12 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-base"
         />
       </label>
 
       {/* Special assistance */}
       <fieldset>
-        <legend className="text-sm font-semibold">
-          Does anyone need special assistance?
-        </legend>
+        <legend className="text-sm font-semibold">{t.assistanceQuestion}</legend>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {SPECIAL_ASSISTANCE.map((option) => {
             const active = assistance.includes(option.id);
@@ -332,7 +332,7 @@ export function ReportForm({
                     : "border-[var(--border-strong)]"
                 }`}
               >
-                {option.label}
+                {t[option.key]}
               </button>
             );
           })}

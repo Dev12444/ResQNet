@@ -25,6 +25,7 @@
  * rail; nothing is crammed onto this screen.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, TriangleAlert } from "lucide-react";
@@ -289,7 +290,7 @@ export default function HomePage() {
           role="note"
           className="panel mb-2 border-l-[3px] border-l-[var(--amber)] px-3 py-1.5 text-[12px] text-[var(--muted)]"
         >
-          <strong className="font-semibold text-[var(--foreground)]">Demo data on this map:</strong>{" "}
+          <strong className="font-semibold text-[var(--foreground)]">{pageStrings(lang).misc.demoDataOnMap}</strong>{" "}
           {demoLayers.join(", ")}. These are illustrative and are not coming from the
           control room. Incidents, units and alerts on the map are not demo data.
         </p>

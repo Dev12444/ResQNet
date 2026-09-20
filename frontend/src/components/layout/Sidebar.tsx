@@ -14,6 +14,7 @@
  * quieter without it.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
@@ -58,6 +59,7 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const pathname = usePathname();
+  const m = pageStrings(lang).misc;
   const t = PLATFORM_STRINGS[lang];
   const nav = t.nav;
 
@@ -67,7 +69,7 @@ export function Sidebar({
       {open && (
         <button
           type="button"
-          aria-label="Close navigation"
+          aria-label={m.closeNavigation}
           onClick={onClose}
           className="fixed inset-0 z-40 bg-[var(--navy-900)]/60 lg:hidden"
         />
@@ -97,7 +99,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close navigation"
+            aria-label={m.closeNavigation}
             className="text-[var(--rail-muted)] hover:text-white"
           >
             <X className="size-5" />
@@ -105,7 +107,7 @@ export function Sidebar({
         </div>
 
         <nav
-          aria-label="Sections"
+          aria-label={m.sections}
           className="thin-scroll shrink-0 py-1"
         >
           <ul>

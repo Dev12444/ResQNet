@@ -10,6 +10,9 @@
  * Owner: FE2.
  */
 
+import { PLATFORM_STRINGS } from "@/lib/constants";
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import { useCallback, useMemo, useState } from "react";
 import {
   Bar,
@@ -46,6 +49,9 @@ import {
 const SEVERITIES: RiskLevel[] = ["critical", "high", "moderate", "watch", "normal"];
 
 export default function WeatherPage() {
+  const { lang } = useLang();
+  const t = pageStrings(lang).weather;
+  const tc = pageStrings(lang).common;
   const alerts = useEnvelope(useCallback(() => getWeatherAlerts(), []));
   const forecast = useEnvelope(useCallback(() => getForecast(), []));
 
@@ -68,12 +74,12 @@ export default function WeatherPage() {
     [alerts.data, district, severities],
   );
 
-  if (alerts.loading && !alerts.data) return <LoadingState label="Loading weather…" />;
+  if (alerts.loading && !alerts.data) return <LoadingState label={t.loading} />;
   if (alerts.error && !alerts.data) {
     return (
       <div className="p-4">
         <ErrorState
-          title="Could not load weather alerts"
+          title={t.loadError}
           detail={alerts.error}
           onRetry={alerts.reload}
         />
@@ -85,9 +91,9 @@ export default function WeatherPage() {
     <div className="p-3 sm:p-4">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="cmd text-[24px] leading-none">Weather</h1>
+          <h1 className="cmd text-[24px] leading-none">{t.title}</h1>
           <p className="text-sm text-[var(--muted)]">
-            District warnings, rainfall and wind outlook.
+            {t.lead}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -95,7 +101,7 @@ export default function WeatherPage() {
             className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
             style={{ background: "var(--medium-bg)", color: "var(--medium)" }}
           >
-            Demo data — no live IMD feed
+            {t.demoNote}
           </span>
           <DataModeBadge mode={alerts.mode} note={alerts.error} />
         </div>
@@ -104,13 +110,13 @@ export default function WeatherPage() {
       {/* Filters */}
       <div className="panel mb-3 flex flex-wrap items-center gap-2 px-3 py-2.5">
         <label>
-          <span className="sr-only">District</span>
+          <span className="sr-only">{tc.district}</span>
           <select
             value={district}
             onChange={(e) => setDistrict(e.target.value)}
             className="h-10 border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm"
           >
-            <option value="">All districts</option>
+            <option value="">{tc.allDistricts}</option>
             {GUJARAT_DISTRICTS.map((d) => (
               <option key={d.id} value={d.name}>
                 {d.name}
@@ -139,7 +145,7 @@ export default function WeatherPage() {
                     : { borderColor: "var(--border-strong)" }
                 }
               >
-                {meta.label}
+                {PLATFORM_STRINGS[lang].risk[s]}
               </button>
             );
           })}
@@ -150,16 +156,16 @@ export default function WeatherPage() {
         {/* Alerts */}
         <section className="panel">
           <h2 className="border-b border-[var(--border)] px-3 py-2 text-[13px] font-bold uppercase tracking-wide">
-            Active warnings
+            {t.activeWarnings}
           </h2>
           {alerts.mode === "unavailable" ? (
             <UnavailableState
-              what="the warning feed"
+              what={pageStrings(lang).primitives.what.warningFeed}
               note={alerts.error}
               onRetry={alerts.reload}
             />
           ) : filtered.length === 0 ? (
-            <EmptyState title="No warnings match these filters" />
+            <EmptyState title={t.noWarnings} />
           ) : (
             <ul className="divide-y divide-[var(--border)]">
               {filtered.map((a) => {
@@ -172,13 +178,13 @@ export default function WeatherPage() {
                         className="px-1.5 py-0.5 text-[10px] font-bold uppercase"
                         style={{ background: meta.color, color: "#fff" }}
                       >
-                        {meta.label}
+                        {PLATFORM_STRINGS[lang].risk[a.severity]}
                       </span>
                       <span
                         className="px-1.5 py-0.5 text-[10px] font-bold uppercase"
                         style={{ background: `${disaster.color}14`, color: disaster.color }}
                       >
-                        {disaster.label}
+                        {pageStrings(lang).disaster[a.disaster]}
                       </span>
                       <span className="mono text-[11px] text-[var(--muted)]">
                         {a.district}
@@ -203,7 +209,7 @@ export default function WeatherPage() {
               7-day rainfall
             </h2>
             <div className="px-2 py-2">
-              <p className="px-1 text-[11px] text-[var(--muted)]">Millimetres per day</p>
+              <p className="px-1 text-[11px] text-[var(--muted)]">{t.mmPerDay}</p>
               <ResponsiveContainer width="100%" height={170}>
                 <BarChart
                   data={forecast.data ?? []}
@@ -214,7 +220,7 @@ export default function WeatherPage() {
                   <YAxis {...axisProps} width={32} />
                   <Tooltip
                     {...tooltipProps}
-                    formatter={(v: unknown) => [`${Number(v)} mm`, "Rainfall"]}
+                    formatter={(v: unknown) => [`${Number(v)} mm`, t.rainfall]}
                   />
                   <Bar dataKey="rainfallMm" fill={HUE_PRIMARY} radius={[4, 4, 0, 0]} maxBarSize={28}>
                     <LabelList
@@ -231,11 +237,11 @@ export default function WeatherPage() {
 
           <section className="panel">
             <h2 className="border-b border-[var(--border)] px-3 py-2 text-[13px] font-bold uppercase tracking-wide">
-              Wind &amp; temperature
+              {t.windTemp}
             </h2>
             <div className="px-2 py-2">
               <p className="px-1 text-[11px] text-[var(--muted)]">
-                Peak wind (kph) and maximum temperature (°C)
+                {t.windTempNote}
               </p>
               <ResponsiveContainer width="100%" height={170}>
                 <LineChart
@@ -249,7 +255,7 @@ export default function WeatherPage() {
                   <Line
                     type="monotone"
                     dataKey="windKph"
-                    name="Wind kph"
+                    name={t.windKph}
                     stroke={SERIES_PAIR[0]}
                     strokeWidth={2}
                     dot={{ r: 2.5 }}
@@ -257,7 +263,7 @@ export default function WeatherPage() {
                   <Line
                     type="monotone"
                     dataKey="maxTempC"
-                    name="Max °C"
+                    name={t.maxC}
                     stroke={SERIES_PAIR[1]}
                     strokeWidth={2}
                     dot={{ r: 2.5 }}

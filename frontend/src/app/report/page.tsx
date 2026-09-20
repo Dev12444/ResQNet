@@ -13,6 +13,9 @@
  * Owner: FE2.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download, FileText, Search, TriangleAlert } from "lucide-react";
@@ -40,6 +43,10 @@ const STATUSES: ReportStatus[] = ["published", "draft", "archived"];
 type SortKey = "newest" | "oldest" | "title" | "kind";
 
 export default function ReportsPage() {
+  const { lang } = useLang();
+  const t = pageStrings(lang).reports;
+  const tc = pageStrings(lang).common;
+  const enums = labels(lang);
   const docs = useEnvelope(useCallback(() => getReportDocs(), []));
 
   const [query, setQuery] = useState("");
@@ -68,14 +75,14 @@ export default function ReportsPage() {
         case "title":
           return a.title.localeCompare(b.title);
         case "kind":
-          return REPORT_KIND_META[a.kind].label.localeCompare(
-            REPORT_KIND_META[b.kind].label,
+          return enums.reportKind[a.kind].localeCompare(
+            enums.reportKind[b.kind],
           );
         default:
           return Date.parse(b.generatedAt) - Date.parse(a.generatedAt);
       }
     });
-  }, [docs.data, query, kinds, district, status, sort]);
+  }, [docs.data, query, kinds, district, status, sort, enums]);
 
   const selected: ReportDoc | null = useMemo(() => {
     if (filtered.length === 0) return null;
@@ -85,11 +92,11 @@ export default function ReportsPage() {
   const filtersActive =
     query.trim() !== "" || kinds.length > 0 || district !== "" || status !== "";
 
-  if (docs.loading && !docs.data) return <LoadingState label="Loading reports…" />;
+  if (docs.loading && !docs.data) return <LoadingState label={t.loading} />;
   if (docs.error && !docs.data) {
     return (
       <div className="p-4">
-        <ErrorState title="Could not load reports" detail={docs.error} onRetry={docs.reload} />
+        <ErrorState title={t.loadErrorTitle} detail={docs.error} onRetry={docs.reload} />
       </div>
     );
   }
@@ -98,10 +105,9 @@ export default function ReportsPage() {
     <div className="p-3 sm:p-4">
       <header className="no-print mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="cmd text-[24px] leading-none">Reports</h1>
+          <h1 className="cmd text-[24px] leading-none">{t.title}</h1>
           <p className="text-sm text-[var(--muted)]">
-            Situation, incident, district, performance, resource and after-action
-            reporting.
+            {t.lead}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -119,7 +125,7 @@ export default function ReportsPage() {
             className="inline-flex min-h-9 items-center gap-1.5 border border-[var(--coral-deep)] bg-[var(--coral)] px-3 cmd text-xs text-white no-underline"
           >
             <TriangleAlert className="size-3.5" aria-hidden />
-            Report an Emergency
+            {t.reportEmergency}
           </Link>
         </div>
       </header>
@@ -148,11 +154,11 @@ export default function ReportsPage() {
               <FileText className="mt-0.5 size-4 shrink-0 text-[var(--muted)]" aria-hidden />
               <span className="min-w-0">
                 <span className="block text-[13px] font-bold">
-                  {REPORT_KIND_META[kind].label}
+                  {enums.reportKind[kind]}
                   <span className="mono ml-1.5 font-normal text-[var(--muted)]">{count}</span>
                 </span>
                 <span className="block text-[11px] leading-snug text-[var(--muted)]">
-                  {REPORT_KIND_META[kind].description}
+                  {enums.reportKindNote[kind]}
                 </span>
               </span>
             </button>
@@ -163,7 +169,7 @@ export default function ReportsPage() {
       {/* Controls */}
       <div className="no-print panel mb-3 flex flex-wrap items-center gap-2 px-3 py-2.5">
         <label className="relative min-w-56 flex-1">
-          <span className="sr-only">Search reports</span>
+          <span className="sr-only">{t.searchLabel}</span>
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--muted)]"
             aria-hidden
@@ -172,19 +178,19 @@ export default function ReportsPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search reference, title, summary or author..."
+            placeholder={t.searchPlaceholder}
             className="h-10 w-full border border-[var(--border-strong)] bg-[var(--surface)] pl-8 pr-2 text-sm"
           />
         </label>
 
         <label>
-          <span className="sr-only">District</span>
+          <span className="sr-only">{tc.district}</span>
           <select
             value={district}
             onChange={(e) => setDistrict(e.target.value)}
             className="h-10 border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm"
           >
-            <option value="">All districts</option>
+            <option value="">{tc.allDistricts}</option>
             {GUJARAT_DISTRICTS.map((d) => (
               <option key={d.id} value={d.name}>
                 {d.name}
@@ -194,13 +200,13 @@ export default function ReportsPage() {
         </label>
 
         <label>
-          <span className="sr-only">Status</span>
+          <span className="sr-only">{t.status}</span>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as ReportStatus | "")}
             className="h-10 border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm capitalize"
           >
-            <option value="">Any status</option>
+            <option value="">{t.anyStatus}</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -210,16 +216,16 @@ export default function ReportsPage() {
         </label>
 
         <label>
-          <span className="sr-only">Sort</span>
+          <span className="sr-only">{t.sort}</span>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
             className="h-10 border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm"
           >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="title">Title A–Z</option>
-            <option value="kind">Report type</option>
+            <option value="newest">{t.newest}</option>
+            <option value="oldest">{t.oldest}</option>
+            <option value="title">{t.titleAz}</option>
+            <option value="kind">{t.reportType}</option>
           </select>
         </label>
 
@@ -234,7 +240,7 @@ export default function ReportsPage() {
             }}
             className="h-10 border border-[var(--border-strong)] px-2.5 text-sm font-semibold"
           >
-            Clear
+            {tc.clear}
           </button>
         )}
       </div>
@@ -243,7 +249,7 @@ export default function ReportsPage() {
       <div className="grid gap-3 lg:grid-cols-[340px_1fr]">
         <section className="no-print panel">
           <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
-            <h2 className="cmd text-[13px]">Index</h2>
+            <h2 className="cmd text-[13px]">{t.index}</h2>
             <span className="mono text-[11px] text-[var(--muted)]">
               {filtered.length} of {docs.data?.length ?? 0}
             </span>
@@ -251,8 +257,8 @@ export default function ReportsPage() {
 
           {filtered.length === 0 ? (
             <EmptyState
-              title="No reports match these filters"
-              hint="Clear a filter to widen the search."
+              title={t.noMatches}
+              hint={t.clearAFilter}
             />
           ) : (
             <ul className="thin-scroll max-h-[560px] divide-y divide-[var(--border)] overflow-y-auto">
@@ -281,9 +287,9 @@ export default function ReportsPage() {
                           className="px-1"
                           style={{ background: "var(--surface-3)" }}
                         >
-                          {REPORT_KIND_META[d.kind].label}
+                          {enums.reportKind[d.kind]}
                         </span>
-                        <span>{d.district ?? "State-wide"}</span>
+                        <span>{d.district ?? t.stateWide}</span>
                         <span aria-hidden>·</span>
                         <span>{d.status}</span>
                       </span>
@@ -299,7 +305,7 @@ export default function ReportsPage() {
           {selected ? (
             <SituationReport doc={selected} />
           ) : (
-            <EmptyState title="Select a report to preview it" />
+            <EmptyState title={t.selectOne} />
           )}
         </section>
       </div>

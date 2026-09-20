@@ -540,6 +540,14 @@ export const UI_STRINGS = {
     submittedAt: "Submitted",
     newReport: "Send another report",
     required: "Required",
+    peopleQuestion: "How many people are affected?",
+    peopleHint: "Leave blank if you are not sure",
+    assistanceQuestion: "Does anyone need special assistance?",
+    assistanceElderly: "Elderly",
+    assistanceChild: "Child",
+    assistanceWheelchair: "Wheelchair",
+    assistanceMedical: "Medical Assistance",
+    assistanceOther: "Other",
   },
   gu: {
     reportTitle: "કટોકટીની જાણ કરો",
@@ -591,6 +599,14 @@ export const UI_STRINGS = {
     submittedAt: "મોકલ્યો",
     newReport: "બીજો રિપોર્ટ મોકલો",
     required: "જરૂરી",
+    peopleQuestion: "કેટલા લોકો અસરગ્રસ્ત છે?",
+    peopleHint: "ખાતરી ન હોય તો ખાલી રાખો",
+    assistanceQuestion: "શું કોઈને ખાસ સહાયની જરૂર છે?",
+    assistanceElderly: "વૃદ્ધ",
+    assistanceChild: "બાળક",
+    assistanceWheelchair: "વ્હીલચેર",
+    assistanceMedical: "તબીબી સહાય",
+    assistanceOther: "અન્ય",
   },
   hi: {
     reportTitle: "आपातकाल की सूचना दें",
@@ -642,6 +658,14 @@ export const UI_STRINGS = {
     submittedAt: "भेजी गई",
     newReport: "दूसरी रिपोर्ट भेजें",
     required: "आवश्यक",
+    peopleQuestion: "कितने लोग प्रभावित हैं?",
+    peopleHint: "निश्चित न हो तो खाली छोड़ें",
+    assistanceQuestion: "क्या किसी को विशेष सहायता चाहिए?",
+    assistanceElderly: "बुज़ुर्ग",
+    assistanceChild: "बच्चा",
+    assistanceWheelchair: "व्हीलचेयर",
+    assistanceMedical: "चिकित्सा सहायता",
+    assistanceOther: "अन्य",
   },
 } as const;
 
@@ -1053,11 +1077,11 @@ export const CONNECTIVITY_META: Record<
 
 /** Special assistance options offered on the SOS form. */
 export const SPECIAL_ASSISTANCE = [
-  { id: "elderly", label: "Elderly" },
-  { id: "child", label: "Child" },
-  { id: "wheelchair", label: "Wheelchair" },
-  { id: "medical", label: "Medical Assistance" },
-  { id: "other", label: "Other" },
+  { id: "elderly", label: "Elderly", key: "assistanceElderly" },
+  { id: "child", label: "Child", key: "assistanceChild" },
+  { id: "wheelchair", label: "Wheelchair", key: "assistanceWheelchair" },
+  { id: "medical", label: "Medical Assistance", key: "assistanceMedical" },
+  { id: "other", label: "Other", key: "assistanceOther" },
 ] as const;
 
 export type SpecialAssistance = (typeof SPECIAL_ASSISTANCE)[number]["id"];

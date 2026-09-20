@@ -37,7 +37,8 @@ import type { Route } from "next";
 import { useCallback, useEffect, useState } from "react";
 import { BellRing, ChevronRight, House, TriangleAlert, X } from "lucide-react";
 import type { DataMode, WeatherAlert } from "@/types";
-import { DISASTER_META } from "@/lib/constants";
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import {
   readIncoming,
   subscribeIncoming,
@@ -62,11 +63,13 @@ interface Flash {
   tone: "critical" | "unverified";
 }
 
-function fromIncoming(a: IncomingAlert): Flash | null {
+type BannerStrings = ReturnType<typeof pageStrings>["banner"];
+
+function fromIncoming(a: IncomingAlert, t: BannerStrings): Flash | null {
   if (a.severity === "moderate") return null;
   return {
     id: a.id,
-    tag: a.kind === "citizen" ? "Citizen report · unverified" : "Warning issued",
+    tag: a.kind === "citizen" ? t.citizenReport : t.warningIssued,
     headline: a.headline,
     detail: a.detail,
     district: a.district,
@@ -76,15 +79,19 @@ function fromIncoming(a: IncomingAlert): Flash | null {
   };
 }
 
-function fromFeed(a: WeatherAlert, demo: boolean): Flash {
-  const meta = DISASTER_META[a.disaster];
+function fromFeed(
+  a: WeatherAlert,
+  demo: boolean,
+  t: BannerStrings,
+  hazard: string,
+): Flash {
   return {
     id: a.id,
     // A fabricated cyclone warning that says "Official warning" and credits IMD
     // is the single most misleading thing this app could put on screen, so the
     // provenance of the feed is carried into the chip rather than assumed.
-    tag: demo ? "Demo warning — not issued" : "Official warning",
-    headline: `${meta.label} warning · ${a.district}`,
+    tag: demo ? t.demoWarning : t.officialWarning,
+    headline: t.warningFor(hazard, a.district),
     detail: a.detail,
     district: a.district,
     source: a.source,
@@ -101,6 +108,10 @@ export function CriticalAlertBanner({
   /** Provenance of `alerts`. Anything but "live" is not an official warning. */
   mode: DataMode;
 }) {
+  const { lang } = useLang();
+  const t = pageStrings(lang).banner;
+  const { stateWide } = t;
+  const hazardLabel = pageStrings(lang).disaster;
   const demoFeed = mode !== "live";
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [incoming, setIncoming] = useState<IncomingAlert[]>([]);
@@ -110,7 +121,7 @@ export function CriticalAlertBanner({
   // Read after mount: storage and Notification.permission are both device
   // state, and reading them during render would desync SSR.
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       try {
         const raw = window.sessionStorage.getItem(DISMISSED_KEY);
         const parsed: unknown = raw ? JSON.parse(raw) : [];
@@ -125,15 +136,19 @@ export function CriticalAlertBanner({
       }
       setIncoming(readIncoming());
     }, 0);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, []);
 
   // A report submitted anywhere in the app — or in another tab — lands here.
   useEffect(() => subscribeIncoming(() => setIncoming(readIncoming())), []);
 
   const queue: Flash[] = [
-    ...incoming.map(fromIncoming).filter((f): f is Flash => f !== null),
-    ...alerts.filter((a) => a.severity === "critical").map((a) => fromFeed(a, demoFeed)),
+    ...incoming
+      .map((a) => fromIncoming(a, t))
+      .filter((f): f is Flash => f !== null),
+    ...alerts
+      .filter((a) => a.severity === "critical")
+      .map((a) => fromFeed(a, demoFeed, t, hazardLabel[a.disaster])),
   ];
   const flash = queue.find((f) => !dismissed.includes(f.id));
 
@@ -150,7 +165,7 @@ export function CriticalAlertBanner({
     setSent(false);
   }, []);
 
-  const requestNotify = useCallback(async () => {
+  const requestNotify = async () => {
     if (!flash || !("Notification" in window)) return;
     let permission = Notification.permission;
     if (permission === "default") permission = await Notification.requestPermission();
@@ -159,11 +174,11 @@ export function CriticalAlertBanner({
     // One notification, for this browser, for this alert. Nothing is queued
     // and nothing is sent anywhere else.
     new Notification(`ResQNet — ${flash.headline}`, {
-      body: `${flash.district ?? "State-wide"}. ${flash.detail}`,
+      body: `${flash.district ?? stateWide}. ${flash.detail}`,
       tag: flash.id,
     });
     setSent(true);
-  }, [flash]);
+  };
 
   if (!flash) return null;
 
@@ -213,7 +228,7 @@ export function CriticalAlertBanner({
             href={flash.href}
             className="cmd flex h-8 items-center gap-1 rounded-[4px] border border-white/60 px-2.5 text-[11px] text-white no-underline hover:bg-white/15"
           >
-            View details
+            {t.viewDetails}
             <ChevronRight className="size-3.5" aria-hidden />
           </Link>
 
@@ -228,7 +243,7 @@ export function CriticalAlertBanner({
             }`}
           >
             <House className="size-3.5" aria-hidden />
-            Find shelter
+            {t.findShelter}
           </Link>
 
           {/* Browser notifications, described accurately. */}
@@ -236,23 +251,23 @@ export function CriticalAlertBanner({
             <button
               type="button"
               onClick={requestNotify}
-              title="Show this warning as a notification in this browser, on this device"
+              title={t.notifyTitle}
               className="cmd flex h-8 items-center gap-1.5 rounded-[4px] border border-white/40 px-2.5 text-[11px] text-white hover:bg-white/15"
             >
               <BellRing className="size-3.5" aria-hidden />
-              Notify this device
+              {t.notifyDevice}
             </button>
           )}
           {sent && (
             <span className="cmd flex h-8 items-center px-1.5 text-[11px] text-white/80">
-              Notified on this device
+              {t.notified}
             </span>
           )}
 
           <button
             type="button"
             onClick={() => dismiss(flash.id)}
-            aria-label="Dismiss this warning"
+            aria-label={t.dismissWarning}
             className="flex size-8 items-center justify-center rounded-[4px] text-white/80 hover:bg-white/15 hover:text-white"
           >
             <X className="size-4" aria-hidden />
@@ -262,10 +277,10 @@ export function CriticalAlertBanner({
 
       <p className="border-t border-white/20 px-3 py-1 text-[10px] leading-snug text-white/75 sm:px-4">
         {unverified
-          ? `Reported by ${flash.source} and awaiting verification by the State Control Room. This banner is showing on this device only — ResQNet does not broadcast to phones. For an emergency, call 112.`
+          ? t.unverifiedNote(flash.source)
           : demoFeed
-            ? `Demonstration warning attributed to ${flash.source} for the walkthrough. Nothing has been issued and nobody has been told. For an emergency, call 112.`
-            : `Issued by ${flash.source}. ResQNet displays official warnings — it does not broadcast to phones. For an emergency, call 112.`}
+            ? t.demoNote(flash.source)
+            : t.officialNote(flash.source)}
       </p>
     </aside>
   );

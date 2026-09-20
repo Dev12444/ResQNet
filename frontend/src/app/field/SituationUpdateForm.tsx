@@ -8,6 +8,9 @@
  * covers every field the initial classification could have got wrong.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 import { useState } from "react";
 import type {
   Assignment,
@@ -19,12 +22,8 @@ import type {
   SituationUpdate,
 } from "@/types";
 import {
-  HAZARD_LABEL,
   HAZARD_OPTIONS,
-  RESOURCE_KIND_META,
-  ROAD_ACCESS_LABEL,
   SEVERITY_COLOR,
-  SEVERITY_LABEL,
 } from "@/lib/constants";
 import { readableOn } from "@/components/layout/primitives";
 import { isSecureContext } from "@/lib/secureContext";
@@ -55,6 +54,9 @@ export function SituationUpdateForm({
   submitting: boolean;
   error: string | null;
 }) {
+  const { lang } = useLang();
+  const t = pageStrings(lang).field;
+  const enums = labels(lang);
   const [severity, setSeverity] = useState<Severity | null>(null);
   const [people, setPeople] = useState("");
   const [hazards, setHazards] = useState<Hazard[]>(incident.hazards);
@@ -75,7 +77,7 @@ export function SituationUpdateForm({
       return;
     }
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setLocError("Location unavailable on this device. Describe it in the notes instead.");
+      setLocError(t.form.locationUnavailable);
       return;
     }
     setLocating(true);
@@ -86,7 +88,7 @@ export function SituationUpdateForm({
         setLocating(false);
       },
       () => {
-        setLocError("Could not get a fix. Describe the correct location in the notes.");
+        setLocError(t.form.fixFailed);
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000 },
@@ -118,16 +120,15 @@ export function SituationUpdateForm({
         });
       }}
     >
-      <h2 className="text-base font-bold uppercase tracking-wide">Update situation</h2>
+      <h2 className="text-base font-bold uppercase tracking-wide">{t.updateSituation}</h2>
       <p className="-mt-2 text-xs text-[var(--muted)]">
-        What you record here replaces the reported picture. Leave a field blank to keep the
-        current value.
+        {t.form.lead}
       </p>
 
       <fieldset>
-        <legend className="text-sm font-semibold">Severity as you find it</legend>
+        <legend className="text-sm font-semibold">{t.form.severityAsFound}</legend>
         <p className="text-xs text-[var(--muted)]">
-          Reported: SEV {incident.severity} · {SEVERITY_LABEL[incident.severity]}
+          {t.reported}: SEV {incident.severity} · {enums.severity[incident.severity]}
         </p>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {SEVERITIES.map((s) => {
@@ -157,7 +158,7 @@ export function SituationUpdateForm({
       </fieldset>
 
       <label className="block">
-        <span className="text-sm font-semibold">People affected</span>
+        <span className="text-sm font-semibold">{t.peopleAffected}</span>
         <input
           type="number"
           inputMode="numeric"
@@ -166,7 +167,7 @@ export function SituationUpdateForm({
           onChange={(e) => setPeople(e.target.value)}
           placeholder={
             incident.people_affected_est === null
-              ? "Not estimated"
+              ? t.notEstimated
               : `Reported: ${incident.people_affected_est}`
           }
           className="mt-1 min-h-12 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-base"
@@ -174,7 +175,7 @@ export function SituationUpdateForm({
       </label>
 
       <fieldset>
-        <legend className="text-sm font-semibold">Hazards present</legend>
+        <legend className="text-sm font-semibold">{t.form.hazardsPresent}</legend>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {HAZARD_OPTIONS.map((h) => {
             const active = hazards.includes(h);
@@ -190,7 +191,7 @@ export function SituationUpdateForm({
                     : "border-[var(--border-strong)]"
                 }`}
               >
-                {HAZARD_LABEL[h]}
+                {enums.hazard[h]}
               </button>
             );
           })}
@@ -198,7 +199,7 @@ export function SituationUpdateForm({
       </fieldset>
 
       <fieldset>
-        <legend className="text-sm font-semibold">Road access</legend>
+        <legend className="text-sm font-semibold">{t.roadAccess}</legend>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {ROAD_OPTIONS.map((r) => (
             <button
@@ -212,21 +213,21 @@ export function SituationUpdateForm({
                   : "border-[var(--border-strong)]"
               }`}
             >
-              {ROAD_ACCESS_LABEL[r]}
+              {enums.roadAccess[r]}
             </button>
           ))}
         </div>
       </fieldset>
 
       <div>
-        <span className="text-sm font-semibold">Corrected location</span>
+        <span className="text-sm font-semibold">{t.form.correctedLocation}</span>
         <button
           type="button"
           onClick={useMyPosition}
           disabled={locating}
           className="mt-1.5 min-h-12 w-full border border-[var(--border-strong)] px-3 text-sm font-semibold hover:bg-[var(--surface-2)] disabled:opacity-60"
         >
-          {locating ? "Getting fix…" : "Use my current position"}
+          {locating ? t.form.gettingFix : t.form.useMyPosition}
         </button>
         {coords && (
           <p className="mono mt-1 text-xs text-[var(--muted)]">
@@ -241,7 +242,7 @@ export function SituationUpdateForm({
       </div>
 
       <fieldset>
-        <legend className="text-sm font-semibold">Additional resources needed</legend>
+        <legend className="text-sm font-semibold">{t.additionalResources}</legend>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {KINDS.map((k) => {
             const active = extra.includes(k);
@@ -257,7 +258,7 @@ export function SituationUpdateForm({
                     : "border-[var(--border-strong)]"
                 }`}
               >
-                {RESOURCE_KIND_META[k].label}
+                {enums.resourceKind[k]}
               </button>
             );
           })}
@@ -265,12 +266,12 @@ export function SituationUpdateForm({
       </fieldset>
 
       <label className="block">
-        <span className="text-sm font-semibold">Notes</span>
+        <span className="text-sm font-semibold">{t.notes}</span>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
-          placeholder="What the control room needs to know"
+          placeholder={t.form.notesHint}
           className="mt-1 w-full border border-[var(--border-strong)] bg-[var(--surface)] px-2 py-1.5 text-base"
         />
       </label>
@@ -282,7 +283,7 @@ export function SituationUpdateForm({
           onChange={(e) => setResolved(e.target.checked)}
           className="size-5"
         />
-        <span className="text-sm font-semibold">Incident resolved at this location</span>
+        <span className="text-sm font-semibold">{t.form.resolvedHere}</span>
       </label>
 
       {error && (
@@ -301,14 +302,14 @@ export function SituationUpdateForm({
           onClick={onCancel}
           className="min-h-14 flex-1 border border-[var(--border-strong)] px-3 font-semibold"
         >
-          Cancel
+          {pageStrings(lang).common.cancel}
         </button>
         <button
           type="submit"
           disabled={submitting}
           className="min-h-14 flex-[2] border-2 border-[var(--foreground)] bg-[var(--foreground)] px-3 font-bold uppercase tracking-wide text-[var(--surface)] disabled:opacity-70"
         >
-          {submitting ? "Sending…" : "Send update"}
+          {submitting ? t.sending : t.send}
         </button>
       </div>
     </form>

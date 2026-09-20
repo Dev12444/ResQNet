@@ -22,6 +22,7 @@
  * plate, the only saturated object in the bar.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
@@ -29,12 +30,13 @@ import type { Lang } from "@/types";
 import { PLATFORM_STRINGS, SIDEBAR_NAV, type NavKey } from "@/lib/constants";
 
 export function PrimaryNav({ lang }: { lang: Lang }) {
+  const m = pageStrings(lang).misc;
   const pathname = usePathname();
   const nav = PLATFORM_STRINGS[lang].nav;
 
   return (
     <nav
-      aria-label="Sections"
+      aria-label={m.sections}
       className="border-b border-[var(--navy-900)] bg-[var(--navy-900)]"
     >
       <ul className="no-scrollbar flex items-stretch overflow-x-auto">

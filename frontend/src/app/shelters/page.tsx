@@ -13,6 +13,9 @@
  * Owner: FE2.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Accessibility,
@@ -45,6 +48,10 @@ import {
 const STATUSES = Object.keys(SHELTER_STATUS_META) as ShelterStatus[];
 
 export default function SheltersPage() {
+  const { lang } = useLang();
+  const t = pageStrings(lang).shelters;
+  const enums = labels(lang);
+  const tc = pageStrings(lang).common;
   const shelters = useEnvelope(useCallback(() => getShelters(), []));
   const now = useNow();
 
@@ -101,12 +108,12 @@ export default function SheltersPage() {
     setRoute(env.data);
   }
 
-  if (shelters.loading && !shelters.data) return <LoadingState label="Loading shelters…" />;
+  if (shelters.loading && !shelters.data) return <LoadingState label={t.loading} />;
   if (shelters.error && !shelters.data) {
     return (
       <div className="p-4">
         <ErrorState
-          title="Could not load shelters"
+          title={t.loadErrorTitle}
           detail={shelters.error}
           onRetry={shelters.reload}
         />
@@ -118,7 +125,7 @@ export default function SheltersPage() {
     <div className="p-3 sm:p-4">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="cmd text-[24px] leading-none">Shelters</h1>
+          <h1 className="cmd text-[24px] leading-none">{t.title}</h1>
           <p className="text-sm text-[var(--muted)]">
             {totals.open} open · {totals.occupancy.toLocaleString("en-IN")} of{" "}
             {totals.capacity.toLocaleString("en-IN")} places in use
@@ -130,7 +137,7 @@ export default function SheltersPage() {
       {/* Filters */}
       <div className="panel mb-3 flex flex-wrap items-center gap-2 px-3 py-2.5">
         <label className="relative min-w-56 flex-1">
-          <span className="sr-only">Search shelters</span>
+          <span className="sr-only">{t.searchLabel}</span>
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--muted)]"
             aria-hidden
@@ -139,19 +146,19 @@ export default function SheltersPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name or address..."
+            placeholder={t.searchPlaceholder}
             className="h-10 w-full border border-[var(--border-strong)] bg-[var(--surface)] pl-8 pr-2 text-sm"
           />
         </label>
 
         <label>
-          <span className="sr-only">District</span>
+          <span className="sr-only">{tc.district}</span>
           <select
             value={district}
             onChange={(e) => setDistrict(e.target.value)}
             className="h-10 border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm"
           >
-            <option value="">All districts</option>
+            <option value="">{tc.allDistricts}</option>
             {GUJARAT_DISTRICTS.map((d) => (
               <option key={d.id} value={d.name}>
                 {d.name}
@@ -164,7 +171,7 @@ export default function SheltersPage() {
           {STATUSES.map((s) => (
             <Chip
               key={s}
-              label={SHELTER_STATUS_META[s].label}
+              label={enums.shelterStatus[s]}
               active={statuses.includes(s)}
               onClick={() =>
                 setStatuses((prev) =>
@@ -177,14 +184,14 @@ export default function SheltersPage() {
 
         <div className="flex flex-wrap gap-1.5">
           {[
-            { id: "food", label: "Food" },
-            { id: "water", label: "Water" },
-            { id: "medical", label: "Medical" },
-            { id: "accessible", label: "Accessible" },
+            { id: "food", labelKey: "food" as const },
+            { id: "water", labelKey: "water" as const },
+            { id: "medical", labelKey: "medical" as const },
+            { id: "accessible", labelKey: "accessible" as const },
           ].map((n) => (
             <Chip
               key={n.id}
-              label={n.label}
+              label={t[n.labelKey]}
               active={needs.includes(n.id)}
               onClick={() =>
                 setNeeds((prev) =>
@@ -200,8 +207,8 @@ export default function SheltersPage() {
         <section className="panel">
           {filtered.length === 0 ? (
             <EmptyState
-              title="No shelters match these filters"
-              hint="Clear a filter to widen the search."
+              title={t.noMatches}
+              hint={t.clearAFilter}
             />
           ) : (
             <ul className="divide-y divide-[var(--border)]">
@@ -228,7 +235,7 @@ export default function SheltersPage() {
                         className="px-1.5 py-0.5 text-[10px] font-bold uppercase"
                         style={{ background: `${meta.color}14`, color: meta.color }}
                       >
-                        {meta.label}
+                        {enums.shelterStatus[s.status]}
                       </span>
                     </div>
 
@@ -288,7 +295,7 @@ export default function SheltersPage() {
                         rel="noopener noreferrer"
                         className="inline-flex min-h-9 items-center gap-1.5 border border-[var(--carbon)] px-2.5 text-xs font-semibold no-underline"
                       >
-                        Directions
+                        {t.directions}
                       </a>
                       <button
                         type="button"
@@ -318,7 +325,7 @@ export default function SheltersPage() {
                 className="mb-2 border-l-4 px-2 py-1.5 text-[11px] leading-snug"
                 style={{ borderColor: "var(--medium)", background: "var(--medium-bg)" }}
               >
-                <strong>Illustrative route.</strong> No live routing engine is connected,
+                <strong>{t.illustrativeRoute}</strong> No live routing engine is connected,
                 so these steps have not been checked against current road conditions.
                 Follow official instructions on the ground.
               </p>
@@ -351,7 +358,7 @@ export default function SheltersPage() {
               {route.hazardsAvoided.length > 0 && (
                 <div className="mt-2 border-t border-[var(--border)] pt-2">
                   <p className="eyebrow text-[var(--muted)]">
-                    Known hazards routed around
+                    {t.hazardsRouted}
                   </p>
                   <ul className="mt-1 space-y-0.5">
                     {route.hazardsAvoided.map((h) => (
@@ -369,8 +376,8 @@ export default function SheltersPage() {
             </div>
           ) : (
             <EmptyState
-              title="No route selected"
-              hint="Choose SafeRoute on a shelter to see a suggested way there."
+              title={t.noRoute}
+              hint={t.noRouteHint}
             />
           )}
         </section>

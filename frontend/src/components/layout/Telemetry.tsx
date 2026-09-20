@@ -11,6 +11,8 @@
  * readout at all.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import { useEffect, useState } from "react";
 
 const IST = "Asia/Kolkata";
@@ -37,7 +39,7 @@ export function LiveClock({ className = "" }: { className?: string }) {
 
   return (
     <span className={`telemetry tabular-nums ${className}`}>
-      <span className="text-[var(--faint)]">LIVE IST </span>
+      <span className="text-[var(--faint)]">{pageStrings(useLang().lang).misc.liveIst} </span>
       <span className="text-[var(--muted)]">
         {now
           ? now.toLocaleTimeString("en-GB", { timeZone: IST, hour12: false })

@@ -14,6 +14,7 @@
  * real government alert, which matters because it looks exactly like one.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import { useState } from "react";
 import Link from "next/link";
 import {
@@ -52,6 +53,7 @@ export function FlashAlertScreen({
   );
   const [safe, setSafe] = useState<"idle" | "sending" | "sent" | "local">("idle");
   const meta = FLASH_SEVERITY_META[alert.severity];
+  const t = pageStrings(lang).flash;
 
   const markSafe = async () => {
     setSafe("sending");
@@ -85,15 +87,15 @@ export function FlashAlertScreen({
         >
           <AlertTriangle className="size-5 shrink-0" aria-hidden />
           <span className="text-[13px] font-extrabold uppercase tracking-wide">
-            Emergency Alert
+            {t.emergencyAlert}
           </span>
           <span className="ml-auto rounded-[3px] bg-white/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-            Simulation
+            {t.simulation}
           </span>
           <button
             type="button"
             onClick={onDismiss}
-            aria-label="Dismiss alert"
+            aria-label={t.dismissAlert}
             className="rounded p-0.5 text-white/85 hover:bg-white/20 hover:text-white"
           >
             <X className="size-4" />
@@ -109,10 +111,10 @@ export function FlashAlertScreen({
             className="rounded-[3px] px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-white"
             style={{ background: meta.color }}
           >
-            {meta.label}
+            {t.severityLabel[alert.severity]}
           </span>
           <span className="text-[11px] font-semibold text-[var(--foreground)]">
-            {meta.action}
+            {t.severityAction[alert.severity]}
           </span>
           <div className="ml-auto flex gap-0.5">
             {alert.languages.map((l) => (
@@ -149,18 +151,18 @@ export function FlashAlertScreen({
           </p>
 
           <dl className="mt-3.5 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[var(--hairline)] pt-3">
-            <Field label="Affected area" value={alert.target.area} />
+            <Field label={t.affectedArea} value={alert.target.area} />
             <Field
-              label="Issued"
+              label={t.issued}
               value={issued.toLocaleTimeString("en-IN", {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
             />
-            <Field label="Source" value="ResQNet · Emergency Response Network" />
+            <Field label={t.source} value={t.sourceValue} />
             <Field
-              label="Estimated reach"
-              value={`${formatReach(alert.target.population)} people`}
+              label={t.estimatedReach}
+              value={t.people(formatReach(alert.target.population))}
             />
           </dl>
         </div>
@@ -172,14 +174,14 @@ export function FlashAlertScreen({
             onClick={onDismiss}
             className="flex items-center justify-center gap-1.5 bg-white px-2 py-3 text-[12px] font-bold text-[var(--navy-800)] no-underline hover:bg-[var(--info-bg)]"
           >
-            <RouteIcon className="size-4" aria-hidden /> VIEW SAFE ROUTE
+            <RouteIcon className="size-4" aria-hidden /> {t.viewSafeRoute}
           </Link>
           <Link
             href="/shelters"
             onClick={onDismiss}
             className="flex items-center justify-center gap-1.5 bg-white px-2 py-3 text-[12px] font-bold text-[var(--navy-800)] no-underline hover:bg-[var(--info-bg)]"
           >
-            <Hospital className="size-4" aria-hidden /> NEAREST SHELTER
+            <Hospital className="size-4" aria-hidden /> {t.nearestShelter}
           </Link>
 
           <button
@@ -190,12 +192,12 @@ export function FlashAlertScreen({
           >
             {safe === "sent" || safe === "local" ? (
               <>
-                <Check className="size-4" aria-hidden /> CHECK-IN RECORDED
+                <Check className="size-4" aria-hidden /> {t.checkInRecorded}
               </>
             ) : (
               <>
                 <ShieldCheck className="size-4" aria-hidden />{" "}
-                {safe === "sending" ? "SENDING…" : "I'M SAFE"}
+                {safe === "sending" ? t.sending : t.imSafe}
               </>
             )}
           </button>
@@ -203,14 +205,13 @@ export function FlashAlertScreen({
             href="tel:112"
             className="flex items-center justify-center gap-1.5 bg-[var(--crimson)] px-2 py-3 text-[12px] font-bold text-white no-underline hover:bg-[var(--crimson-700)]"
           >
-            <Phone className="size-4" aria-hidden /> EMERGENCY 112
+            <Phone className="size-4" aria-hidden /> {t.emergency112}
           </a>
         </div>
 
         {safe === "local" && (
           <p className="border-t border-[var(--hairline)] bg-[var(--medium-bg)] px-3 py-1.5 text-[11px] text-[var(--foreground)]">
-            Saved on this device only — it has <strong>not</strong> reached the
-            control room yet. If you need help now, call 112.
+            {t.deviceOnlyNote} <strong>{t.notWord}</strong> {t.callNowNote}
           </p>
         )}
 
@@ -225,18 +226,15 @@ export function FlashAlertScreen({
               onClick={onDismiss}
               className="ml-auto shrink-0 text-[11px] font-bold text-[var(--navy-600)] no-underline hover:underline"
             >
-              VIEW INCIDENT
+              {t.viewIncident}
             </Link>
           </div>
         )}
 
         {/* The disclaimer that makes this honest */}
         <p className="border-t border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-[10px] leading-relaxed text-[var(--muted)]">
-          <strong className="text-[var(--foreground)]">Simulated alert.</strong>{" "}
-          This is a demonstration of ResQNet&apos;s warning workflow. It is not an
-          official government cell broadcast and was not sent to any phone. In a
-          live deployment an approved warning is handed to the NDMA Common
-          Alerting Protocol gateway, which performs the broadcast.
+          <strong className="text-[var(--foreground)]">{t.simulatedAlert}</strong>{" "}
+          {t.simulatedAlertNote}
         </p>
       </div>
     </div>

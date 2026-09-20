@@ -39,6 +39,8 @@ import {
   tooltipProps,
 } from "./chartTheme";
 import { EmptyState } from "@/components/layout/primitives";
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 
 /* ------------------------------------------------------------------ */
 /* Counts across categories                                            */
@@ -47,13 +49,14 @@ import { EmptyState } from "@/components/layout/primitives";
 export function CategoryBars({
   data,
   height = 220,
-  valueLabel = "Count",
+  valueLabel,
 }: {
   data: { label: string; value: number }[];
   height?: number;
   valueLabel?: string;
 }) {
-  if (data.length === 0) return <EmptyState title="No data for these filters" />;
+  const t = pageStrings(useLang().lang).charts;
+  if (data.length === 0) return <EmptyState title={t.noData} />;
 
   return (
     <ResponsiveContainer width="100%" height={Math.max(height, data.length * 28 + 30)}>
@@ -69,7 +72,7 @@ export function CategoryBars({
         />
         <Tooltip
           {...tooltipProps}
-          formatter={(v: unknown) => [Number(v), valueLabel] as [number, string]}
+          formatter={(v: unknown) => [Number(v), valueLabel ?? t.count] as [number, string]}
         />
         <Bar dataKey="value" fill={HUE_PRIMARY} radius={[0, 4, 4, 0]} maxBarSize={18}>
           <LabelList
@@ -94,8 +97,9 @@ export function CategoryBars({
  * the chart stays readable if the colours are indistinguishable.
  */
 export function SeverityBars({ data }: { data: { severity: Severity; count: number }[] }) {
+  const t = pageStrings(useLang().lang).charts;
   if (data.every((d) => d.count === 0)) {
-    return <EmptyState title="No incidents for these filters" />;
+    return <EmptyState title={t.noIncidents} />;
   }
   const rows = data.map((d) => ({
     ...d,
@@ -110,7 +114,7 @@ export function SeverityBars({ data }: { data: { severity: Severity; count: numb
         <XAxis dataKey="label" {...axisProps} />
         <YAxis {...axisProps} allowDecimals={false} width={28} />
         <Tooltip {...tooltipProps} />
-        <Bar dataKey="count" name="Incidents" radius={[4, 4, 0, 0]} maxBarSize={44}>
+        <Bar dataKey="count" name={t.incidents} radius={[4, 4, 0, 0]} maxBarSize={44}>
           {rows.map((row) => (
             <Cell key={row.severity} fill={SEVERITY_COLOR[row.severity]} />
           ))}
@@ -135,8 +139,10 @@ export function TimelineChart({
 }: {
   data: { t: string; incidents: number; reports: number }[];
 }) {
+  const t = pageStrings(useLang().lang).charts;
+  const tt = pageStrings(useLang().lang).misc.chartTable;
   const [showTable, setShowTable] = useState(false);
-  if (data.length === 0) return <EmptyState title="No activity in this window" />;
+  if (data.length === 0) return <EmptyState title={t.noActivity} />;
 
   const rows = data.map((d) => ({
     ...d,
@@ -158,7 +164,7 @@ export function TimelineChart({
           <Line
             type="monotone"
             dataKey="reports"
-            name="Reports"
+            name={t.reports}
             stroke={SERIES_PAIR[0]}
             strokeWidth={2}
             dot={{ r: 2.5 }}
@@ -167,7 +173,7 @@ export function TimelineChart({
           <Line
             type="monotone"
             dataKey="incidents"
-            name="Incidents"
+            name={t.incidents}
             stroke={SERIES_PAIR[1]}
             strokeWidth={2}
             dot={{ r: 2.5 }}
@@ -182,18 +188,18 @@ export function TimelineChart({
         aria-expanded={showTable}
         className="mt-1 text-xs font-semibold underline"
       >
-        {showTable ? "Hide data table" : "Show data table"}
+        {showTable ? t.hideTable : t.showTable}
       </button>
 
       {showTable && (
         <div className="mt-2 overflow-x-auto">
           <table className="w-full border-collapse text-xs">
-            <caption className="sr-only">Reports and incidents per time bucket</caption>
+            <caption className="sr-only">{tt.caption}</caption>
             <thead>
               <tr className="border-b border-[var(--border-strong)] text-left">
-                <th scope="col" className="px-2 py-1">Time</th>
-                <th scope="col" className="px-2 py-1">Reports</th>
-                <th scope="col" className="px-2 py-1">Incidents</th>
+                <th scope="col" className="px-2 py-1">{tt.time}</th>
+                <th scope="col" className="px-2 py-1">{tt.reports}</th>
+                <th scope="col" className="px-2 py-1">{tt.incidents}</th>
               </tr>
             </thead>
             <tbody>
@@ -227,7 +233,8 @@ export function GroupedBars({
   seriesB: string;
   asDuration?: boolean;
 }) {
-  if (data.length === 0) return <EmptyState title="No data for these filters" />;
+  const t = pageStrings(useLang().lang).charts;
+  if (data.length === 0) return <EmptyState title={t.noData} />;
   const fmt = (v: number) => (asDuration ? formatDuration(v) : String(v));
 
   return (

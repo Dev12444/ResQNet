@@ -15,6 +15,7 @@
  * coastline stays readable.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Map as MapLibreMap, Marker, NavigationControl } from "maplibre-gl";
 import type { StyleSpecification } from "maplibre-gl";
@@ -279,6 +280,7 @@ export function GujaratMap({
      inside AppShell, and the map's legend is the only thing here that changes
      with language. */
   const { lang } = useLang();
+  const m = pageStrings(lang).misc;
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markerObjects = useRef<Marker[]>([]);
@@ -839,7 +841,7 @@ export function GujaratMap({
         type="button"
         onClick={() => setShowGrid((g) => !g)}
         aria-pressed={showGrid}
-        title="Toggle the map grid reference overlay"
+        title={m.toggleGrid}
         className={`cmd absolute left-14 top-[54px] z-10 flex items-center gap-1.5 border border-[var(--carbon)] px-2 py-1 text-[11px] shadow-sm ${
           showGrid
             ? "bg-[var(--carbon)] text-white"
@@ -855,8 +857,8 @@ export function GujaratMap({
       <button
         type="button"
         onClick={recenter}
-        aria-label="Reset the map view"
-        title="Reset the map view"
+        aria-label={m.resetView}
+        title={m.resetView}
         className="absolute left-3 top-[76px] z-10 flex size-[29px] items-center justify-center rounded-[4px] border border-[var(--border-strong)] bg-white shadow-sm hover:bg-[var(--surface-2)]"
       >
         <Crosshair className="size-4" aria-hidden />
@@ -877,7 +879,7 @@ export function GujaratMap({
           </button>
           {layersOpen && (
             <fieldset className="absolute right-0 top-full z-20 mt-1 w-56 border border-[var(--carbon)] bg-[var(--surface)] shadow-lg">
-              <legend className="sr-only">Map layers</legend>
+              <legend className="sr-only">{m.mapLayers}</legend>
               <p className="eyebrow border-b border-[var(--hairline)] bg-[var(--surface-2)] px-2 py-1.5 text-[var(--muted)]">
                 Operational Layers
               </p>
@@ -946,7 +948,7 @@ export function GujaratMap({
             <button
               type="button"
               onClick={() => onSelectDistrict(null)}
-              aria-label="Close district panel"
+              aria-label={m.closeDistrictPanel}
               className="shrink-0 text-[var(--rail-muted)] hover:text-white"
             >
               <X className="size-4" />
@@ -970,7 +972,7 @@ export function GujaratMap({
               signature reads identically wherever it appears. */}
           <div className="border-b border-[var(--hairline)] px-3 py-2">
             <div className="flex items-baseline justify-between">
-              <span className="eyebrow text-[var(--muted)]">ResQ Pulse</span>
+              <span className="eyebrow text-[var(--muted)]">{m.resqPulse}</span>
               <span
                 className="cmd text-[12px]"
                 style={{ color: RISK_META[selected.risk].color }}

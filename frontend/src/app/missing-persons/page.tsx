@@ -11,6 +11,9 @@
  * Owner: FE2.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 import { useCallback, useMemo, useState } from "react";
 import { Search, UserSearch } from "lucide-react";
 import type { MissingStatus } from "@/types";
@@ -27,6 +30,10 @@ import { DataModeBadge } from "@/components/layout/ConnectionBar";
 const STATUSES = Object.keys(MISSING_STATUS_META) as MissingStatus[];
 
 export default function MissingPersonsPage() {
+  const { lang } = useLang();
+  const t = pageStrings(lang).missing;
+  const enums = labels(lang);
+  const tc = pageStrings(lang).common;
   const people = useEnvelope(useCallback(() => getMissingPersons(), []));
 
   const [query, setQuery] = useState("");
@@ -59,12 +66,12 @@ export default function MissingPersonsPage() {
     return out;
   }, [people.data]);
 
-  if (people.loading && !people.data) return <LoadingState label="Loading register…" />;
+  if (people.loading && !people.data) return <LoadingState label={t.loading} />;
   if (people.error && !people.data) {
     return (
       <div className="p-4">
         <ErrorState
-          title="Could not load the register"
+          title={t.loadErrorTitle}
           detail={people.error}
           onRetry={people.reload}
         />
@@ -76,9 +83,9 @@ export default function MissingPersonsPage() {
     <div className="p-3 sm:p-4">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="cmd text-[24px] leading-none">Missing Persons</h1>
+          <h1 className="cmd text-[24px] leading-none">{t.title}</h1>
           <p className="text-sm text-[var(--muted)]">
-            Missing → Potential Match → Located → Reunited
+            {t.ladder}
           </p>
         </div>
         <DataModeBadge mode={people.mode} note={people.error} />
@@ -107,7 +114,7 @@ export default function MissingPersonsPage() {
                 {counts[s]}
               </span>
               <span className="block text-[11px] font-bold uppercase tracking-wide">
-                {meta.label}
+                {enums.missingStatus[s]}
               </span>
             </button>
           );
@@ -116,7 +123,7 @@ export default function MissingPersonsPage() {
 
       <div className="panel mb-3 flex flex-wrap items-center gap-2 px-3 py-2.5">
         <label className="relative min-w-56 flex-1">
-          <span className="sr-only">Search the register</span>
+          <span className="sr-only">{t.searchLabel}</span>
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--muted)]"
             aria-hidden
@@ -125,19 +132,19 @@ export default function MissingPersonsPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name, last-seen location or description..."
+            placeholder={t.searchPlaceholder}
             className="h-10 w-full border border-[var(--border-strong)] bg-[var(--surface)] pl-8 pr-2 text-sm"
           />
         </label>
 
         <label>
-          <span className="sr-only">District</span>
+          <span className="sr-only">{tc.district}</span>
           <select
             value={district}
             onChange={(e) => setDistrict(e.target.value)}
             className="h-10 border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm"
           >
-            <option value="">All districts</option>
+            <option value="">{tc.allDistricts}</option>
             {GUJARAT_DISTRICTS.map((d) => (
               <option key={d.id} value={d.name}>
                 {d.name}
@@ -153,15 +160,15 @@ export default function MissingPersonsPage() {
             onChange={(e) => setShowResolved(e.target.checked)}
             className="size-4"
           />
-          Show reunited cases
+          {t.showReunited}
         </label>
       </div>
 
       <section className="panel">
         {filtered.length === 0 ? (
           <EmptyState
-            title="No cases match these filters"
-            hint="Reunited cases are hidden unless you tick the box above."
+            title={t.noMatches}
+            hint={t.reunitedHidden}
           />
         ) : (
           <ul className="divide-y divide-[var(--border)]">
@@ -185,7 +192,7 @@ export default function MissingPersonsPage() {
                         className="px-1.5 py-0.5 text-[10px] font-bold uppercase"
                         style={{ background: `${meta.color}14`, color: meta.color }}
                       >
-                        {meta.label}
+                        {enums.missingStatus[p.status]}
                       </span>
                     </div>
 
@@ -193,26 +200,26 @@ export default function MissingPersonsPage() {
 
                     <dl className="mono mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5 text-[11px] text-[var(--muted)]">
                       <span>
-                        <dt className="inline">Last seen: </dt>
+                        <dt className="inline">{t.lastSeenAt} </dt>
                         <dd className="inline">
                           {p.lastSeenLocation}, {p.district}
                         </dd>
                       </span>
                       <span>
-                        <dt className="inline">At: </dt>
+                        <dt className="inline">{t.at} </dt>
                         <dd className="inline">
                           {new Date(p.lastSeenAt).toTimeString().slice(0, 5)}
                         </dd>
                       </span>
                       <span>
-                        <dt className="inline">Case officer: </dt>
+                        <dt className="inline">{t.caseOfficer} </dt>
                         <dd className="inline">{p.caseOfficer}</dd>
                       </span>
                     </dl>
 
                     {!p.hasPhoto && (
                       <p className="mt-1 text-[11px] text-[var(--faint)]">
-                        No photograph on file.
+                        {t.noPhoto}
                       </p>
                     )}
                   </div>

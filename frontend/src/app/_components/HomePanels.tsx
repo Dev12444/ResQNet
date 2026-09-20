@@ -9,6 +9,8 @@
  * dedicated pages.
  */
 
+import { useLang } from "@/components/layout/LangProvider";
+import { pageStrings } from "@/lib/pageStrings";
 import Link from "next/link";
 import type { Route } from "next";
 import { useEffect, useMemo, useState } from "react";
@@ -293,6 +295,7 @@ export function NearestShelters({
  * so motion on this component always means one thing.
  */
 export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) {
+  const m = pageStrings(lang).misc;
   const t = PLATFORM_STRINGS[lang];
   const [index, setIndex] = useState(0);
   const current = pulse[index];
@@ -304,7 +307,7 @@ export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) 
       <div className="panel-head">
         <Radio className="size-3.5 shrink-0" style={{ color: meta.color }} aria-hidden />
         <h2 className="cmd text-[12px]">{t.resqPulse}</h2>
-        <span className="telemetry ml-auto">District index</span>
+        <span className="telemetry ml-auto">{m.districtIndex}</span>
       </div>
 
       <div className="no-scrollbar flex overflow-x-auto border-b border-[var(--hairline)]">
@@ -350,7 +353,7 @@ export function PulsePanel({ pulse, lang }: { pulse: ResQPulse[]; lang: Lang }) 
           className="mt-2 rounded-[4px] border-l-[3px] bg-[var(--surface-2)] px-2 py-1.5"
           style={{ borderLeftColor: meta.color }}
         >
-          <span className="eyebrow block text-[var(--muted)]">Priority area</span>
+          <span className="eyebrow block text-[var(--muted)]">{m.priorityArea}</span>
           <span className="mt-0.5 block text-[12px] font-bold">
             {current.priorityArea}
           </span>
@@ -511,6 +514,7 @@ export function DispatchLogPanel({
       : entries;
     return compact ? list.slice(0, 12) : list;
   }, [entries, filter, compact]);
+  const m = pageStrings(useLang().lang).misc;
 
   return (
     <section className="panel flex min-h-0 flex-col">
@@ -525,13 +529,13 @@ export function DispatchLogPanel({
         <div className="border-b border-[var(--hairline)] px-2.5 py-2">
           <label className="block">
             <span className="sr-only">
-              Filter log by incident, district, unit or severity
+              {m.filterPlaceholder}
             </span>
             <input
               type="search"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter by incident, district, unit or severity..."
+              placeholder={m.filterPlaceholder}
               className="h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-white px-2 text-[12px]"
             />
           </label>
@@ -662,13 +666,14 @@ export function RadarForecast({
  * anyone reading the shapes underneath as observation data.
  */
 function RadarSweep() {
+  const m = pageStrings(useLang().lang).misc;
   return (
     <div className="relative overflow-hidden rounded-[4px] border border-[var(--border)] bg-[#0b1f38]">
       <svg
         viewBox="0 0 200 130"
         className="h-[132px] w-full"
         role="img"
-        aria-label="Schematic of the cyclone system over the Arabian Sea with its projected track towards the Kutch coast"
+        aria-label={m.cycloneSchematic}
       >
         <defs>
           <radialGradient id="resq-eye" cx="50%" cy="50%">
@@ -778,11 +783,14 @@ function RadarSweep() {
  * alone is unreadable to part of the audience.
  */
 export function WeatherTrend({ forecast }: { forecast: ForecastDay[] }) {
+  const m = pageStrings(useLang().lang).misc;
   return (
     <section className="panel flex min-h-0 flex-col">
       <div className="panel-head">
         <TrendingUp className="size-3.5 shrink-0 text-[var(--navy-600)]" aria-hidden />
-        <h2 className="cmd min-w-0 text-[12px] sm:shrink-0 sm:whitespace-nowrap">Weather Trend</h2>
+        <h2 className="cmd min-w-0 text-[12px] sm:shrink-0 sm:whitespace-nowrap">
+          {m.weatherTrend}
+        </h2>
         <PanelStamp demo />
       </div>
 

@@ -21,6 +21,8 @@
  *     how a stacked lockup is normally reduced.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { useLang } from "@/components/layout/LangProvider";
 import Image from "next/image";
 
 /** Natural size of the trimmed artwork, used to keep the intrinsic ratio. */
@@ -35,10 +37,11 @@ export function ResQLogo({
   /** Set on the header copy: it is above the fold on every route. */
   priority?: boolean;
 }) {
+  const m = pageStrings(useLang().lang).misc;
   return (
     <Image
       src="/brand/resqnet-logo.png"
-      alt="ResQNet — Disaster Response Platform"
+      alt={m.logoAlt}
       width={LOGO.w}
       height={LOGO.h}
       priority={priority}

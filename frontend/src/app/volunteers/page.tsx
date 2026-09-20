@@ -10,6 +10,9 @@
  * Owner: FE2.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 import { useCallback, useMemo, useState } from "react";
 import {
   BriefcaseMedical,
@@ -56,6 +59,10 @@ const NEXT_STATUS: Record<ReliefStatus, ReliefStatus | null> = {
 };
 
 export default function VolunteersPage() {
+  const { lang } = useLang();
+  const t = pageStrings(lang).volunteers;
+  const enums = labels(lang);
+  const tc = pageStrings(lang).common;
   const requests = useEnvelope(useCallback(() => getReliefRequests(), []));
 
   const [query, setQuery] = useState("");
@@ -95,13 +102,13 @@ export default function VolunteersPage() {
   const openCount = merged.filter((r) => r.status === "open").length;
 
   if (requests.loading && !requests.data) {
-    return <LoadingState label="Loading relief requests…" />;
+    return <LoadingState label={t.loading} />;
   }
   if (requests.error && !requests.data) {
     return (
       <div className="p-4">
         <ErrorState
-          title="Could not load relief requests"
+          title={t.loadError}
           detail={requests.error}
           onRetry={requests.reload}
         />
@@ -113,7 +120,7 @@ export default function VolunteersPage() {
     <div className="p-3 sm:p-4">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="cmd text-[24px] leading-none">Volunteers &amp; NGOs</h1>
+          <h1 className="cmd text-[24px] leading-none">{t.reliefTitle}</h1>
           <p className="text-sm text-[var(--muted)]">
             {openCount} unclaimed request{openCount === 1 ? "" : "s"} across{" "}
             {new Set(merged.map((r) => r.district)).size} districts
@@ -124,7 +131,7 @@ export default function VolunteersPage() {
 
       <div className="panel mb-3 flex flex-wrap items-center gap-2 px-3 py-2.5">
         <label className="relative min-w-56 flex-1">
-          <span className="sr-only">Search relief requests</span>
+          <span className="sr-only">{t.searchLabel}</span>
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--muted)]"
             aria-hidden
@@ -133,19 +140,19 @@ export default function VolunteersPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search location, reference or organisation..."
+            placeholder={t.searchPlaceholder}
             className="h-10 w-full border border-[var(--border-strong)] bg-[var(--surface)] pl-8 pr-2 text-sm"
           />
         </label>
 
         <label>
-          <span className="sr-only">District</span>
+          <span className="sr-only">{tc.district}</span>
           <select
             value={district}
             onChange={(e) => setDistrict(e.target.value)}
             className="h-10 border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm"
           >
-            <option value="">All districts</option>
+            <option value="">{tc.allDistricts}</option>
             {GUJARAT_DISTRICTS.map((d) => (
               <option key={d.id} value={d.name}>
                 {d.name}
@@ -158,7 +165,7 @@ export default function VolunteersPage() {
           {KINDS.map((k) => (
             <Chip
               key={k}
-              label={RELIEF_KIND_META[k].label}
+              label={enums.reliefKind[k]}
               active={kinds.includes(k)}
               onClick={() =>
                 setKinds((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]))
@@ -171,7 +178,7 @@ export default function VolunteersPage() {
           {STATUSES.map((s) => (
             <Chip
               key={s}
-              label={RELIEF_STATUS_META[s].label}
+              label={enums.reliefStatus[s]}
               active={statuses.includes(s)}
               onClick={() =>
                 setStatuses((p) => (p.includes(s) ? p.filter((x) => x !== s) : [...p, s]))
@@ -183,12 +190,11 @@ export default function VolunteersPage() {
 
       <section className="panel">
         {filtered.length === 0 ? (
-          <EmptyState title="No requests match these filters" />
+          <EmptyState title={t.noMatches} />
         ) : (
           <ul className="divide-y divide-[var(--border)]">
             {filtered.map((r) => {
               const meta = RELIEF_STATUS_META[r.status];
-              const kindMeta = RELIEF_KIND_META[r.kind];
               const Icon = KIND_ICON[r.kind];
               const next = NEXT_STATUS[r.status];
               return (
@@ -204,7 +210,7 @@ export default function VolunteersPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="mono text-[11px] text-[var(--muted)]">{r.id}</span>
                       <span className="text-[14px] font-semibold">
-                        {r.quantity.toLocaleString("en-IN")} {r.unit} — {kindMeta.label}
+                        {r.quantity.toLocaleString("en-IN")} {r.unit} — {enums.reliefKind[r.kind]}
                       </span>
                       <span
                         className="px-1.5 py-0.5 text-[10px] font-bold uppercase"
@@ -227,7 +233,7 @@ export default function VolunteersPage() {
                       className="px-1.5 py-0.5 text-[10px] font-bold uppercase"
                       style={{ background: `${meta.color}14`, color: meta.color }}
                     >
-                      {meta.label}
+                      {enums.reliefStatus[r.status]}
                     </span>
                     {next && (
                       <button
@@ -237,7 +243,7 @@ export default function VolunteersPage() {
                         }
                         className="min-h-9 border border-[var(--border-strong)] px-2.5 text-xs font-semibold hover:bg-[var(--surface-2)]"
                       >
-                        Mark {RELIEF_STATUS_META[next].label}
+                        Mark {enums.reliefStatus[next]}
                       </button>
                     )}
                   </div>

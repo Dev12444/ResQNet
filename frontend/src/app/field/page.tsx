@@ -24,11 +24,8 @@ import type {
 } from "@/types";
 import {
   ASSIGNMENT_FLOW,
-  ASSIGNMENT_STATUS_LABEL,
   QUICK_ACTIONS,
-  RESOURCE_KIND_META,
   SEVERITY_COLOR,
-  SEVERITY_LABEL,
   haversineKm,
 } from "@/lib/constants";
 import {
@@ -39,6 +36,9 @@ import {
   updateAssignmentStatus,
 } from "@/lib/api";
 import { MOCK_VERIFIED_SEVERITY } from "@/lib/mock";
+import { pageStrings } from "@/lib/pageStrings";
+import { labels } from "@/lib/i18n";
+import { useLang } from "@/components/layout/LangProvider";
 import { useEnvelope } from "@/components/layout/useEnvelope";
 import {
   Badge,
@@ -64,6 +64,9 @@ import {
 import { SituationUpdateForm } from "./SituationUpdateForm";
 
 export default function FieldPage() {
+  const { lang } = useLang();
+  const t = pageStrings(lang).field;
+  const enums = labels(lang);
   const [unitId, setUnitId] = useState<number | null>(null);
   const [showUpdate, setShowUpdate] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -126,7 +129,7 @@ export default function FieldPage() {
     [incidentId],
   );
 
-  if (all.loading) return <LoadingState label="Loading your assignment…" />;
+  if (all.loading) return <LoadingState label={t.loading} />;
 
   /**
    * "No assignment" and "could not ask" are the same empty list and must never
@@ -139,17 +142,15 @@ export default function FieldPage() {
     return (
       <div className="mx-auto w-full max-w-xl px-3 py-4">
         <ErrorState
-          title="Could not reach the control room"
+          title={t.loadErrorTitle}
           detail={
-            all.error ??
-            "The server did not answer. This is not the same as having no assignment."
+            all.error ?? t.unreachableDetail
           }
           onRetry={all.reload}
         />
         <p className="mt-2 border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--muted)]">
-          Do not treat this as “stand down”. Confirm your tasking by radio or on{" "}
-          <strong className="font-semibold text-[var(--fg)]">112</strong> before standing
-          down or leaving a scene.
+          {t.doNotStandDown}{" "}
+          <strong className="font-semibold text-[var(--fg)]">112</strong>.
         </p>
       </div>
     );
@@ -159,8 +160,8 @@ export default function FieldPage() {
     return (
       <div className="mx-auto w-full max-w-xl px-3 py-4">
         <EmptyState
-          title="No active assignment"
-          hint="You will see your incident here as soon as the control room dispatches your unit."
+          title={t.noAssignmentTitle}
+          hint={t.noAssignmentHint}
         />
       </div>
     );
@@ -200,27 +201,21 @@ export default function FieldPage() {
       const updated = await updateAssignmentStatus(assignment.id, next);
       setLocalStatus(updated.status);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Could not update status");
+      setActionError(err instanceof Error ? err.message : t.statusError);
     } finally {
       setBusy(false);
     }
   }
 
   const nextStatus = ASSIGNMENT_FLOW[ASSIGNMENT_FLOW.indexOf(status) + 1] ?? null;
-  const actionLabel: Record<AssignmentStatus, string> = {
-    assigned: "ACKNOWLEDGE",
-    en_route: "EN ROUTE",
-    on_scene: "ON SCENE",
-    completed: "COMPLETE",
-    cancelled: "CANCELLED",
-  };
+  const actionLabel: Record<AssignmentStatus, string> = t.action;
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 py-4">
       {/* Unit picker — a real responder app would know the unit; this is the demo stand-in. */}
       <label className="mb-3 block">
         <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Your unit
+          {t.yourUnit}
         </span>
         <select
           value={assignment?.resource_id ?? ""}
@@ -234,17 +229,17 @@ export default function FieldPage() {
         >
           {all.data.map((a) => (
             <option key={a.id} value={a.resource_id}>
-              {a.resource.callsign} — {RESOURCE_KIND_META[a.resource.kind].label}
+              {a.resource.callsign} — {enums.resourceKind[a.resource.kind]}
             </option>
           ))}
         </select>
       </label>
 
-      {incident.loading && <LoadingState label="Loading incident…" />}
+      {incident.loading && <LoadingState label={t.loadingIncident} />}
 
       {incident.error && !inc && (
         <ErrorState
-          title="Could not load the incident"
+          title={t.incidentErrorTitle}
           detail={incident.error}
           onRetry={incident.reload}
         />
@@ -295,15 +290,15 @@ export default function FieldPage() {
               className="mt-2 inline-flex min-h-11 items-center border border-[var(--info)] px-3 text-sm font-semibold"
               style={{ color: "var(--info)" }}
             >
-              Navigate in Google Maps
+              {t.navigate}
             </a>
           </header>
 
           {/* Severity: reported vs verified, and who last said so. */}
-          <Panel title="Severity">
+          <Panel title={t.severity}>
             <div className="grid grid-cols-2 divide-x divide-[var(--border)]">
               <div className="px-3 py-2">
-                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Reported</p>
+                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">{t.reported}</p>
                 <p
                   className="mt-1 inline-block px-2 py-0.5 text-sm font-bold"
                   style={{
@@ -312,12 +307,12 @@ export default function FieldPage() {
                   }}
                 >
                   SEV {verified?.reported ?? inc.severity} ·{" "}
-                  {SEVERITY_LABEL[verified?.reported ?? inc.severity]}
+                  {enums.severity[verified?.reported ?? inc.severity]}
                 </p>
               </div>
               <div className="px-3 py-2">
                 <p className="text-xs uppercase tracking-wide text-[var(--muted)]">
-                  Field-verified
+                  {t.fieldVerified}
                 </p>
                 {fieldSeverity !== null ? (
                   <p
@@ -327,10 +322,10 @@ export default function FieldPage() {
                       color: readableOn(SEVERITY_COLOR[fieldSeverity]),
                     }}
                   >
-                    SEV {fieldSeverity} · {SEVERITY_LABEL[fieldSeverity]}
+                    SEV {fieldSeverity} · {enums.severity[fieldSeverity]}
                   </p>
                 ) : (
-                  <p className="mt-1 text-sm text-[var(--muted)]">Not yet verified on scene</p>
+                  <p className="mt-1 text-sm text-[var(--muted)]">{pageStrings(lang).misc.notVerifiedOnScene}</p>
                 )}
               </div>
             </div>
@@ -341,30 +336,29 @@ export default function FieldPage() {
           </Panel>
 
           {/* Operational picture. */}
-          <Panel title="Situation">
+          <Panel title={t.situation}>
             <dl className="px-3 py-2">
-              <DataRow label="Summary">{inc.ai_summary}</DataRow>
-              <DataRow label="People affected" mono>
-                {inc.people_affected_est ?? "Not estimated"}
+              <DataRow label={t.summary}>{inc.ai_summary}</DataRow>
+              <DataRow label={t.peopleAffected} mono>
+                {inc.people_affected_est ?? t.notEstimated}
               </DataRow>
-              <DataRow label="Reported hazards">
+              <DataRow label={t.hazards}>
                 <HazardList hazards={inc.hazards} />
               </DataRow>
-              <DataRow label="AI confidence">
+              <DataRow label={t.aiConfidence}>
                 <ConfidenceMeter confidence={inc.confidence} compact />
               </DataRow>
             </dl>
             <p className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
-              Hazards above are as reported and classified. Treat them as unconfirmed until you
-              see them yourself.
+              {t.hazardsCaveat}
             </p>
           </Panel>
 
           {trust.mode === "unavailable" ? (
-            <Panel title="Evidence">
+            <Panel title={t.evidence}>
               <div className="px-3 py-2">
                 <UnavailableState
-                  what="the reports behind this incident"
+                  what={pageStrings(lang).primitives.what.incidentReports}
                   note={trust.error}
                   onRetry={trust.reload}
                 />
@@ -372,7 +366,7 @@ export default function FieldPage() {
             </Panel>
           ) : (
             trust.data && (
-            <Panel title="Evidence">
+            <Panel title={t.evidence}>
               <div className="space-y-2 px-3 py-2">
                 <SourceEvidence sources={trust.data.sources} />
                 {trust.data.sensor_corroboration && (
@@ -391,7 +385,7 @@ export default function FieldPage() {
             )
           )}
 
-          <Panel title="Suggested actions" subtitle="Advisory — your assessment on scene overrides these.">
+          <Panel title={t.suggestedActions} subtitle={t.suggestedActionsNote}>
             <ul className="divide-y divide-[var(--border)]">
               {inc.ai_actions.map((action) => (
                 <li key={action} className="px-3 py-2 text-sm">
@@ -401,16 +395,16 @@ export default function FieldPage() {
             </ul>
           </Panel>
 
-          <Panel title="Assigned to this incident">
+          <Panel title={t.assignedUnits}>
             <ul className="divide-y divide-[var(--border)]">
               {(inc.assignments ?? []).map((a) => (
                 <li key={a.id} className="flex items-center justify-between gap-2 px-3 py-2">
                   <span className="mono text-sm font-semibold">{a.resource.callsign}</span>
                   <span className="text-xs text-[var(--muted)]">
-                    {RESOURCE_KIND_META[a.resource.kind].label}
+                    {enums.resourceKind[a.resource.kind]}
                   </span>
                   <Badge
-                    label={ASSIGNMENT_STATUS_LABEL[a.status]}
+                    label={enums.assignmentStatus[a.status]}
                     color="var(--info)"
                     variant="tint"
                   />
@@ -418,7 +412,7 @@ export default function FieldPage() {
               ))}
               {(inc.assignments ?? []).length === 0 && (
                 <li className="px-3 py-2 text-sm text-[var(--muted)]">
-                  No other units assigned.
+                  {t.noOtherUnits}
                 </li>
               )}
             </ul>
@@ -427,9 +421,9 @@ export default function FieldPage() {
           {/* Lifecycle. One big button for the next step. */}
           <section className="border-2 border-[var(--border-strong)] p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-              Current status
+              {t.currentStatus}
             </p>
-            <p className="mt-1 text-lg font-bold">{ASSIGNMENT_STATUS_LABEL[status]}</p>
+            <p className="mt-1 text-lg font-bold">{enums.assignmentStatus[status]}</p>
 
             <ol className="mt-2 flex gap-1">
               {ASSIGNMENT_FLOW.map((s) => {
@@ -462,14 +456,14 @@ export default function FieldPage() {
                 disabled={busy}
                 className="mt-3 min-h-16 w-full border-2 border-[var(--foreground)] bg-[var(--foreground)] text-xl font-bold uppercase tracking-wide text-[var(--surface)] disabled:opacity-70"
               >
-                {busy ? "Sending…" : actionLabel[nextStatus]}
+                {busy ? t.sending : actionLabel[nextStatus]}
               </button>
             ) : (
               <p
                 className="mt-3 border-l-4 px-3 py-2 text-sm font-semibold"
                 style={{ borderColor: "var(--ok)", background: "var(--ok-bg)" }}
               >
-                Assignment complete.
+                {t.assignmentComplete}
               </p>
             )}
 
@@ -479,7 +473,7 @@ export default function FieldPage() {
               aria-expanded={showUpdate}
               className="mt-2 min-h-14 w-full border-2 border-[var(--border-strong)] font-bold uppercase tracking-wide"
             >
-              Update situation
+              {t.updateSituation}
             </button>
           </section>
 
@@ -499,7 +493,7 @@ export default function FieldPage() {
                   setShowUpdate(false);
                 } catch (err) {
                   setActionError(
-                    err instanceof Error ? err.message : "Could not send the update",
+                    err instanceof Error ? err.message : t.sendError,
                   );
                 } finally {
                   setBusy(false);
@@ -509,7 +503,7 @@ export default function FieldPage() {
           )}
 
           {/* One-tap signals for hands-busy moments. */}
-          <Panel title="Quick actions" subtitle="Sends a single signal to the control room.">
+          <Panel title={t.quickActions} subtitle={t.quickActionsNote}>
             <div className="grid grid-cols-2 gap-px bg-[var(--border)]">
               {QUICK_ACTIONS.map((action) => {
                 const sent = sentSignals.includes(action.id);
@@ -545,7 +539,7 @@ export default function FieldPage() {
                         setSentSignals((prev) => [...prev, action.id]);
                       } catch (err) {
                         setActionError(
-                          err instanceof Error ? err.message : "Could not send the signal",
+                          err instanceof Error ? err.message : t.signalError,
                         );
                       } finally {
                         setBusy(false);
@@ -563,9 +557,7 @@ export default function FieldPage() {
 
           {sentUpdates.length > 0 && (
             <PartialDataNote
-              what={`${sentUpdates.length} situation update${
-                sentUpdates.length === 1 ? "" : "s"
-              } sent from this device. The control room picture updates once the backend accepts them.`}
+              what={t.updatesSent(sentUpdates.length)}
             />
           )}
         </div>

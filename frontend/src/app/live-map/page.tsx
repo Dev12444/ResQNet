@@ -10,6 +10,7 @@
  * Owner: FE2.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import { useCallback, useMemo, useState } from "react";
 import type { MapMarkerInput } from "../_components/GujaratMap";
 import { GujaratMap } from "../_components/GujaratMap";
@@ -42,6 +43,7 @@ export default function LiveMapPage() {
 
   const [district, setDistrict] = useState<string | null>(null);
   const { lang } = useLang();
+  const m = pageStrings(lang).misc;
 
   /* Shelters closest to whatever the operator has selected, so the list below
      the map always describes the area on screen. */
@@ -126,7 +128,7 @@ export default function LiveMapPage() {
     <div className="p-3 sm:p-4">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-2 border-l-2 border-[var(--teal)] pl-3">
         <div>
-          <h1 className="cmd text-[24px] leading-none">Live Map</h1>
+          <h1 className="cmd text-[24px] leading-none">{m.liveMap}</h1>
           <p className="text-sm text-[var(--muted)]">
             District risk posture and operational markers across the state.
           </p>
@@ -158,7 +160,7 @@ export default function LiveMapPage() {
 
         <section className="panel flex min-h-0 flex-col">
           <div className="panel-head">
-            <h2 className="cmd text-[12px]">Districts by risk</h2>
+            <h2 className="cmd text-[12px]">{m.districtsByRisk}</h2>
             <span className="telemetry ml-auto">{ranked.length} in view</span>
           </div>
           <ul className="thin-scroll flex-1 divide-y divide-[var(--border)] overflow-y-auto">
