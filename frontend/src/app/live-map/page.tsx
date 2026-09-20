@@ -30,7 +30,7 @@ import {
   getWeatherAlerts,
   worstMode,
 } from "@/lib/api";
-import { GUJARAT_CENTER, RISK_META, districtByName } from "@/lib/constants";
+import { GUJARAT_CENTER, RISK_META, districtByName, riskLabel } from "@/lib/constants";
 
 export default function LiveMapPage() {
   const situations = useEnvelope(useCallback(() => getDistrictSituations(), []));
@@ -184,7 +184,7 @@ export default function LiveMapPage() {
                         className="text-[10px] font-bold uppercase tracking-wide"
                         style={{ color: meta.color }}
                       >
-                        {meta.label}
+                        {riskLabel(s.risk, lang)}
                       </span>
                     </span>
                     <span className="mono shrink-0 text-right text-[11px] text-[var(--muted)]">

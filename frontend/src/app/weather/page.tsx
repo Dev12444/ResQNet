@@ -206,7 +206,7 @@ export default function WeatherPage() {
         <div className="flex flex-col gap-3">
           <section className="panel">
             <h2 className="border-b border-[var(--border)] px-3 py-2 text-[13px] font-bold uppercase tracking-wide">
-              7-day rainfall
+              {t.rainfall7d}
             </h2>
             <div className="px-2 py-2">
               <p className="px-1 text-[11px] text-[var(--muted)]">{t.mmPerDay}</p>
@@ -271,8 +271,8 @@ export default function WeatherPage() {
                 </LineChart>
               </ResponsiveContainer>
               <p className="px-1 pt-1 text-[11px] text-[var(--muted)]">
-                <span style={{ color: SERIES_PAIR[0] }}>—</span> Wind kph{"  "}
-                <span style={{ color: SERIES_PAIR[1] }}>—</span> Max °C
+                <span style={{ color: SERIES_PAIR[0] }}>—</span> {t.windKph}{"  "}
+                <span style={{ color: SERIES_PAIR[1] }}>—</span> {t.maxC}
               </p>
             </div>
           </section>
@@ -292,8 +292,7 @@ export default function WeatherPage() {
       </div>
 
       <p className="mt-3 text-[11px] text-[var(--faint)]">
-        Source: IMD, NDMA. ResQNet has no live meteorological integration — the figures
-        above are demonstration values with their stated issue times, not observations.
+        {t.sourceNote}
       </p>
     </div>
   );

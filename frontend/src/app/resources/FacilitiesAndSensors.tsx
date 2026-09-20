@@ -18,7 +18,9 @@ import { labels } from "@/lib/i18n";
 import { useLang } from "@/components/layout/LangProvider";
 
 export function FacilitiesPanel({ facilities }: { facilities: FacilityView[] }) {
-  const t = pageStrings(useLang().lang).resources;
+  const { lang } = useLang();
+  const t = pageStrings(lang).resources;
+  const tm = pageStrings(lang).misc.freshness;
   if (facilities.length === 0) {
     return <EmptyState title={t.noFacilities} />;
   }
@@ -73,7 +75,7 @@ export function FacilitiesPanel({ facilities }: { facilities: FacilityView[] }) 
             )}
 
             <div className="mt-1.5">
-              <FreshnessLabel ageSec={f.freshness.age_sec} staleLabel="CAPACITY STALE" />
+              <FreshnessLabel ageSec={f.freshness.age_sec} staleLabel={tm.capacityStale} />
               {stale && (
                 <p className="mt-0.5 text-xs" style={{ color: "var(--high)" }}>
                   Confirm by phone before routing a patient — this count is{" "}

@@ -549,8 +549,8 @@ export function GujaratMap({
       const extra = countByDistrict.get(s.district);
       el.setAttribute(
         "aria-label",
-        `${s.district}, ${RISK_META[s.risk].label} risk, ${s.activeIncidents} active incidents` +
-          (extra ? `, ${extra} markers in district` : ""),
+        m.districtAria(s.district, riskLabel(s.risk, lang), s.activeIncidents) +
+          (extra ? m.markersInDistrict(extra) : ""),
       );
       el.className = "resq-district";
       /* 18px at normal risk up to 30px at critical. The old scale started at
@@ -745,6 +745,8 @@ export function GujaratMap({
     zoom,
     base,
     showGrid,
+    lang,
+    m,
   ]);
 
   /* ---------------- controls ---------------- */
@@ -1116,6 +1118,7 @@ const LEGEND_LAYERS: MapLayer[] = ["cyclone", "flood", "fire", "warning", "shelt
  * was actually drawn.
  */
 function MapLiveStamp({ detail, mode }: { detail: string; mode: DataMode }) {
+  const m = pageStrings(useLang().lang).misc;
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -1145,17 +1148,15 @@ function MapLiveStamp({ detail, mode }: { detail: string; mode: DataMode }) {
         className="cmd text-[10px]"
         style={{ color: meta.color }}
         title={
-          live
-            ? "Every layer on this map came from the API."
-            : `Weakest layer on this map: ${meta.label.toLowerCase()}.`
+          live ? m.allLayersFromApi : m.weakestLayer(meta.label.toLowerCase())
         }
       >
         {live
-          ? "Live"
+          ? m.mapLive
           : mode === "simulated"
-            ? "Demo data"
+            ? m.mapDemoData
             : mode === "unavailable"
-              ? "Layer missing"
+              ? m.mapLayerMissing
               : meta.label}
       </span>
       <span aria-hidden className="h-3 w-px bg-[var(--hairline)]" />

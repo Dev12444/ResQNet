@@ -26,7 +26,6 @@ import type { ReliefKind, ReliefRequest, ReliefStatus } from "@/types";
 import {
   GUJARAT_DISTRICTS,
   PRIORITY_COLOR,
-  PRIORITY_LABEL,
   RELIEF_KIND_META,
   RELIEF_STATUS_META,
 } from "@/lib/constants";
@@ -122,8 +121,7 @@ export default function VolunteersPage() {
         <div>
           <h1 className="cmd text-[24px] leading-none">{t.reliefTitle}</h1>
           <p className="text-sm text-[var(--muted)]">
-            {openCount} unclaimed request{openCount === 1 ? "" : "s"} across{" "}
-            {new Set(merged.map((r) => r.district)).size} districts
+            {t.summary(openCount, new Set(merged.map((r) => r.district)).size)}
           </p>
         </div>
         <DataModeBadge mode={requests.mode} note={requests.error} />
@@ -210,7 +208,11 @@ export default function VolunteersPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="mono text-[11px] text-[var(--muted)]">{r.id}</span>
                       <span className="text-[14px] font-semibold">
-                        {r.quantity.toLocaleString("en-IN")} {r.unit} — {enums.reliefKind[r.kind]}
+                        {t.quantity(
+                          r.quantity.toLocaleString("en-IN"),
+                          r.unit,
+                          enums.reliefKind[r.kind],
+                        )}
                       </span>
                       <span
                         className="px-1.5 py-0.5 text-[10px] font-bold uppercase"
@@ -219,12 +221,12 @@ export default function VolunteersPage() {
                           color: PRIORITY_COLOR[r.priority],
                         }}
                       >
-                        {PRIORITY_LABEL[r.priority]}
+                        {enums.priority[r.priority]}
                       </span>
                     </div>
                     <p className="mono mt-0.5 text-[11px] text-[var(--muted)]">
                       {r.location} · {r.district}
-                      {r.claimedBy && ` · claimed by ${r.claimedBy}`}
+                      {r.claimedBy && t.claimedBy(r.claimedBy)}
                     </p>
                   </div>
 
@@ -243,7 +245,7 @@ export default function VolunteersPage() {
                         }
                         className="min-h-9 border border-[var(--border-strong)] px-2.5 text-xs font-semibold hover:bg-[var(--surface-2)]"
                       >
-                        Mark {enums.reliefStatus[next]}
+                        {t.mark(enums.reliefStatus[next])}
                       </button>
                     )}
                   </div>
@@ -254,9 +256,7 @@ export default function VolunteersPage() {
         )}
 
         <p className="border-t border-[var(--border)] px-3 py-2 text-[11px] text-[var(--faint)]">
-          Status changes made here are held on this device for the demonstration. They
-          are not yet sent to the state control room — the coordination endpoint is an
-          open integration.
+          {t.reliefDemoNote}
         </p>
       </section>
     </div>

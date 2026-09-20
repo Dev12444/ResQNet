@@ -123,6 +123,10 @@ interface AnalyticsStrings {
   observations: string;
   observationsNote: string;
   nothingNotable: string;
+  scope: (shown: number, total: number, districts: number) => string;
+  demoFigures: string;
+  noTriageNote: string;
+  insightSeverity: { critical: string; warning: string; info: string };
   trend: string;
   trendNote: string;
   incidentType: string;
@@ -314,9 +318,16 @@ interface SheltersStrings {
   water: string;
   medical: string;
   accessible: string;
+  summary: (open: number, occupancy: string, capacity: string) => string;
+  placesOf: (occupancy: number, capacity: number, pct: number) => string;
+  occupancyStale: string;
+  staleNote: (minutes: number) => string;
+  occupancyAt: (name: string) => string;
 }
 
 interface MissingStrings {
+  privacyNote: string;
+  privacyNoteTail: string;
   title: string;
   lead: string;
   loading: string;
@@ -339,6 +350,8 @@ interface MissingStrings {
 }
 
 interface WeatherStrings {
+  rainfall7d: string;
+  sourceNote: string;
   title: string;
   lead: string;
   loading: string;
@@ -360,6 +373,11 @@ interface WeatherStrings {
 }
 
 interface VolunteersStrings {
+  summary: (open: number, districts: number) => string;
+  claimedBy: (org: string) => string;
+  mark: (status: string) => string;
+  reliefDemoNote: string;
+  quantity: (amount: string, unit: string, kind: string) => string;
   title: string;
   lead: string;
   loading: string;
@@ -771,6 +789,29 @@ interface MiscStrings {
   resetView: string;
   closeDistrictPanel: string;
   resqPulse: string;
+  mapLive: string;
+  mapDemoData: string;
+  mapLayerMissing: string;
+  allLayersFromApi: string;
+  weakestLayer: (what: string) => string;
+  districtAria: (district: string, risk: string, incidents: number) => string;
+  markersInDistrict: (n: number) => string;
+  api: {
+    serverWaking: string;
+    deviceOffline: string;
+    offlineLastKnown: string;
+    timedOut: string;
+    showingDemoData: (note: string) => string;
+  };
+  freshness: {
+    offline: string;
+    updatedAgo: (age: string) => string;
+    locationStale: string;
+    capacityStale: string;
+    sec: (n: number) => string;
+    min: (n: number) => string;
+    hr: (n: number) => string;
+  };
   liveMap: string;
   districtsByRisk: string;
   notVerifiedOnScene: string;
@@ -1047,6 +1088,12 @@ const en: PageStrings = {
     observations: "Observations",
     observationsNote: "Computed from the rows currently in view.",
     nothingNotable: "Nothing notable in this selection",
+    scope: (shown, total, districts) =>
+      `${shown} of ${total} incidents · ${districts} districts in view`,
+    demoFigures: " — demo figures",
+    noTriageNote:
+      "Report → triage is not shown: the incident contract has no `triaged_at` timestamp, so it cannot be derived.",
+    insightSeverity: { critical: "CRITICAL", warning: "WARNING", info: "INFO" },
     trend: "Incident trend",
     trendNote: "Incidents and reports opened per bucket.",
     incidentType: "Incident type",
@@ -1255,8 +1302,18 @@ const en: PageStrings = {
     water: "Water",
     medical: "Medical",
     accessible: "Accessible",
+    summary: (open, occupancy, capacity) =>
+      `${open} open · ${occupancy} of ${capacity} places in use`,
+    placesOf: (occupancy, capacity, pct) => `${occupancy} / ${capacity} places (${pct}%)`,
+    occupancyStale: "OCCUPANCY STALE",
+    staleNote: (minutes) =>
+      `This count is ${minutes} min old — confirm by phone before sending people here.`,
+    occupancyAt: (name) => `Occupancy at ${name}`,
   },
   missing: {
+    privacyNote:
+      "This register shows only what is needed to help identify someone. Contact details, addresses and dates of birth are held by the case officer and are not published here. If you recognise someone, call the district emergency line on",
+    privacyNoteTail: ".",
     title: "Missing Persons",
     lead: "Reports of people missing after an emergency.",
     loading: "Loading records…",
@@ -1278,6 +1335,9 @@ const en: PageStrings = {
     reunitedHidden: "Reunited cases are hidden unless you tick the box above.",
   },
   weather: {
+    rainfall7d: "7-day rainfall",
+    sourceNote:
+      "Source: IMD, NDMA. ResQNet has no live meteorological integration — the figures on this page are fixtures for the demonstration.",
     title: "Weather",
     lead: "District warnings, rainfall and wind outlook.",
     loading: "Loading weather…",
@@ -1298,6 +1358,13 @@ const en: PageStrings = {
     noWarnings: "No warnings match these filters",
   },
   volunteers: {
+    summary: (open, districts) =>
+      `${open} unclaimed request${open === 1 ? "" : "s"} across ${districts} districts`,
+    claimedBy: (org) => ` · claimed by ${org}`,
+    mark: (status) => `Mark ${status}`,
+    reliefDemoNote:
+      "Status changes made here are held on this device for the demonstration. They are not yet sent to the state control room — the coordination endpoint is an open integration.",
+    quantity: (amount, unit, kind) => `${amount} ${unit} — ${kind}`,
     title: "Volunteers",
     lead: "Trained volunteers and where they are deployed.",
     loading: "Loading volunteers…",
@@ -1814,6 +1881,31 @@ const en: PageStrings = {
     resetView: "Reset the map view",
     closeDistrictPanel: "Close district panel",
     resqPulse: "ResQ Pulse",
+    mapLive: "Live",
+    mapDemoData: "Demo data",
+    mapLayerMissing: "Layer missing",
+    allLayersFromApi: "Every layer on this map came from the API.",
+    weakestLayer: (what) => `Weakest layer on this map: ${what}.`,
+    districtAria: (district, risk, incidents) =>
+      `${district}, ${risk} risk, ${incidents} active incidents`,
+    markersInDistrict: (n) => `, ${n} markers in district`,
+    api: {
+      serverWaking:
+        "Server waking — the API sleeps after a few idle minutes and takes up to a minute to start. Retrying will work.",
+      deviceOffline: "This device is offline",
+      offlineLastKnown: "Offline — showing last known data",
+      timedOut: "Request timed out",
+      showingDemoData: (note) => `${note} — showing demo data`,
+    },
+    freshness: {
+      offline: "OFFLINE",
+      updatedAgo: (age) => `Updated ${age} ago`,
+      locationStale: "LOCATION STALE",
+      capacityStale: "CAPACITY STALE",
+      sec: (n) => `${n} sec`,
+      min: (n) => `${n} min`,
+      hr: (n) => `${n} hr`,
+    },
     liveMap: "Live Map",
     districtsByRisk: "Districts by risk",
     notVerifiedOnScene: "Not yet verified on scene",
@@ -1928,6 +2020,12 @@ const gu: PageStrings = {
     observations: "અવલોકનો",
     observationsNote: "હાલ દેખાતી હરોળમાંથી ગણતરી કરેલ.",
     nothingNotable: "આ પસંદગીમાં નોંધપાત્ર કંઈ નથી",
+    scope: (shown, total, districts) =>
+      `${total} માંથી ${shown} ઘટના · ${districts} જિલ્લા દૃશ્યમાં`,
+    demoFigures: " — ડેમો આંકડા",
+    noTriageNote:
+      "અહેવાલ → વર્ગીકરણ બતાવાતું નથી: ઘટના કરારમાં `triaged_at` સમયમુદ્રા નથી, તેથી તે ગણી શકાતું નથી.",
+    insightSeverity: { critical: "ગંભીર", warning: "ચેતવણી", info: "માહિતી" },
     trend: "ઘટના વલણ",
     trendNote: "દરેક સમયગાળામાં ખૂલેલી ઘટનાઓ અને અહેવાલો.",
     incidentType: "ઘટના પ્રકાર",
@@ -2132,8 +2230,18 @@ const gu: PageStrings = {
     water: "પાણી",
     medical: "તબીબી",
     accessible: "સુલભ",
+    summary: (open, occupancy, capacity) =>
+      `${open} ખુલ્લાં · ${capacity} માંથી ${occupancy} જગ્યા વપરાશમાં`,
+    placesOf: (occupancy, capacity, pct) => `${capacity} માંથી ${occupancy} જગ્યા (${pct}%)`,
+    occupancyStale: "વપરાશ જૂનો",
+    staleNote: (minutes) =>
+      `આ આંકડો ${minutes} મિનિટ જૂનો છે — લોકોને મોકલતાં પહેલાં ફોનથી ખાતરી કરો.`,
+    occupancyAt: (name) => `${name} માં વપરાશ`,
   },
   missing: {
+    privacyNote:
+      "આ રજિસ્ટરમાં કોઈને ઓળખવા માટે જરૂરી હોય તેટલું જ દેખાય છે. સંપર્ક વિગતો, સરનામાં અને જન્મતારીખ કેસ અધિકારી પાસે રહે છે અને અહીં પ્રકાશિત થતી નથી. તમે કોઈને ઓળખતા હો તો જિલ્લા કટોકટી લાઇન પર કૉલ કરો",
+    privacyNoteTail: ".",
     title: "ગુમ થયેલ વ્યક્તિઓ",
     lead: "કટોકટી પછી ગુમ થયેલ લોકોના અહેવાલ.",
     loading: "રેકોર્ડ લોડ થઈ રહ્યા છે…",
@@ -2155,6 +2263,9 @@ const gu: PageStrings = {
     reunitedHidden: "ઉપરનું ખાનું ટિક ન કરો ત્યાં સુધી પરિવાર સાથે મળેલા કેસ છુપાયેલા રહે છે.",
   },
   weather: {
+    rainfall7d: "7 દિવસનો વરસાદ",
+    sourceNote:
+      "સ્રોત: IMD, NDMA. ResQNet સાથે કોઈ જીવંત હવામાન જોડાણ નથી — આ પાનાના આંકડા નિદર્શન માટેના નમૂના છે.",
     title: "હવામાન",
     lead: "જિલ્લા ચેતવણીઓ, વરસાદ અને પવનનો અંદાજ.",
     loading: "હવામાન લોડ થઈ રહ્યું છે…",
@@ -2175,6 +2286,13 @@ const gu: PageStrings = {
     noWarnings: "આ ફિલ્ટર સાથે કોઈ ચેતવણી મળી નથી",
   },
   volunteers: {
+    summary: (open, districts) =>
+      `${districts} જિલ્લામાં ${open} વણદાવેલી વિનંતી`,
+    claimedBy: (org) => ` · ${org} દ્વારા દાવો`,
+    mark: (status) => `${status} ચિહ્નિત કરો`,
+    reliefDemoNote:
+      "અહીં કરેલા સ્થિતિ ફેરફાર નિદર્શન માટે આ ઉપકરણ પર જ રહે છે. તે હજી રાજ્ય કંટ્રોલ રૂમને મોકલાતા નથી — સંકલન એન્ડપોઇન્ટ હજી બાકી છે.",
+    quantity: (amount, unit, kind) => `${amount} ${unit} — ${kind}`,
     title: "સ્વયંસેવકો",
     lead: "પ્રશિક્ષિત સ્વયંસેવકો અને તેમની તૈનાતી.",
     loading: "સ્વયંસેવકો લોડ થઈ રહ્યા છે…",
@@ -2687,6 +2805,31 @@ const gu: PageStrings = {
     resetView: "નકશાનું દૃશ્ય રીસેટ કરો",
     closeDistrictPanel: "જિલ્લા પેનલ બંધ કરો",
     resqPulse: "ResQ પલ્સ",
+    mapLive: "લાઇવ",
+    mapDemoData: "ડેમો માહિતી",
+    mapLayerMissing: "સ્તર ગુમ",
+    allLayersFromApi: "આ નકશાનું દરેક સ્તર API માંથી આવ્યું છે.",
+    weakestLayer: (what) => `આ નકશાનું સૌથી નબળું સ્તર: ${what}.`,
+    districtAria: (district, risk, incidents) =>
+      `${district}, ${risk} જોખમ, ${incidents} સક્રિય ઘટના`,
+    markersInDistrict: (n) => `, જિલ્લામાં ${n} માર્કર`,
+    api: {
+      serverWaking:
+        "સર્વર જાગી રહ્યું છે — થોડી નિષ્ક્રિય મિનિટો પછી API સૂઈ જાય છે અને શરૂ થવામાં એક મિનિટ સુધી લાગે છે. ફરી પ્રયાસ કરવાથી કામ થશે.",
+      deviceOffline: "આ ઉપકરણ ઓફલાઇન છે",
+      offlineLastKnown: "ઓફલાઇન — છેલ્લી જાણીતી માહિતી બતાવાય છે",
+      timedOut: "વિનંતીનો સમય પૂરો થયો",
+      showingDemoData: (note) => `${note} — ડેમો માહિતી બતાવાય છે`,
+    },
+    freshness: {
+      offline: "ઓફલાઇન",
+      updatedAgo: (age) => `${age} પહેલાં અપડેટ`,
+      locationStale: "સ્થળ જૂનું",
+      capacityStale: "ક્ષમતા જૂની",
+      sec: (n) => `${n} સેકન્ડ`,
+      min: (n) => `${n} મિનિટ`,
+      hr: (n) => `${n} કલાક`,
+    },
     liveMap: "લાઇવ નકશો",
     districtsByRisk: "જોખમ પ્રમાણે જિલ્લા",
     notVerifiedOnScene: "ઘટનાસ્થળે હજી ચકાસાયું નથી",
@@ -2801,6 +2944,12 @@ const hi: PageStrings = {
     observations: "अवलोकन",
     observationsNote: "अभी दिख रही पंक्तियों से गणना।",
     nothingNotable: "इस चयन में कुछ उल्लेखनीय नहीं",
+    scope: (shown, total, districts) =>
+      `${total} में से ${shown} घटनाएँ · ${districts} ज़िले दृश्य में`,
+    demoFigures: " — डेमो आँकड़े",
+    noTriageNote:
+      "रिपोर्ट → वर्गीकरण नहीं दिखाया गया: घटना अनुबंध में `triaged_at` टाइमस्टैम्प नहीं है, इसलिए यह निकाला नहीं जा सकता।",
+    insightSeverity: { critical: "गंभीर", warning: "चेतावनी", info: "सूचना" },
     trend: "घटना रुझान",
     trendNote: "प्रत्येक अवधि में खुली घटनाएँ और रिपोर्ट।",
     incidentType: "घटना प्रकार",
@@ -3004,8 +3153,18 @@ const hi: PageStrings = {
     water: "पानी",
     medical: "चिकित्सा",
     accessible: "सुलभ",
+    summary: (open, occupancy, capacity) =>
+      `${open} खुले · ${capacity} में से ${occupancy} स्थान उपयोग में`,
+    placesOf: (occupancy, capacity, pct) => `${capacity} में से ${occupancy} स्थान (${pct}%)`,
+    occupancyStale: "उपयोग पुराना",
+    staleNote: (minutes) =>
+      `यह आँकड़ा ${minutes} मिनट पुराना है — लोगों को भेजने से पहले फ़ोन पर पुष्टि करें।`,
+    occupancyAt: (name) => `${name} में उपयोग`,
   },
   missing: {
+    privacyNote:
+      "इस रजिस्टर में किसी को पहचानने के लिए आवश्यक जानकारी ही दिखती है। संपर्क विवरण, पते और जन्मतिथि केस अधिकारी के पास रहते हैं और यहाँ प्रकाशित नहीं होते। यदि आप किसी को पहचानते हैं तो ज़िला आपातकालीन लाइन पर कॉल करें",
+    privacyNoteTail: "।",
     title: "लापता व्यक्ति",
     lead: "आपात स्थिति के बाद लापता लोगों की रिपोर्ट।",
     loading: "रिकॉर्ड लोड हो रहे हैं…",
@@ -3027,6 +3186,9 @@ const hi: PageStrings = {
     reunitedHidden: "जब तक ऊपर का बॉक्स न चुनें, परिवार से मिले मामले छिपे रहते हैं।",
   },
   weather: {
+    rainfall7d: "7 दिन की वर्षा",
+    sourceNote:
+      "स्रोत: IMD, NDMA. ResQNet का कोई जीवंत मौसम एकीकरण नहीं है — इस पृष्ठ के आँकड़े प्रदर्शन हेतु नमूने हैं।",
     title: "मौसम",
     lead: "ज़िला चेतावनियाँ, वर्षा और हवा का अनुमान।",
     loading: "मौसम लोड हो रहा है…",
@@ -3047,6 +3209,13 @@ const hi: PageStrings = {
     noWarnings: "इन फ़िल्टरों से कोई चेतावनी नहीं मिली",
   },
   volunteers: {
+    summary: (open, districts) =>
+      `${districts} ज़िलों में ${open} बिना दावे की अनुरोध`,
+    claimedBy: (org) => ` · ${org} द्वारा दावा`,
+    mark: (status) => `${status} चिह्नित करें`,
+    reliefDemoNote:
+      "यहाँ किए गए स्थिति परिवर्तन प्रदर्शन के लिए इसी डिवाइस पर रहते हैं। ये अभी राज्य कंट्रोल रूम को नहीं भेजे जाते — समन्वय एंडपॉइंट अभी बाकी है।",
+    quantity: (amount, unit, kind) => `${amount} ${unit} — ${kind}`,
     title: "स्वयंसेवक",
     lead: "प्रशिक्षित स्वयंसेवक और उनकी तैनाती।",
     loading: "स्वयंसेवक लोड हो रहे हैं…",
@@ -3558,6 +3727,31 @@ const hi: PageStrings = {
     resetView: "मानचित्र दृश्य रीसेट करें",
     closeDistrictPanel: "ज़िला पैनल बंद करें",
     resqPulse: "ResQ पल्स",
+    mapLive: "लाइव",
+    mapDemoData: "डेमो डेटा",
+    mapLayerMissing: "परत अनुपलब्ध",
+    allLayersFromApi: "इस मानचित्र की हर परत API से आई है।",
+    weakestLayer: (what) => `इस मानचित्र की सबसे कमज़ोर परत: ${what}.`,
+    districtAria: (district, risk, incidents) =>
+      `${district}, ${risk} जोखिम, ${incidents} सक्रिय घटनाएँ`,
+    markersInDistrict: (n) => `, ज़िले में ${n} मार्कर`,
+    api: {
+      serverWaking:
+        "सर्वर जाग रहा है — कुछ निष्क्रिय मिनटों के बाद API सो जाता है और शुरू होने में एक मिनट तक लगता है। फिर से कोशिश करने पर काम करेगा।",
+      deviceOffline: "यह डिवाइस ऑफ़लाइन है",
+      offlineLastKnown: "ऑफ़लाइन — अंतिम ज्ञात डेटा दिखाया जा रहा है",
+      timedOut: "अनुरोध का समय समाप्त",
+      showingDemoData: (note) => `${note} — डेमो डेटा दिखाया जा रहा है`,
+    },
+    freshness: {
+      offline: "ऑफ़लाइन",
+      updatedAgo: (age) => `${age} पहले अपडेट`,
+      locationStale: "स्थान पुराना",
+      capacityStale: "क्षमता पुरानी",
+      sec: (n) => `${n} सेकंड`,
+      min: (n) => `${n} मिनट`,
+      hr: (n) => `${n} घंटे`,
+    },
     liveMap: "लाइव मानचित्र",
     districtsByRisk: "जोखिम अनुसार ज़िले",
     notVerifiedOnScene: "घटनास्थल पर अभी सत्यापित नहीं",

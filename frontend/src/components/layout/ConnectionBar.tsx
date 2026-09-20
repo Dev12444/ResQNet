@@ -10,9 +10,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ConnectionStatus, DataMode } from "@/types";
+import type { ConnectionStatus, DataMode, Lang } from "@/types";
 import { DATA_MODE_META, STALE_AFTER_SEC } from "@/lib/constants";
 import { labels } from "@/lib/i18n";
+import { pageStrings } from "@/lib/pageStrings";
 import { ping, USE_MOCK } from "@/lib/api";
 import { useLang } from "./LangProvider";
 
@@ -153,29 +154,31 @@ export function DataModeBadge({ mode, note }: { mode: DataMode; note?: string | 
  */
 export function FreshnessLabel({
   ageSec,
-  staleLabel = "LOCATION STALE",
+  staleLabel,
   offline = false,
 }: {
   ageSec: number;
   staleLabel?: string;
   offline?: boolean;
 }) {
+  const { lang } = useLang();
+  const t = pageStrings(lang).misc.freshness;
   if (offline) {
     return (
       <span className="mono text-xs font-semibold" style={{ color: "var(--faint)" }}>
-        OFFLINE
+        {t.offline}
       </span>
     );
   }
   if (ageSec > STALE_AFTER_SEC) {
     return (
       <span className="mono text-xs font-semibold" style={{ color: "var(--high)" }}>
-        {staleLabel} · {formatAge(ageSec)}
+        {staleLabel ?? t.locationStale} · {formatAge(ageSec, lang)}
       </span>
     );
   }
   return (
-    <span className="mono text-xs text-[var(--muted)]">Updated {formatAge(ageSec)} ago</span>
+    <span className="mono text-xs text-[var(--muted)]">{t.updatedAgo(formatAge(ageSec, lang))}</span>
   );
 }
 
@@ -200,9 +203,9 @@ export function useNow(intervalMs = 30000): number | null {
   return now;
 }
 
-export function formatAge(sec: number): string {
-  if (sec < 60) return `${sec} sec`;
-  if (sec < 3600) return `${Math.floor(sec / 60)} min`;
-  const h = Math.floor(sec / 3600);
-  return `${h} hr`;
+export function formatAge(sec: number, lang: Lang = "en"): string {
+  const t = pageStrings(lang).misc.freshness;
+  if (sec < 60) return t.sec(sec);
+  if (sec < 3600) return t.min(Math.floor(sec / 60));
+  return t.hr(Math.floor(sec / 3600));
 }

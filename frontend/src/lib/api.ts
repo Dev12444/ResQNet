@@ -12,6 +12,7 @@
  * `ADAPTER` below and derived on the client from data that does exist.
  */
 
+import { pageStrings } from "@/lib/pageStrings";
 import type {
   AiStatus,
   Alert,
@@ -34,6 +35,7 @@ import type {
   IncidentType,
   IncidentDetail,
   IncidentTrust,
+  Lang,
   Priority,
   Report,
   ReportCreate,
@@ -192,7 +194,7 @@ export async function request<T>(path: string, init?: RequestInit, timeoutMs = T
   } catch (err) {
     if (err instanceof ApiError) throw err;
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new ApiError("Request timed out", null);
+      throw new ApiError(apiNotes().timedOut, null);
     }
     throw new ApiError(err instanceof Error ? err.message : "Network error", null);
   } finally {
@@ -216,8 +218,23 @@ function isProbablyWaking(err: unknown): boolean {
   return err.status === null || err.status === 502 || err.status === 503 || err.status === 504;
 }
 
-const WAKING_NOTE =
-  "Server waking — the API sleeps after a few idle minutes and takes up to a minute to start. Retrying will work.";
+/**
+ * The reader's language, read from the key `LangProvider` persists to.
+ *
+ * These notes are produced outside React, so there is no context to read. The
+ * key is the single source of truth either way, and a note is short-lived
+ * enough that it simply comes back translated on the next fetch.
+ */
+function apiNotes() {
+  let lang: Lang = "en";
+  try {
+    const saved = window.localStorage.getItem("resqnet.lang");
+    if (saved === "gu" || saved === "hi") lang = saved;
+  } catch {
+    /* storage blocked, or server-side: English is the right default */
+  }
+  return pageStrings(lang).misc.api;
+}
 
 /**
  * Run a live call, degrading in the order: live → last good response → last
@@ -247,13 +264,13 @@ async function withFallback<T>(
   const lastResort = (note: string): Envelope<T> =>
     liveEmpty
       ? envelope(liveEmpty(), "unavailable", note)
-      : envelope(fallback(), "simulated", `${note} — showing demo data`);
+      : envelope(fallback(), "simulated", apiNotes().showingDemoData(note));
 
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     const cached = cache.get(key) as T | undefined;
     return cached === undefined
-      ? lastResort("This device is offline")
-      : envelope(cached, "stale", "Offline — showing last known data");
+      ? lastResort(apiNotes().deviceOffline)
+      : envelope(cached, "stale", apiNotes().offlineLastKnown);
   }
 
   try {
@@ -262,7 +279,7 @@ async function withFallback<T>(
     return envelope(data, "live");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Request failed";
-    const note = isProbablyWaking(err) ? WAKING_NOTE : message;
+    const note = isProbablyWaking(err) ? apiNotes().serverWaking : message;
     const cached = cache.get(key) as T | undefined;
     if (cached !== undefined) {
       return envelope(cached, "stale", `${note} — showing last known data`);

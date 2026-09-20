@@ -424,8 +424,7 @@ export default function AnalyticsPage() {
           <p className="eyebrow mb-1 text-[var(--teal)]">{pageStrings(lang).misc.stateOperations}</p>
           <h1 className="cmd text-[24px] leading-none">{t.title}</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            {incidents.length} of {paired.data?.length ?? 0} incidents ·{" "}
-            {scopedSituations.length} districts in view
+            {t.scope(incidents.length, paired.data?.length ?? 0, scopedSituations.length)}
           </p>
         </div>
         <DataModeBadge mode={paired.mode} note={paired.error} />
@@ -456,7 +455,7 @@ export default function AnalyticsPage() {
           tone={kpis.shelterPct !== null && kpis.shelterPct >= 85 ? "var(--high)" : "var(--ok)"}
           note={`${kpis.occupancy.toLocaleString("en-IN")} of ${kpis.capacity.toLocaleString(
             "en-IN",
-          )}${shelters.mode === "live" ? "" : " — demo figures"}`}
+          )}${shelters.mode === "live" ? "" : t.demoFigures}`}
         />
         <Kpi
           label={t.highestRisk}
@@ -679,7 +678,7 @@ export default function AnalyticsPage() {
             {insights.map((i) => (
               <li key={i.id} className="flex flex-wrap gap-x-3 gap-y-1 px-3 py-2">
                 <Badge
-                  label={i.severity}
+                  label={t.insightSeverity[i.severity]}
                   color={
                     i.severity === "critical"
                       ? "var(--critical)"
@@ -730,8 +729,7 @@ export default function AnalyticsPage() {
           <div className="px-2 py-2">
             <ResponseTimeChart data={responseByType} />
             <p className="px-1 pt-1 text-[11px] text-[var(--muted)]">
-              Report → triage is not shown: the incident contract has no `triaged_at`
-              timestamp, so it cannot be derived.
+              {t.noTriageNote}
             </p>
           </div>
         </Panel>

@@ -127,8 +127,11 @@ export default function SheltersPage() {
         <div>
           <h1 className="cmd text-[24px] leading-none">{t.title}</h1>
           <p className="text-sm text-[var(--muted)]">
-            {totals.open} open · {totals.occupancy.toLocaleString("en-IN")} of{" "}
-            {totals.capacity.toLocaleString("en-IN")} places in use
+            {t.summary(
+              totals.open,
+              totals.occupancy.toLocaleString("en-IN"),
+              totals.capacity.toLocaleString("en-IN"),
+            )}
           </p>
         </div>
         <DataModeBadge mode={shelters.mode} note={shelters.error} />
@@ -242,9 +245,9 @@ export default function SheltersPage() {
                     <div className="mt-2">
                       <div className="flex items-baseline justify-between">
                         <span className="mono text-[13px]">
-                          <strong>{s.occupancy}</strong> / {s.capacity} places ({pct}%)
+                          {t.placesOf(s.occupancy, s.capacity, pct)}
                         </span>
-                        <FreshnessLabel ageSec={age} staleLabel="OCCUPANCY STALE" />
+                        <FreshnessLabel ageSec={age} staleLabel={t.occupancyStale} />
                       </div>
                       <div
                         className="mt-1 h-2 w-full bg-[var(--surface-3)]"
@@ -252,7 +255,7 @@ export default function SheltersPage() {
                         aria-valuenow={s.occupancy}
                         aria-valuemin={0}
                         aria-valuemax={s.capacity}
-                        aria-label={`Occupancy at ${s.name}`}
+                        aria-label={t.occupancyAt(s.name)}
                       >
                         <div
                           className="h-full"
@@ -264,20 +267,19 @@ export default function SheltersPage() {
                       </div>
                       {stale && (
                         <p className="mt-1 text-[11px]" style={{ color: "var(--high)" }}>
-                          This count is {Math.round(age / 60)} min old — confirm by phone
-                          before sending people here.
+                          {t.staleNote(Math.round(age / 60))}
                         </p>
                       )}
                     </div>
 
                     <ul className="mt-2 flex flex-wrap gap-3 text-[11px] text-[var(--muted)]">
-                      <Amenity ok={s.amenities.food} icon={Utensils} label="Food" />
-                      <Amenity ok={s.amenities.water} icon={Droplets} label="Water" />
-                      <Amenity ok={s.amenities.medical} icon={HeartPulse} label="Medical" />
+                      <Amenity ok={s.amenities.food} icon={Utensils} label={t.food} />
+                      <Amenity ok={s.amenities.water} icon={Droplets} label={t.water} />
+                      <Amenity ok={s.amenities.medical} icon={HeartPulse} label={t.medical} />
                       <Amenity
                         ok={s.amenities.accessible}
                         icon={Accessibility}
-                        label="Accessible"
+                        label={t.accessible}
                       />
                     </ul>
 
@@ -304,7 +306,7 @@ export default function SheltersPage() {
                         style={{ color: "var(--info)" }}
                       >
                         <Navigation className="size-3.5" aria-hidden />
-                        SafeRoute
+                        {t.safeRoute}
                       </button>
                     </div>
                   </li>

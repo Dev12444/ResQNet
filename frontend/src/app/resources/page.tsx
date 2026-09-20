@@ -253,7 +253,7 @@ export default function ResourcesPage() {
 
       <Panel
         title={t.units}
-        subtitle={`${filteredUnits.length} of ${units.data?.length ?? 0} shown`}
+        subtitle={tc.of(filteredUnits.length, units.data?.length ?? 0)}
         className="mb-3"
       >
         <UnitsTable units={filteredUnits} />

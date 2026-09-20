@@ -230,13 +230,11 @@ export default function MissingPersonsPage() {
         )}
 
         <p className="border-t border-[var(--border)] px-3 py-2 text-[11px] leading-snug text-[var(--faint)]">
-          This register shows only what is needed to help identify someone. Contact
-          details, addresses and dates of birth are held by the case officer and are not
-          published here. If you recognise someone, call the district emergency line on{" "}
+          {t.privacyNote}{" "}
           <a href="tel:1077" className="font-semibold underline">
             1077
           </a>
-          .
+          {t.privacyNoteTail}
         </p>
       </section>
     </div>
